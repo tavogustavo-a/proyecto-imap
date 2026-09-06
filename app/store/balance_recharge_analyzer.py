@@ -907,6 +907,7 @@ def _recharge_duplicate_blocks(row: BalanceRecharge) -> bool:
     return st in (
         'pending',
         'pending_binance_pay',
+        'pending_gateway',
         'approved',
         'accumulated',
         'accum_converted',

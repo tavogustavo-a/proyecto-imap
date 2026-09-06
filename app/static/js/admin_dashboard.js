@@ -35,6 +35,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const globalLinkedApisList = document.getElementById("globalLinkedApisList");
     const addGlobalApiBtn = document.getElementById("addGlobalApiBtn");
     const newGlobalApiOwner = document.getElementById("newGlobalApiOwner");
+    const newGlobalApiName = document.getElementById("newGlobalApiName");
+    const newGlobalApiIp = document.getElementById("newGlobalApiIp");
     const newGlobalApiToken = document.getElementById("newGlobalApiToken");
     const globalApiMsg = document.getElementById("globalApiMsg");
 
@@ -42,6 +44,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeEditGlobalApiModalBtn = document.getElementById("closeEditGlobalApiModalBtn");
     const editGlobalApiId = document.getElementById("editGlobalApiId");
     const editGlobalApiOwner = document.getElementById("editGlobalApiOwner");
+    const editGlobalApiName = document.getElementById("editGlobalApiName");
+    const editGlobalApiIp = document.getElementById("editGlobalApiIp");
     const editGlobalApiToken = document.getElementById("editGlobalApiToken");
     const saveEditGlobalApiBtn = document.getElementById("saveEditGlobalApiBtn");
 
@@ -169,6 +173,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!globalLinkedApisList) return;
         globalLinkedApisList.innerHTML = "";
         if (!projects || projects.length === 0) {
+            globalLinkedApisList.innerHTML = '<p class="mut text-center">No hay APIs vinculadas.</p>';
             return;
         }
 
@@ -177,8 +182,8 @@ document.addEventListener('DOMContentLoaded', function() {
             div.className = "linked-api-item d-flex justify-content-between align-items-center mb-05 p-05 text-left";
             div.innerHTML = `
                 <div class="flex-grow-1 ml-05">
-                    <strong>${escapeHtml(ownerLabelFromProject(p))}</strong><br>
-                    <small class="text-muted">Token ${escapeHtml(maskToken(p.token))}</small>
+                    <strong>${escapeHtml(p.name || ownerLabelFromProject(p))}</strong>
+                    <br><small class="text-muted">${escapeHtml(ownerLabelFromProject(p))}${p.ip ? " · " + escapeHtml(p.ip) : ""}</small>
                 </div>
                 <div class="d-flex gap-05 mr-05 align-items-center flex-wrap">
                     <button type="button" class="btn-blue btn-imap-action btn-imap-small test-global-project-btn" data-id="${p.id}">
@@ -187,6 +192,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <button type="button" class="btn-panel btn-orange btn-sm edit-global-project-btn" 
                             data-id="${p.id}" data-owner-id="${p.owner_user_id || ""}" 
                             data-owner-username="${escapeHtml(ownerLabelFromProject(p))}"
+                            data-name="${escapeHtml(p.name || "")}"
+                            data-ip="${escapeHtml(p.ip || "")}"
                             data-token="${escapeHtml(p.token)}">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -203,6 +210,8 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.addEventListener("click", () => {
                 editGlobalApiId.value = btn.dataset.id;
                 fillOwnerSelect(editGlobalApiOwner, partnerBindUsers, btn.dataset.ownerId || "", btn.dataset.ownerUsername || "");
+                if (editGlobalApiName) editGlobalApiName.value = btn.dataset.name || "";
+                if (editGlobalApiIp) editGlobalApiIp.value = btn.dataset.ip || "";
                 editGlobalApiToken.value = btn.dataset.token;
                 editGlobalApiModal.classList.remove("popup-hide");
                 editGlobalApiModal.classList.add("popup-show");
@@ -261,32 +270,55 @@ document.addEventListener('DOMContentLoaded', function() {
     if (addGlobalApiBtn) {
         addGlobalApiBtn.addEventListener("click", () => {
             const ownerUserId = newGlobalApiOwner ? newGlobalApiOwner.value : "";
+            const name = newGlobalApiName ? newGlobalApiName.value.trim() : "";
+            const ip = newGlobalApiIp ? newGlobalApiIp.value.trim() : "";
             const token = newGlobalApiToken.value.trim();
 
-            if (!ownerUserId || !token) {
+            if (!ownerUserId || !name || !ip || !token) {
                 globalApiMsg.textContent = "Faltan datos obligatorios.";
                 globalApiMsg.className = "text-italic text-danger";
                 return;
             }
 
+            addGlobalApiBtn.disabled = true;
+            globalApiMsg.textContent = "Agregando...";
+            globalApiMsg.className = "text-italic text-orange";
+
             fetch("/admin/global_linked_projects", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                body: JSON.stringify({ owner_user_id: parseInt(ownerUserId, 10), token })
+                body: JSON.stringify({
+                    owner_user_id: parseInt(ownerUserId, 10),
+                    name,
+                    ip,
+                    token
+                })
             })
             .then(res => res.json())
             .then(data => {
                 if (data.status === "ok") {
+                    globalApiMsg.textContent = "API agregada correctamente.";
+                    globalApiMsg.className = "text-italic text-success";
                     if (window.PartnerOwnerPicker) {
                         window.PartnerOwnerPicker.clear(newGlobalApiOwner);
                     } else if (newGlobalApiOwner) {
                         newGlobalApiOwner.value = "";
                     }
+                    if (newGlobalApiName) newGlobalApiName.value = "";
+                    if (newGlobalApiIp) newGlobalApiIp.value = "";
                     newGlobalApiToken.value = "";
                     fetchGlobalApis();
                 } else {
                     globalApiMsg.textContent = "Error: " + data.message;
+                    globalApiMsg.className = "text-italic text-danger";
                 }
+            })
+            .catch(function () {
+                globalApiMsg.textContent = "Error de red.";
+                globalApiMsg.className = "text-italic text-danger";
+            })
+            .finally(function () {
+                addGlobalApiBtn.disabled = false;
             });
         });
     }
@@ -303,9 +335,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const ownerUserId = editGlobalApiOwner ? editGlobalApiOwner.value : "";
             const payload = {
                 owner_user_id: ownerUserId ? parseInt(ownerUserId, 10) : null,
+                name: editGlobalApiName ? editGlobalApiName.value.trim() : "",
+                ip: editGlobalApiIp ? editGlobalApiIp.value.trim() : "",
                 token: editGlobalApiToken.value.trim()
             };
-            if (!payload.owner_user_id || !payload.token) {
+            if (!payload.owner_user_id || !payload.name || !payload.token) {
                 alert("Faltan datos obligatorios.");
                 return;
             }

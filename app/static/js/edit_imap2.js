@@ -135,6 +135,15 @@ document.addEventListener("DOMContentLoaded", function() {
         return;
       }
 
+      // Nginx/proxy suele cortar en 1 MB (413) antes de Flask.
+      const maxBytes = 8 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1);
+        alert('El fondo pesa ' + mb + ' MB. Usa una imagen más liviana (JPG/WebP, menos de 8 MB).');
+        e.target.value = '';
+        return;
+      }
+
       // No mostrar vista previa, solo preparar para subir
 
       // Subir el archivo
@@ -162,7 +171,25 @@ document.addEventListener("DOMContentLoaded", function() {
         },
         body: formData
       })
-      .then(response => response.json())
+      .then(async response => {
+        const raw = await response.text();
+        let data = null;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch (err) {
+          data = null;
+        }
+        if (response.status === 413) {
+          throw new Error('La imagen es demasiado grande para el servidor. Comprime el fondo o súbelo en JPG/WebP más liviano.');
+        }
+        if (!data) {
+          throw new Error(response.ok ? 'Respuesta inválida del servidor' : 'El servidor rechazó la subida (código ' + response.status + ').');
+        }
+        if (!response.ok && data.status !== 'ok') {
+          throw new Error(data.message || 'Error del servidor: ' + response.status);
+        }
+        return data;
+      })
       .then(data => {
         if (data.status === 'ok') {
           // Mostrar botón de eliminar (sin vista previa de imagen)

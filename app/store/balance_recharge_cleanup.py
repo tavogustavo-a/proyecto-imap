@@ -14,7 +14,7 @@ from app.store.models import BalanceRecharge, StoreSetting
 from app.utils.timezone import COLOMBIA_TZ, get_colombia_now
 
 # Nunca purgar solicitudes en cola de revisión / acumulación activa / auto sin verificar / Binance sin pagar.
-_PURGE_PROTECTED_STATUSES = frozenset({'pending', 'accumulated', 'pending_binance_pay'})
+_PURGE_PROTECTED_STATUSES = frozenset({'pending', 'accumulated', 'pending_binance_pay', 'pending_gateway'})
 _VALID_PURGE_CATEGORIES = frozenset({'all', 'review', 'auto', 'accum'})
 
 logger = logging.getLogger(__name__)

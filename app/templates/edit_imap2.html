@@ -554,7 +554,7 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/edit_imap2.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2.js') }}?v=20260906-bg-413" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20260710-totp-mask" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2_linked.js') }}" defer></script>
 {% endblock %}

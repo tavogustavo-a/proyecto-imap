@@ -110,6 +110,8 @@
             data-saldo-url="{{ url_for('store_bp.api_user_balance_recharge_saldo') }}"
             data-binance-pay-order-url="{{ url_for('store_bp.api_user_balance_recharge_binance_pay_order') }}"
             data-binance-pay-status-url="{{ url_for('store_bp.api_user_balance_recharge_binance_pay_status', merchant_trade_no='__TRADE__') }}"
+            data-gateway-order-url="{{ url_for('store_bp.api_user_balance_recharge_gateway_order') }}"
+            data-gateway-status-url="{{ url_for('store_bp.api_user_balance_recharge_gateway_status', reference='__REF__') }}"
             novalidate>
       <input type="hidden" name="currency" id="balanceRechargeCurrency" value="{{ tipo_precio|default('COP', true) }}">
       <div class="balance-recharge-field balance-recharge-field--methods" id="balanceRechargeMethodsWrap">
@@ -259,5 +261,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260611-list-pagination" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/recargas_saldo.js') }}?v=20260906-gateways-v1" defer></script>
 {% endblock %}

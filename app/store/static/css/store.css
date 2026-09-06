@@ -34170,6 +34170,25 @@ body .store-front-main .store-products-wrap--view-view6 > .card.product-texture-
   max-width: none;
 }
 
+/* Pasarelas (Stripe / Mercado Pago / Wompi): credenciales en fila 1, descripción y acciones a lo ancho */
+.purchase-history-page.admin-recargas-page .admin-pm-row--gateway .admin-pm-field-label--description {
+  grid-column: 1 / -1;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--gateway .admin-pm-accum-config {
+  grid-column: 1 / -1;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--gateway .admin-pm-actions {
+  grid-column: 1 / -1;
+}
+
+.purchase-history-page.admin-recargas-page .admin-pm-row--gateway .admin-pm-actions-primary {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+}
+
 .purchase-history-page.admin-recargas-page .admin-pm-methods-msg {
   margin: 0 0 1rem;
   padding: 0.65rem 0.85rem;

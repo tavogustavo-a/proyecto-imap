@@ -192,7 +192,7 @@
     .partner-docs .api-add-row {
       display: flex;
       flex-direction: row;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       gap: .45rem;
       align-items: center;
       margin-top: .5rem;
@@ -716,7 +716,7 @@
       <div class="admin-box">
         <p style="margin-top:0"><strong>IPs permitidas</strong> — la lista no puede quedar vacía: sin IPs vinculadas la API no acepta ninguna conexión.
           Cada IP o rango CIDR (<code>190.85.10.20</code> / <code>190.85.10.0/24</code>) debe tener un usuario dueño.
-          Esta misma lista vale para la API Partner, para <strong>Mi API</strong> de Códigos (API Para Proyectos Vinculados, más abajo) y para <strong>Mi API</strong> de licencias.
+          Esta misma lista vale para la API Partner, para <strong>Mi API</strong> de Códigos (APIs Vinculadas proyectos, más abajo) y para <strong>Mi API</strong> de licencias.
           Tu IP actual: <code id="clientIp">…</code></p>
         <div id="ipList"></div>
         <div class="ip-add-row">
@@ -1009,6 +1009,6 @@
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/partner_api_docs.js') }}?v={{ licencias_static_version }}-ipbind8" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v={{ licencias_static_version }}-apidocs7" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v={{ licencias_static_version }}-apidocs8" defer></script>
   {% endif %}
 {% endblock %}

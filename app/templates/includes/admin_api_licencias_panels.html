@@ -2,13 +2,13 @@
 <div id="apiLicenciasAdmin" class="partner-docs-api-licencias">
   <div class="admin-box">
     <h3 class="admin-api-section-title">
-      <span>API Para Proyectos Vinculados</span>
-      <button type="button" id="globalLinkedApisInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace esta sección" aria-label="Información sobre API Para Proyectos Vinculados" aria-controls="globalLinkedApisInfoModal" aria-haspopup="dialog">
+      <span>APIs Vinculadas proyectos</span>
+      <button type="button" id="globalLinkedApisInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace esta sección" aria-label="Información sobre APIs Vinculadas proyectos" aria-controls="globalLinkedApisInfoModal" aria-haspopup="dialog">
         <i class="fas fa-info-circle" aria-hidden="true"></i>
       </button>
       <button type="button" id="showCodesMyApiBtn" title="Ver mi API para proyectos vinculados">Mi API</button>
     </h3>
-    <p class="mut">Da acceso a otros proyectos a esta API de Códigos. Con Mi API copias el token de este proyecto. La IP se configura arriba y la URL es la de esta API.</p>
+    <p class="mut">Da acceso a otros proyectos a esta API de Códigos. Elige el usuario dueño, el nombre del proyecto, su IP y el token. Con Mi API copias el token de este proyecto.</p>
     <div id="globalLinkedApisList" class="mb-1">
       <p class="mut">Cargando APIs globales...</p>
     </div>
@@ -21,8 +21,10 @@
           <i class="fas fa-chevron-down" aria-hidden="true"></i>
         </button>
       </div>
-      <input type="text" id="newGlobalApiToken" class="api-input" placeholder="Token de Acceso" autocomplete="off">
-      <button type="button" id="addGlobalApiBtn" title="Agregar API Global"><i class="fas fa-plus"></i></button>
+      <input type="text" id="newGlobalApiName" class="api-input" placeholder="Nombre del proyecto" autocomplete="off">
+      <input type="text" id="newGlobalApiIp" class="api-input" placeholder="IP o rango CIDR" autocomplete="off">
+      <input type="text" id="newGlobalApiToken" class="api-input" placeholder="Token de acceso" autocomplete="off">
+      <button type="button" id="addGlobalApiBtn" title="Agregar API"><i class="fas fa-plus"></i></button>
     </div>
     <p class="text-center mt-05 mb-0"><span id="globalApiMsg" class="status-msg"></span></p>
   </div>
@@ -56,17 +58,16 @@
 <div id="globalLinkedApisInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="globalLinkedApisInfoTitle" hidden>
   <div class="popup-modal-header">
     <h4 id="globalLinkedApisInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
-      <i class="fas fa-info-circle" aria-hidden="true"></i> API Para Proyectos Vinculados
+      <i class="fas fa-info-circle" aria-hidden="true"></i> APIs Vinculadas proyectos
     </h4>
     <button type="button" class="btn-close" id="closeGlobalLinkedApisInfoBtn" aria-label="Cerrar información">
       <i class="fas fa-times"></i>
     </button>
   </div>
   <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
-    <p class="mb-05"><strong>Qué hace:</strong> da a otros proyectos acceso a esta API de Códigos con el token de este proyecto.</p>
-    <p class="mb-05"><strong>Cómo usarlo:</strong> con <strong>Mi API</strong> copias el token. Aquí eliges usuario dueño y token. <strong>Probar</strong> comprueba IP + token.</p>
-    <p class="mb-05"><strong>Qué necesitas:</strong> usuario dueño y token de acceso. La URL es siempre la de este proyecto.</p>
-    <p class="mb-0"><strong>IP:</strong> ese mismo usuario debe tener al menos una IP en la lista de arriba.</p>
+    <p class="mb-05"><strong>Qué hace:</strong> vincula un usuario dueño con un nombre de proyecto, su IP y el token que usará en esta API de Códigos.</p>
+    <p class="mb-05"><strong>Cómo usarlo:</strong> con <strong>Mi API</strong> copias el token. Aquí eliges usuario, nombre, IP y token. <strong>Probar</strong> comprueba IP + token.</p>
+    <p class="mb-0"><strong>IP:</strong> la IP que pegues queda vinculada a ese usuario (también aparece en la lista de arriba). Sin IP no se aceptan consultas.</p>
   </div>
   <div class="d-flex justify-content-center">
     <button type="button" class="popup-button-confirm" id="okGlobalLinkedApisInfoBtn">Entendido</button>
@@ -75,7 +76,7 @@
 
 <div id="editGlobalApiModal" class="popup-base popup-small popup-hide">
   <div class="popup-modal-header">
-    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Editar API Global</h4>
+    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Editar API vinculada</h4>
     <button type="button" class="btn-close" id="closeEditGlobalApiModalBtn" aria-label="Cerrar modal">
       <i class="fas fa-times"></i>
     </button>
@@ -91,7 +92,11 @@
         <i class="fas fa-chevron-down" aria-hidden="true"></i>
       </button>
     </div>
-    <label for="editGlobalApiToken" class="d-block mb-03">Token de Acceso:</label>
+    <label for="editGlobalApiName" class="d-block mb-03">Nombre del proyecto:</label>
+    <input type="text" id="editGlobalApiName" class="w-100 mb-05 text-center api-input" autocomplete="off">
+    <label for="editGlobalApiIp" class="d-block mb-03">IP o rango CIDR:</label>
+    <input type="text" id="editGlobalApiIp" class="w-100 mb-05 text-center api-input" placeholder="Ej: 192.168.1.10" autocomplete="off">
+    <label for="editGlobalApiToken" class="d-block mb-03">Token de acceso:</label>
     <input type="text" id="editGlobalApiToken" class="w-100 text-center api-input">
   </div>
   <div class="d-flex justify-content-center">

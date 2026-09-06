@@ -8434,6 +8434,8 @@ def _recharge_payment_methods_payload(viewer):
             'is_breb_bancolombia': bool(display.get('is_breb_bancolombia')),
             'is_breb_nequi': bool(display.get('is_breb_nequi')),
             'is_binance_pay': bool(display.get('is_binance_pay')),
+            'is_gateway': bool(display.get('is_gateway')),
+            'gateway_brand': display.get('gateway_brand') or '',
             'bre_b_llave': display.get('bre_b_llave') or '',
             'enabled': bool(m.get('enabled', True)),
             'is_accumulator': is_accum,
@@ -8474,6 +8476,7 @@ def _user_balance_recharge_filter_counts(user_id):
     pending_filter = or_(
         BalanceRecharge.status == 'pending',
         BalanceRecharge.status == 'pending_binance_pay',
+        BalanceRecharge.status == 'pending_gateway',
         and_(
             BalanceRecharge.status == 'auto_credited',
             BalanceRecharge.admin_verified.is_(None),
@@ -8554,6 +8557,7 @@ def _balance_recharge_status_label(status, recharge_row=None):
     labels = {
         'pending': 'Pendiente',
         'pending_binance_pay': 'Esperando pago Binance',
+        'pending_gateway': 'Esperando pago',
         'approved': 'Aprobada',
         'rejected': 'Rechazada',
         'auto_credited': '',
@@ -8799,6 +8803,7 @@ def api_user_balance_recharges():
             or_(
                 BalanceRecharge.status == 'pending',
                 BalanceRecharge.status == 'pending_binance_pay',
+                BalanceRecharge.status == 'pending_gateway',
                 and_(
                     BalanceRecharge.status == 'auto_credited',
                     BalanceRecharge.admin_verified.is_(None),
@@ -9016,6 +9021,14 @@ def api_user_balance_recharge_submit():
                 f'El medio «{pm_label or payment_method_id}» no está listo para recargas: '
                 'en admin debe elegirse un medio de pago (Binance, Nequi, etc.), no «— Medio de pago —».'
             ),
+        }), 400
+
+    from app.store.balance_recharge_gateways import payment_method_is_gateway as _pm_is_gateway
+
+    if _pm_is_gateway(selected_method):
+        return jsonify({
+            'success': False,
+            'message': 'Este medio se paga en línea: usa el botón «Pagar ahora» (no requiere comprobante).',
         }), 400
 
     auto_recharge = _user_has_recarga_automatica(user)
@@ -9917,6 +9930,409 @@ def api_binance_pay_webhook():
         return jsonify({'returnCode': 'FAIL', 'returnMessage': 'processing error'}), 500
 
     return jsonify({'returnCode': 'SUCCESS', 'returnMessage': None})
+
+
+# --------------------------------------------------------------------------
+# Pasarelas con aprobación automática (Stripe / Mercado Pago / Wompi)
+# --------------------------------------------------------------------------
+
+def _gateway_recharge_return_url():
+    return url_for('store_bp.recargas_saldo', _external=True)
+
+
+def _gateway_finalize_row(row, method, verification):
+    """Acredita una fila pending_gateway verificada. Devuelve (applied, row_fresca)."""
+    from app.store.balance_recharge_credit import try_gateway_payment_finalize
+    from app.store.balance_recharge_gateways import (
+        amounts_match_claimed as _gw_amounts_match,
+        gateway_label_for_brand,
+        payment_method_gateway_brand,
+    )
+    from app.store.models import BalanceRecharge
+
+    if not verification.get('paid'):
+        return False, row
+    if row.amount_claimed is not None and not _gw_amounts_match(
+        row.amount_claimed,
+        verification.get('amount'),
+        verification.get('currency') or row.currency,
+    ):
+        current_app.logger.warning(
+            'Gateway: monto no coincide ref %s (esperado %s, pagado %s)',
+            row.receipt_number,
+            row.amount_claimed,
+            verification.get('amount'),
+        )
+        return False, row
+
+    brand = payment_method_gateway_brand(method)
+    applied, sse_reason = try_gateway_payment_finalize(
+        row.id,
+        gateway_label=gateway_label_for_brand(brand),
+        transaction_id=str(verification.get('transaction_id') or ''),
+        webhook_payload={
+            'gateway_brand': brand,
+            'amount': verification.get('amount'),
+            'currency': verification.get('currency'),
+            'transaction_id': verification.get('transaction_id'),
+        },
+    )
+    if applied:
+        db.session.commit()
+        fresh = BalanceRecharge.query.get(row.id)
+        if sse_reason and fresh:
+            try:
+                from app.store.balance_recharge_events import notify_from_recharge_row
+
+                notify_from_recharge_row(fresh, reason=sse_reason)
+            except Exception:
+                pass
+        return True, fresh or row
+    db.session.rollback()
+    return False, BalanceRecharge.query.get(row.id) or row
+
+
+@store_bp.route('/api/user/balance-recharge/gateway/order', methods=['POST'])
+@store_access_required
+def api_user_balance_recharge_gateway_order():
+    import json as _json
+    from decimal import Decimal, InvalidOperation
+
+    from app.store.balance_recharge_gateways import (
+        build_gateway_order_snapshot,
+        create_gateway_checkout,
+        gateway_bucket_for_brand,
+        gateway_credentials_configured,
+        gateway_label_for_brand,
+        make_gateway_reference,
+        payment_method_gateway_brand,
+        proof_hash_for_gateway_order,
+    )
+    from app.store.balance_recharge_payment import methods_for_user_with_accum
+    from app.store.models import BalanceRecharge
+
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return jsonify({'success': False, 'message': 'No autenticado'}), 401
+    if user.username != current_app.config.get('ADMIN_USER', 'admin') and not _eligible_tienda_user_licencias_portal(user):
+        return jsonify({'success': False, 'message': 'Sin acceso'}), 403
+
+    _ensure_balance_recharges_table()
+    billing = _balance_recharge_viewer_billing_user(user)
+    _, tipo_precio = catalog_products_for_store_user(billing or user)
+    tp = (tipo_precio or 'COP').upper()
+
+    data = request.get_json(silent=True) or {}
+    payment_method_id = str(data.get('payment_method_id') or '').strip()
+    amount_raw = data.get('amount')
+    if not payment_method_id:
+        return jsonify({'success': False, 'message': 'Selecciona un medio de pago.'}), 400
+
+    from app.store.balance_recharge_analyzer import parse_recharge_amount
+
+    if isinstance(amount_raw, (int, float)):
+        amount_val = Decimal(str(amount_raw))
+    else:
+        parsed = parse_recharge_amount(str(amount_raw or ''))
+        if parsed is None:
+            return jsonify({'success': False, 'message': 'Indica un monto válido.'}), 400
+        try:
+            amount_val = Decimal(str(parsed))
+        except (InvalidOperation, ValueError):
+            return jsonify({'success': False, 'message': 'Indica un monto válido.'}), 400
+    if amount_val <= 0:
+        return jsonify({'success': False, 'message': 'El monto debe ser mayor que cero.'}), 400
+
+    allowed = methods_for_user_with_accum(billing or user, tp, viewer=user)
+    selected = next((m for m in allowed if m.get('id') == payment_method_id), None)
+    if not selected:
+        return jsonify({'success': False, 'message': 'Medio de pago no válido.'}), 400
+
+    brand = payment_method_gateway_brand(selected)
+    if not brand:
+        return jsonify({'success': False, 'message': 'Este medio no es una pasarela en línea.'}), 400
+    expected_bucket = gateway_bucket_for_brand(brand)
+    if tp != expected_bucket:
+        return jsonify({
+            'success': False,
+            'message': f'{gateway_label_for_brand(brand)} solo está disponible para cuentas en {expected_bucket}.',
+        }), 400
+    if not gateway_credentials_configured(selected):
+        return jsonify({
+            'success': False,
+            'message': f'{gateway_label_for_brand(brand)} no está configurado (faltan credenciales en admin).',
+        }), 400
+
+    if tp == 'COP':
+        amount_val = Decimal(int(amount_val))
+        if amount_val < 1000:
+            return jsonify({'success': False, 'message': 'El monto mínimo es 1.000 COP.'}), 400
+    else:
+        if amount_val < Decimal('0.50'):
+            return jsonify({'success': False, 'message': 'El monto mínimo es 0.50 USD.'}), 400
+
+    from app.store.transaction_amount_limits import transaction_amount_limit_error_message
+
+    limit_msg = transaction_amount_limit_error_message(amount_val, tp, selected)
+    if limit_msg:
+        return jsonify({'success': False, 'message': limit_msg}), 400
+
+    currency = tp
+    reference = make_gateway_reference(0)
+    row = BalanceRecharge(
+        user_id=billing.id,
+        submitted_by_user_id=user.id,
+        currency=currency,
+        payment_method_id=payment_method_id,
+        amount_claimed=amount_val,
+        note=None,
+        status='pending_gateway',
+        proof_files_json='[]',
+        proof_image_hash=proof_hash_for_gateway_order(reference),
+        receipt_number=reference,
+    )
+    db.session.add(row)
+    db.session.flush()
+    reference = make_gateway_reference(row.id)
+    row.receipt_number = reference
+    row.proof_image_hash = proof_hash_for_gateway_order(reference)
+
+    pm_label = selected.get('label') or payment_method_id
+    webhook_url = ''
+    if brand == 'mercadopago':
+        webhook_url = url_for('store_bp.api_mercadopago_webhook', _external=True)
+    result = create_gateway_checkout(
+        selected,
+        reference=reference,
+        amount=amount_val,
+        currency=currency,
+        description=f'Recarga saldo {pm_label}'[:120],
+        return_url=_gateway_recharge_return_url(),
+        webhook_url=webhook_url,
+    )
+    if not result.get('ok'):
+        db.session.rollback()
+        err = str(result.get('error') or '')
+        friendly = err if err and err not in ('network', 'rejected', 'internal', 'unsupported') else (
+            f'{gateway_label_for_brand(brand)} no disponible. Intenta de nuevo.'
+        )
+        return jsonify({'success': False, 'message': friendly}), 502 if err == 'network' else 400
+
+    snapshot = build_gateway_order_snapshot(
+        reference=reference,
+        brand=brand,
+        payment_method_id=payment_method_id,
+        payment_method_label=pm_label,
+        amount=float(amount_val),
+        currency=currency,
+        checkout_url=str(result.get('checkout_url') or ''),
+        provider_ref=str(result.get('provider_ref') or ''),
+    )
+    row.analyzer_json = _json.dumps(snapshot, ensure_ascii=False)
+    db.session.commit()
+
+    try:
+        from app.store.balance_recharge_events import notify_from_recharge_row
+
+        notify_from_recharge_row(row, reason='gateway_order_created')
+    except Exception:
+        pass
+
+    return jsonify({
+        'success': True,
+        'message': 'Orden creada. Completa el pago en la pasarela.',
+        'reference': reference,
+        'recharge_id': row.id,
+        'checkout_url': result.get('checkout_url') or '',
+        'gateway_brand': brand,
+        'amount': float(amount_val),
+        'currency': currency,
+        'item': _serialize_balance_recharge_row(row, user),
+    })
+
+
+@store_bp.route('/api/user/balance-recharge/gateway/status/<reference>')
+@store_access_required
+def api_user_balance_recharge_gateway_status(reference):
+    from app.store.balance_recharge_gateways import (
+        fetch_gateway_payment,
+        gateway_snapshot_from_row,
+        payment_method_gateway_brand,
+    )
+    from app.store.balance_recharge_payment import _find_method_by_id
+    from app.store.models import BalanceRecharge
+
+    user_id = session.get('user_id')
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return jsonify({'success': False, 'message': 'No autenticado'}), 401
+
+    _ensure_balance_recharges_table()
+    ref = re.sub(r'[^A-Za-z0-9]', '', str(reference or ''))[:32]
+    if not ref:
+        return jsonify({'success': False, 'message': 'Referencia inválida.'}), 400
+
+    row = BalanceRecharge.query.filter_by(receipt_number=ref).first()
+    if not row or not _balance_recharge_row_accessible(row, user):
+        return jsonify({'success': False, 'message': 'No encontrado'}), 404
+
+    st = (row.status or '').lower()
+    if st == 'pending_gateway':
+        method = _find_method_by_id(row.payment_method_id or '') or {}
+        if payment_method_gateway_brand(method):
+            snapshot = gateway_snapshot_from_row(row)
+            try:
+                verification = fetch_gateway_payment(
+                    method,
+                    reference=ref,
+                    provider_ref=str(snapshot.get('provider_ref') or ''),
+                )
+                _applied, row = _gateway_finalize_row(row, method, verification)
+                st = (row.status or '').lower()
+            except Exception as exc:
+                current_app.logger.warning('Gateway status poll falló ref %s: %s', ref, exc)
+
+    return jsonify({
+        'success': True,
+        'status': st,
+        'paid': st == 'approved',
+        'amount': float(row.amount_claimed) if row.amount_claimed is not None else None,
+        'currency': row.currency,
+        'recharge_id': row.id,
+        'item': _serialize_balance_recharge_row(row, user),
+    })
+
+
+def _gateway_webhook_reconcile(reference, expected_brand):
+    """Busca la fila por referencia y re-verifica contra la API de la pasarela."""
+    from app.store.balance_recharge_gateways import (
+        fetch_gateway_payment,
+        gateway_snapshot_from_row,
+        payment_method_gateway_brand,
+    )
+    from app.store.balance_recharge_payment import _find_method_by_id
+    from app.store.models import BalanceRecharge
+
+    ref = re.sub(r'[^A-Za-z0-9]', '', str(reference or ''))[:32]
+    if not ref:
+        return 'ignored'
+    _ensure_balance_recharges_table()
+    row = BalanceRecharge.query.filter_by(receipt_number=ref).first()
+    if not row:
+        current_app.logger.warning('Webhook %s: referencia desconocida %s', expected_brand, ref)
+        return 'ignored'
+    st = (row.status or '').lower()
+    if st == 'approved':
+        return 'ok'
+    if st != 'pending_gateway':
+        return 'ignored'
+    method = _find_method_by_id(row.payment_method_id or '') or {}
+    if payment_method_gateway_brand(method) != expected_brand:
+        current_app.logger.warning(
+            'Webhook %s: la referencia %s no corresponde a esa pasarela', expected_brand, ref
+        )
+        return 'ignored'
+    snapshot = gateway_snapshot_from_row(row)
+    verification = fetch_gateway_payment(
+        method,
+        reference=ref,
+        provider_ref=str(snapshot.get('provider_ref') or ''),
+    )
+    applied, _row = _gateway_finalize_row(row, method, verification)
+    if applied:
+        return 'ok'
+    return 'retry' if verification.get('paid') else 'ignored'
+
+
+@store_bp.route('/api/pay/stripe/webhook', methods=['POST'])
+@csrf_exempt_route
+def api_stripe_webhook():
+    from app.store.balance_recharge_gateways import stripe_reference_from_webhook
+
+    raw_body = request.get_data(as_text=True) or ''
+    reference, _session_id = stripe_reference_from_webhook(raw_body)
+    if not reference:
+        return jsonify({'received': True})
+    try:
+        outcome = _gateway_webhook_reconcile(reference, 'stripe')
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('Stripe webhook falló: %s', exc)
+        return jsonify({'received': False}), 500
+    if outcome == 'retry':
+        return jsonify({'received': False}), 500
+    return jsonify({'received': True})
+
+
+@store_bp.route('/api/pay/mercadopago/webhook', methods=['POST', 'GET'])
+@csrf_exempt_route
+def api_mercadopago_webhook():
+    from app.store.balance_recharge_gateways import (
+        mp_fetch_payment_by_id,
+        mp_payment_id_from_webhook,
+    )
+    from app.store.balance_recharge_payment import get_payment_methods_config
+
+    raw_body = request.get_data(as_text=True) or ''
+    payment_id = mp_payment_id_from_webhook(dict(request.args), raw_body)
+    if not payment_id:
+        return jsonify({'received': True})
+
+    # El webhook de MP solo trae el id del pago: resolvemos la referencia
+    # consultando la API con los tokens de los medios Mercado Pago configurados.
+    reference = ''
+    try:
+        cfg = get_payment_methods_config()
+        seen_tokens = set()
+        for bucket in cfg.values():
+            for m in bucket or []:
+                if str(m.get('payment_brand') or '').strip().lower() != 'mercadopago':
+                    continue
+                token = str(m.get('gateway_secret') or '').strip()
+                if not token or token in seen_tokens:
+                    continue
+                seen_tokens.add(token)
+                payment = mp_fetch_payment_by_id(token, payment_id)
+                ext_ref = str(payment.get('external_reference') or '').strip()
+                if ext_ref:
+                    reference = ext_ref
+                    break
+            if reference:
+                break
+    except Exception as exc:
+        current_app.logger.warning('MP webhook: no se pudo resolver pago %s: %s', payment_id, exc)
+    if not reference:
+        return jsonify({'received': True})
+    try:
+        outcome = _gateway_webhook_reconcile(reference, 'mercadopago')
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('MP webhook falló: %s', exc)
+        return jsonify({'received': False}), 500
+    if outcome == 'retry':
+        return jsonify({'received': False}), 500
+    return jsonify({'received': True})
+
+
+@store_bp.route('/api/pay/wompi/webhook', methods=['POST'])
+@csrf_exempt_route
+def api_wompi_webhook():
+    from app.store.balance_recharge_gateways import wompi_reference_from_webhook
+
+    raw_body = request.get_data(as_text=True) or ''
+    reference = wompi_reference_from_webhook(raw_body)
+    if not reference:
+        return jsonify({'received': True})
+    try:
+        outcome = _gateway_webhook_reconcile(reference, 'wompi')
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('Wompi webhook falló: %s', exc)
+        return jsonify({'received': False}), 500
+    if outcome == 'retry':
+        return jsonify({'received': False}), 500
+    return jsonify({'received': True})
 
 
 @store_bp.route('/api/user/balance-recharge/<int:recharge_id>/proof/<int:file_index>')
@@ -11164,12 +11580,15 @@ def _enrich_payment_methods_for_admin_api(cfg):
             bucket_methods.append(row)
         for m in sort_payment_methods_for_user_display(bucket_methods):
             from app.store.balance_recharge_binance_pay import mask_binance_pay_secret_for_admin
+            from app.store.balance_recharge_gateways import mask_gateway_secrets_for_admin
             from app.store.balance_recharge_payment import (
                 _sanitize_paypal_method_for_admin,
                 accum_conversion_multipliers,
             )
 
-            row = _sanitize_paypal_method_for_admin(mask_binance_pay_secret_for_admin(dict(m)))
+            row = _sanitize_paypal_method_for_admin(
+                mask_gateway_secrets_for_admin(mask_binance_pay_secret_for_admin(dict(m)))
+            )
             if cur == 'ACCUM':
                 eff_mults = accum_conversion_multipliers(row)
                 if eff_mults.get('mult_usd_to_cop') is not None:

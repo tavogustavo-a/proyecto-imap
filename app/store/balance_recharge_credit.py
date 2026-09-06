@@ -282,6 +282,66 @@ def try_binance_pay_webhook_finalize(
     return True, 'binance_pay'
 
 
+def try_gateway_payment_finalize(
+    recharge_id: int,
+    *,
+    gateway_label: str = '',
+    transaction_id: str = '',
+    webhook_payload: dict[str, Any] | None = None,
+) -> tuple[bool, str | None]:
+    """Acredita saldo cuando una pasarela (Stripe/Mercado Pago/Wompi) confirma el pago.
+
+    Idempotente: solo transiciona desde ``pending_gateway``.
+    Returns (applied, sse_reason). sse_reason es None si ya estaba aprobada.
+    """
+    row = lock_balance_recharge(recharge_id)
+    if not row:
+        return False, None
+    status = (row.status or '').lower()
+    if status == 'approved':
+        return True, None
+    if status != 'pending_gateway':
+        return False, None
+    amount = row.amount_claimed
+    if amount is None or float(amount) <= 0:
+        return False, None
+    target = User.query.get(row.user_id)
+    if not target:
+        return False, None
+
+    if not _cas_recharge_status(row.id, 'pending_gateway', 'approved'):
+        return False, None
+    now = datetime.utcnow()
+    cur = (row.currency or 'COP').strip().upper()
+    apply_user_balance_credit(target, cur, float(amount))
+    row.status = 'approved'
+    row.auto_credited = True
+    row.amount_credited = amount
+    row.admin_verified = True
+    row.reviewed_at = now
+    label = (gateway_label or 'la pasarela').strip()
+    row.admin_note = f'Acreditado automáticamente por {label} (pago confirmado).'
+    row.email_verify_status = 'matched'
+    row.email_verify_next_at = None
+    if transaction_id:
+        row.receipt_number = row.receipt_number or transaction_id[:64]
+    if webhook_payload is not None:
+        import json as _json
+
+        try:
+            existing = _json.loads(row.analyzer_json or '{}')
+        except Exception:
+            existing = {}
+        if not isinstance(existing, dict):
+            existing = {}
+        existing['gateway_confirmation'] = webhook_payload
+        existing['gateway_paid'] = True
+        if transaction_id:
+            existing['gateway_transaction_id'] = transaction_id
+        row.analyzer_json = _json.dumps(existing, ensure_ascii=False)
+    return True, 'gateway_paid'
+
+
 def try_admin_approve_finalize(
     recharge_id: int,
     *,

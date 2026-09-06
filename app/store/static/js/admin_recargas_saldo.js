@@ -1737,9 +1737,18 @@
     { value: 'usdt_trc20', label: 'USDT TRC20' },
     { value: 'binance_pay', label: 'Binance Pay' },
     { value: 'binance', label: 'Binance' },
+    { value: 'stripe', label: 'Stripe' },
+    { value: 'mercadopago', label: 'Mercado Pago' },
+    { value: 'wompi', label: 'Wompi (QR Bancolombia)' },
     { value: 'criptomoneda', label: 'Criptomoneda' },
     { value: 'generico', label: 'Genérico' },
   ];
+
+  var GATEWAY_BRAND_KEYS = { stripe: 1, mercadopago: 1, wompi: 1 };
+
+  function isGatewayBrandKey(brand) {
+    return !!GATEWAY_BRAND_KEYS[String(brand || '').trim().toLowerCase()];
+  }
   var paymentBrandChoicesFromApi = null;
   var pmModal = document.getElementById('adminPmUsersModal');
   var pmModalTitle = document.getElementById('adminPmUsersModalTitle');
@@ -1784,6 +1793,7 @@
     'usdt_trc20',
     'binance',
     'binance_pay',
+    'stripe',
     'paypal',
   ];
 
@@ -1795,6 +1805,8 @@
     'breve',
     'breb_bancolombia',
     'breb_nequi',
+    'mercadopago',
+    'wompi',
     'generico',
   ];
 
@@ -1975,11 +1987,15 @@
     if (brandBucket === 'USD' && selected === 'usdt') {
       selected = 'binance';
     }
+    if (brandBucket === 'USD' && (selected === 'mercadopago' || selected === 'wompi')) {
+      selected = '';
+    }
     if (
       brandBucket === 'COP' &&
       (selected === 'binance' ||
         selected === 'binance_pay' ||
         selected === 'paypal' ||
+        selected === 'stripe' ||
         selected === 'usdt' ||
         selected === 'usdt_erc20' ||
         selected === 'usdt_trc20' ||
@@ -2106,6 +2122,11 @@
       binance_pay_api_key: m.binance_pay_api_key || '',
       binance_pay_secret: m.binance_pay_secret || '',
       binance_pay_secret_configured: !!m.binance_pay_secret_configured,
+      gateway_public_key: m.gateway_public_key || '',
+      gateway_secret: m.gateway_secret || '',
+      gateway_secret2: m.gateway_secret2 || '',
+      gateway_secret_configured: !!m.gateway_secret_configured,
+      gateway_secret2_configured: !!m.gateway_secret2_configured,
       _isDraft: !!m._isDraft,
     };
     entry = normalizeBrebMethodFields(entry);
@@ -2229,6 +2250,9 @@
     var accountEl = row.querySelector('.admin-pm-account');
     var binanceApiEl = row.querySelector('.admin-pm-binance-api-key');
     var binanceSecretEl = row.querySelector('.admin-pm-binance-secret');
+    var gatewayPublicEl = row.querySelector('.admin-pm-gateway-public');
+    var gatewaySecretEl = row.querySelector('.admin-pm-gateway-secret');
+    var gatewaySecret2El = row.querySelector('.admin-pm-gateway-secret2');
     var brebLlaveEl = row.querySelector('.admin-pm-breb-llave');
     var brebSuffixEl = row.querySelector('.admin-pm-breb-suffix');
     var descriptionEl = row.querySelector('.admin-pm-description');
@@ -2259,6 +2283,11 @@
       binance_pay_api_key: (binanceApiEl && binanceApiEl.value ? binanceApiEl.value : '').trim(),
       binance_pay_secret: (binanceSecretEl && binanceSecretEl.value ? binanceSecretEl.value : '').trim(),
       binance_pay_secret_configured: !!prev.binance_pay_secret_configured,
+      gateway_public_key: (gatewayPublicEl && gatewayPublicEl.value ? gatewayPublicEl.value : '').trim(),
+      gateway_secret: (gatewaySecretEl && gatewaySecretEl.value ? gatewaySecretEl.value : '').trim(),
+      gateway_secret2: (gatewaySecret2El && gatewaySecret2El.value ? gatewaySecret2El.value : '').trim(),
+      gateway_secret_configured: !!prev.gateway_secret_configured,
+      gateway_secret2_configured: !!prev.gateway_secret2_configured,
       payment_currency: readPaymentCurrencyFromRow(row, prev.payment_currency || 'COP'),
       mult_usd_to_cop: (multUsdCopEl && multUsdCopEl.value ? multUsdCopEl.value : '').trim(),
       mult_cop_to_usd: (multCopUsdEl && multCopUsdEl.value ? multCopUsdEl.value : '').trim(),
@@ -2286,7 +2315,10 @@
       !(m.bre_b_llave || '').trim() &&
       !(m.bre_b_account_suffix || '').trim() &&
       !(m.binance_pay_api_key || '').trim() &&
-      !(m.binance_pay_secret || '').trim()
+      !(m.binance_pay_secret || '').trim() &&
+      !(m.gateway_public_key || '').trim() &&
+      !(m.gateway_secret || '').trim() &&
+      !(m.gateway_secret2 || '').trim()
     );
   }
 
@@ -2393,6 +2425,23 @@
         row.binance_pay_secret_configured = true;
       }
     }
+    if (isGatewayMethod(entry)) {
+      if (entry.gateway_public_key) {
+        row.gateway_public_key = entry.gateway_public_key;
+      }
+      if (entry.gateway_secret) {
+        row.gateway_secret = entry.gateway_secret;
+      }
+      if (entry.gateway_secret2) {
+        row.gateway_secret2 = entry.gateway_secret2;
+      }
+      if (entry.gateway_secret_configured) {
+        row.gateway_secret_configured = true;
+      }
+      if (entry.gateway_secret2_configured) {
+        row.gateway_secret2_configured = true;
+      }
+    }
     return row;
   }
 
@@ -2492,6 +2541,54 @@
                 (idx + 1) +
                 '): indica el API Secret de Binance Pay.'
             );
+          }
+        } else if (enabled && isGatewayMethod(row)) {
+          var gwBrandKey = String(row.payment_brand || rowBrand || '').trim().toLowerCase();
+          var gwLabel =
+            gwBrandKey === 'stripe'
+              ? 'Stripe'
+              : gwBrandKey === 'mercadopago'
+              ? 'Mercado Pago'
+              : 'Wompi';
+          var gwSecretOk =
+            (row.gateway_secret || '').trim() || row.gateway_secret_configured;
+          if (!gwSecretOk) {
+            var gwSecretName =
+              gwBrandKey === 'stripe'
+                ? 'la Secret Key (sk_…)'
+                : gwBrandKey === 'mercadopago'
+                ? 'el Access Token (APP_USR-…)'
+                : 'la Llave privada (prv_…)';
+            issues.push(
+              gwLabel +
+                ' (' +
+                methodBucketLabel(cur) +
+                ', fila ' +
+                (idx + 1) +
+                '): indica ' +
+                gwSecretName +
+                '.'
+            );
+          }
+          if (gwBrandKey === 'wompi') {
+            if (!(row.gateway_public_key || '').trim()) {
+              issues.push(
+                'Wompi (' +
+                  methodBucketLabel(cur) +
+                  ', fila ' +
+                  (idx + 1) +
+                  '): indica la Llave pública (pub_…).'
+              );
+            }
+            if (!(row.gateway_secret2 || '').trim() && !row.gateway_secret2_configured) {
+              issues.push(
+                'Wompi (' +
+                  methodBucketLabel(cur) +
+                  ', fila ' +
+                  (idx + 1) +
+                  '): indica el Secreto de integridad.'
+              );
+            }
           }
         } else if (enabled && (isPaypalMethod(row) || rowBrand === 'paypal')) {
           var paypalEmail = normalizePaypalEmail(row.account_number);
@@ -2636,6 +2733,11 @@
   function isBinancePayMethod(m) {
     m = m || {};
     return String(m.payment_brand || inferPaymentBrand(m) || '').trim().toLowerCase() === 'binance_pay';
+  }
+
+  function isGatewayMethod(m) {
+    m = m || {};
+    return isGatewayBrandKey(m.payment_brand || inferPaymentBrand(m) || '');
   }
 
   function isPaypalMethod(m) {
@@ -2835,6 +2937,9 @@
     ) {
       family = 40;
       sub = 0;
+    } else if (brand === 'stripe' || brand === 'mercadopago' || brand === 'wompi') {
+      family = 45;
+      sub = 0;
     } else if (brand === 'paypal' || label.indexOf('paypal') >= 0) {
       family = 50;
       sub = 0;
@@ -2891,6 +2996,9 @@
     usdt_trc20: 1,
     binance_pay: 1,
     binance: 1,
+    stripe: 1,
+    mercadopago: 1,
+    wompi: 1,
     generico: 1,
     criptomoneda: 1,
   };
@@ -2951,6 +3059,14 @@
       if (keyTail.length >= 4) {
         keyTail = keyTail.slice(-8).toLowerCase();
         id = ('binance_pay_' + keyTail).slice(0, 48);
+      }
+    }
+    if (!id && isGatewayMethod(m)) {
+      // Solo la llave pública: el secreto se enmascara y cambiaría el ID al re-guardar.
+      var gwTail = String(m.gateway_public_key || '').replace(/[^a-zA-Z0-9]/g, '');
+      if (gwTail.length >= 4) {
+        gwTail = gwTail.slice(-8).toLowerCase();
+        id = (String(brand) + '_' + gwTail).slice(0, 48);
       }
     }
     if (!id && isPaypalMethod(m)) {
@@ -3095,12 +3211,71 @@
     var isBrebNequi = !isAccum && layoutBrand === 'breb_nequi';
     var isBreb = !isAccum && layoutBrand === 'breb_bancolombia';
     var isBinancePay = layoutBrand === 'binance_pay';
+    var isGateway = isGatewayBrandKey(layoutBrand);
     var isPaypal = layoutBrand === 'paypal' || isPaypalMethod(m);
     var isUsdtWallet = isUsdtWalletMethod(m);
     var cryptoField = cryptoWalletFieldMeta(isUsdtWallet ? layoutBrand : m.payment_brand || layoutBrand);
     var paypalField = paypalAccountFieldMeta();
     var fieldBinanceApiKey = pmFieldId(cur, idx, 'binance-api-key');
     var fieldBinanceSecret = pmFieldId(cur, idx, 'binance-secret');
+    var fieldGatewayPublic = pmFieldId(cur, idx, 'gateway-public');
+    var fieldGatewaySecret = pmFieldId(cur, idx, 'gateway-secret');
+    var fieldGatewaySecret2 = pmFieldId(cur, idx, 'gateway-secret2');
+    var gatewayFieldsHtml = '';
+    if (isGateway) {
+      var gwSecretPlaceholder =
+        layoutBrand === 'stripe'
+          ? 'Secret Key (sk_live_…) *'
+          : layoutBrand === 'mercadopago'
+          ? 'Access Token (APP_USR-…) *'
+          : 'Llave privada (prv_prod_…) *';
+      var gwSecretSaved = !!m.gateway_secret_configured;
+      var gwSecret2Saved = !!m.gateway_secret2_configured;
+      gatewayFieldsHtml =
+        (layoutBrand === 'wompi'
+          ? '<label class="admin-pm-field-label admin-pm-field-label--gateway-public">' +
+            '<span class="sr-only">Llave pública</span>' +
+            '<input type="text" id="' +
+            fieldGatewayPublic +
+            '" name="pm_gateway_public_' +
+            cur +
+            '_' +
+            idx +
+            '" class="form-control admin-pm-gateway-public" placeholder="Llave pública (pub_prod_…) *" autocomplete="off" spellcheck="false" value="' +
+            escapeHtml(m.gateway_public_key || '') +
+            '"></label>'
+          : '') +
+        '<label class="admin-pm-field-label admin-pm-field-label--gateway-secret">' +
+        '<span class="sr-only">Credencial secreta</span>' +
+        '<input type="password" id="' +
+        fieldGatewaySecret +
+        '" name="pm_gateway_secret_' +
+        cur +
+        '_' +
+        idx +
+        '" class="form-control admin-pm-gateway-secret" placeholder="' +
+        (gwSecretSaved ? 'Secreto guardado (dejar vacío para conservar)' : gwSecretPlaceholder) +
+        '" ' +
+        (gwSecretSaved ? '' : 'required ') +
+        'autocomplete="new-password" value=""></label>' +
+        (layoutBrand === 'wompi'
+          ? '<label class="admin-pm-field-label admin-pm-field-label--gateway-secret2">' +
+            '<span class="sr-only">Secreto de integridad</span>' +
+            '<input type="password" id="' +
+            fieldGatewaySecret2 +
+            '" name="pm_gateway_secret2_' +
+            cur +
+            '_' +
+            idx +
+            '" class="form-control admin-pm-gateway-secret2" placeholder="' +
+            (gwSecret2Saved
+              ? 'Integridad guardada (dejar vacío para conservar)'
+              : 'Secreto de integridad *') +
+            '" ' +
+            (gwSecret2Saved ? '' : 'required ') +
+            'autocomplete="new-password" value=""></label>'
+          : '');
+    }
     var payCur = normalizeAccumPayCurrency(m.payment_currency || 'COP');
     var showMultUsdCop = payCur === 'USD';
     var showMultCopUsd = payCur === 'COP';
@@ -3158,6 +3333,7 @@
       (isAccum ? ' admin-pm-row--accum' : '') +
       (isBreb ? ' admin-pm-row--breb' : '') +
       (isBinancePay ? ' admin-pm-row--binance-pay' : '') +
+      (isGateway ? ' admin-pm-row--gateway' : '') +
       (m._isDraft ? ' admin-pm-row--draft' : '') +
       '" data-currency="' +
       cur +
@@ -3263,6 +3439,8 @@
           '" ' +
           (m.binance_pay_secret_configured ? '' : 'required ') +
           'autocomplete="new-password" value=""></label>'
+        : isGateway
+        ? gatewayFieldsHtml
         : isPaypal
         ? '<label class="admin-pm-field-label admin-pm-field-label--account admin-pm-field-label--paypal-email">' +
           '<span class="sr-only">' +
@@ -3408,6 +3586,7 @@
           (accumBrand === 'binance' ||
             accumBrand === 'binance_pay' ||
             accumBrand === 'paypal' ||
+            accumBrand === 'stripe' ||
             accumBrand === 'usdt' ||
             accumBrand === 'usdt_erc20' ||
             accumBrand === 'usdt_trc20' ||

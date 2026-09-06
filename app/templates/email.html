@@ -92,14 +92,14 @@
       <div id="allowedEmailsTextContainer" class="allowed-emails-display">
         <p>Cargando correos...</p>
       </div>
-      <div id="allowedEmailsPagination" class="d-flex justify-content-between align-items-center flex-wrap gap-05">
+      <div id="allowedEmailsPagination" class="d-flex justify-content-between align-items-center">
         <button id="deleteAllEmailsBtn" class="btn-panel btn-red btn-sm" title="Eliminar TODOS los correos permitidos para este usuario">
           Eliminar Todo
         </button>
-        <div class="allowed-emails-page-nav d-flex align-items-center gap-05">
-          <button id="prevPageBtn" class="btn-panel btn-blue" disabled>&larr; Anterior</button>
+        <div class="allowed-emails-page-nav d-flex align-items-center">
+          <button id="prevPageBtn" class="btn-panel btn-blue" disabled>Anterior</button>
           <span id="paginationInfo"></span>
-          <button id="nextPageBtn" class="btn-panel btn-blue" disabled>Siguiente &rarr;</button>
+          <button id="nextPageBtn" class="btn-panel btn-blue" disabled>Siguiente</button>
         </div>
       </div>
       
@@ -119,40 +119,6 @@
         </div>
       </div>
 
-      {# --- NUEVA SECCIÓN: APIs Vinculadas --- #}
-      <hr class="hr-margin-15">
-      <div id="linkedApisSection" class="mb-0">
-        <div class="d-flex justify-content-between align-items-center mb-05 flex-nowrap gap-05">
-          <strong class="d-flex align-items-center gap-05 flex-nowrap">
-            <span>APIs Vinculadas proyectos</span>
-            <button type="button" id="linkedApisInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Qué hace esta sección" aria-label="Información sobre APIs Vinculadas" aria-controls="linkedApisInfoModal" aria-haspopup="dialog">
-              <i class="fas fa-info-circle" aria-hidden="true"></i>
-            </button>
-          </strong>
-          <div class="d-flex align-items-center gap-05">
-            <button type="button" id="showMyApiBtn" class="btn-panel btn-blue btn-sm" title="Ver mi API para este proyecto">
-              Mi API
-            </button>
-          </div>
-        </div>
-
-        <div id="linkedApisList" class="mb-1">
-          <p class="text-muted text-center">Cargando APIs vinculadas...</p>
-        </div>
-
-        <div class="d-flex gap-05 align-items-center api-add-row">
-          <input type="text" id="newApiNameInput" class="flex-grow-1 api-input" placeholder="Nombre del proyecto" autocomplete="off">
-          <input type="text" id="newApiIpInput" class="flex-grow-1 api-input" placeholder="IP o rango CIDR" autocomplete="off">
-          <input type="text" id="newApiTokenInput" class="flex-grow-1 api-input" placeholder="Token de acceso" autocomplete="off">
-          <button type="button" id="addLinkedApiBtn" class="btn-blue" title="Agregar otra API">
-            <i class="fas fa-plus"></i>
-          </button>
-        </div>
-        <div class="text-center mt-05">
-          <span id="linkedApiMsg" class="text-italic"></span>
-        </div>
-      </div>
-      {# --- FIN NUEVA SECCIÓN --- #}
     </div>
   </div>
 
@@ -347,73 +313,6 @@
   </div>
 </div>
 
-{# --- MODALES PARA APIs VINCULADAS --- #}
-<div id="linkedApisInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="linkedApisInfoTitle" hidden>
-  <div class="popup-modal-header">
-    <h4 id="linkedApisInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
-      <i class="fas fa-info-circle" aria-hidden="true"></i> APIs Vinculadas proyectos
-    </h4>
-    <button type="button" class="btn-close" id="closeLinkedApisInfoBtn" aria-label="Cerrar información">
-      <i class="fas fa-times" aria-hidden="true"></i>
-    </button>
-  </div>
-  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
-    <p class="mb-05"><strong>Qué hace:</strong> vincula este usuario con un nombre de proyecto, su IP y el token que usará en esta API de Códigos.</p>
-    <p class="mb-05"><strong>Cómo usarlo:</strong> agrega nombre, IP o rango CIDR y token. La URL es siempre la de este proyecto. Con <strong>Mi API</strong> copias el token de este usuario.</p>
-    <p class="mb-0"><strong>IP:</strong> la IP que pegues queda vinculada a este usuario en Documentación API. Sin IP no se aceptan consultas.</p>
-  </div>
-  <div class="d-flex justify-content-center">
-    <button type="button" class="popup-button-confirm" id="okLinkedApisInfoBtn">Entendido</button>
-  </div>
-</div>
-
-<div id="myApiModal" class="popup-base popup-small popup-hide">
-  <div class="popup-modal-header">
-    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Mi API de Acceso para codigos</h4>
-    <button type="button" class="btn-close" id="closeMyApiModalBtn" aria-label="Cerrar modal">
-      <i class="fas fa-times" aria-hidden="true"></i>
-    </button>
-  </div>
-  <p class="text-small mb-1 text-center">Usa el token para vincular este usuario. El servidor que consulte debe usar una IP vinculada a este usuario (se agrega en APIs Vinculadas o en Documentación API).</p>
-  <div class="mb-1 text-center">
-    <label for="myApiTokenDisplay" class="d-block mb-03"><strong>Tu Token Maestro:</strong></label>
-    <div class="d-flex gap-05">
-      <input type="text" id="myApiTokenDisplay" class="flex-grow-1 text-center api-input" readonly>
-      <button type="button" class="btn-panel btn-blue btn-sm copy-api-btn" data-target="myApiTokenDisplay" title="Copiar Token">
-        <i class="fas fa-copy"></i>
-      </button>
-      <button type="button" id="regenMasterTokenBtn" class="btn-panel btn-orange btn-sm" title="Regenerar Token">
-        <i class="fas fa-sync-alt"></i>
-      </button>
-    </div>
-  </div>
-  <div class="alert-info p-05 text-smaller text-center mt-1">
-    <strong>Nota:</strong> Cada usuario tiene un token único. No compartas este token con nadie.
-  </div>
-</div>
-
-<div id="editLinkedApiModal" class="popup-base popup-small popup-hide">
-  <div class="popup-modal-header">
-    <h4 class="mt-0 mb-0 flex-grow-1 text-center">Editar API Vinculada</h4>
-    <button type="button" class="btn-close" id="closeEditApiModalBtn" aria-label="Cerrar modal">
-      <i class="fas fa-times" aria-hidden="true"></i>
-    </button>
-  </div>
-  <input type="hidden" id="editApiId">
-  <div class="mb-1 text-center">
-    <label for="editApiName" class="d-block mb-03">Nombre del Proyecto:</label>
-    <input type="text" id="editApiName" class="w-100 mb-05 text-center api-input">
-    <label for="editApiIp" class="d-block mb-03">IP o rango CIDR:</label>
-    <input type="text" id="editApiIp" class="w-100 mb-05 text-center api-input" placeholder="Ej: 192.168.1.10" autocomplete="off">
-    <label for="editApiToken" class="d-block mb-03">Token de Acceso:</label>
-    <input type="text" id="editApiToken" class="w-100 text-center api-input">
-  </div>
-  <div class="d-flex justify-content-center">
-    <button type="button" class="popup-button-confirm" id="saveEditApiBtn">Guardar</button>
-  </div>
-</div>
-{# --- FIN MODALES APIs --- #}
-
 {% endblock content %}
 
 {# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
@@ -421,5 +320,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260901-edit-api-ip"></script>
+<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260906-no-linked-apis"></script>
 {% endblock scripts %}

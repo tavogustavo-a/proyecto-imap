@@ -48,6 +48,9 @@ PAYMENT_BRAND_SPEC: Dict[str, Dict[str, Any]] = {
         'linked_brands': ['binance_pay', 'binance pay'],
     },
     'binance': {'label': 'Binance', 'linked_brands': ['binance']},
+    'stripe': {'label': 'Stripe', 'linked_brands': ['stripe']},
+    'mercadopago': {'label': 'Mercado Pago', 'linked_brands': ['mercadopago', 'mercado pago']},
+    'wompi': {'label': 'Wompi (QR Bancolombia)', 'linked_brands': ['wompi', 'bancolombia']},
     'criptomoneda': {'label': 'Criptomoneda', 'linked_brands': []},
     'generico': {
         'label': 'Genérico',
@@ -460,6 +463,13 @@ def _method_account_tail_for_id(ent: Dict[str, Any]) -> str:
         if len(key) >= 4:
             return key[-8:].lower()
         return ''
+    if str(ent.get('payment_brand') or '').strip().lower() in ('stripe', 'mercadopago', 'wompi'):
+        # Solo la llave pública (siempre visible): el secreto se enmascara al editar
+        # y usarlo cambiaría el ID en guardados posteriores.
+        key = re.sub(r'[^a-zA-Z0-9]', '', str(ent.get('gateway_public_key') or ''))
+        if len(key) >= 4:
+            return key[-8:].lower()
+        return ''
     if payment_method_is_usdt_wallet(ent):
         return _crypto_wallet_tail(ent)
     if payment_method_is_breb_bancolombia(ent):
@@ -843,6 +853,14 @@ def payment_method_user_display(method: Dict[str, Any]) -> Dict[str, Any]:
         out['is_binance_pay'] = True
         out['account_number'] = ''
         return out
+    from app.store.balance_recharge_gateways import payment_method_gateway_brand
+
+    gw_brand = payment_method_gateway_brand(method)
+    if gw_brand:
+        out['is_gateway'] = True
+        out['gateway_brand'] = gw_brand
+        out['account_number'] = ''
+        return out
     brand = str(method.get('payment_brand') or '').strip().lower()
     if brand == 'paypal':
         out['account_number'] = _normalize_paypal_account(account_number)
@@ -1044,6 +1062,10 @@ def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Opt
         api_key_draft = str(raw.get('binance_pay_api_key') or '').strip()[:128]
         if api_key_draft:
             draft['binance_pay_api_key'] = api_key_draft
+    if payment_brand in ('stripe', 'mercadopago', 'wompi'):
+        gw_pub_draft = str(raw.get('gateway_public_key') or '').strip()[:128]
+        if gw_pub_draft:
+            draft['gateway_public_key'] = gw_pub_draft
     ent = {
         'id': canonical_method_id(draft, idx, currency=currency),
         'label': label[:80],
@@ -1103,6 +1125,16 @@ def _normalize_method_entry(raw: Dict[str, Any], currency: str, idx: int) -> Opt
             ent['binance_pay_api_key'] = api_key
         if secret and secret != '********':
             ent['binance_pay_secret'] = secret
+    if payment_brand in ('stripe', 'mercadopago', 'wompi'):
+        pub = str(raw.get('gateway_public_key') or '').strip()[:128]
+        if pub:
+            ent['gateway_public_key'] = pub
+        for field in ('gateway_secret', 'gateway_secret2'):
+            val = str(raw.get(field) or '').strip()[:256]
+            if val and val != '********':
+                ent[field] = val
+        # Las pasarelas no reciben transferencias manuales: sin número de cuenta.
+        ent['account_number'] = ''
     return ent
 
 
@@ -1377,8 +1409,10 @@ def save_payment_methods_config(payload: Dict[str, Any], app=None, previous: Opt
             elif prev.get('qr_filename') and not ent.get('qr_filename'):
                 ent['qr_filename'] = prev['qr_filename']
             from app.store.balance_recharge_binance_pay import merge_binance_pay_secret_on_save
+            from app.store.balance_recharge_gateways import merge_gateway_secrets_on_save
 
             merge_binance_pay_secret_on_save(ent, item, prev)
+            merge_gateway_secrets_on_save(ent, item, prev)
             normalized.append(ent)
         if cur == 'ACCUM' and normalized:
             _apply_accum_multiplier_inheritance(normalized)

@@ -75,11 +75,103 @@ def _wrap_bare_css_prefix(text: str) -> str:
     return "<style type=\"text/css\">\n" + prefix.strip() + "\n</style>\n" + rest
 
 
+_MESSAGE_CSS_SCOPE = ".main-message-wrapper"
+
+
+def _scope_css_selector(sel: str) -> str | None:
+    s = (sel or "").strip()
+    if not s:
+        return None
+    low = s.lower()
+    if low in ("html", "body", ":root") or low.startswith("html ") or low.startswith("body "):
+        return None
+    if s == "*":
+        return f"{_MESSAGE_CSS_SCOPE} *"
+    if s.startswith(_MESSAGE_CSS_SCOPE):
+        return s
+    return f"{_MESSAGE_CSS_SCOPE} {s}"
+
+
+def _scope_css_selector_group(group: str) -> str | None:
+    scoped = []
+    for part in (group or "").split(","):
+        item = _scope_css_selector(part)
+        if item:
+            scoped.append(item)
+    return ", ".join(scoped) if scoped else None
+
+
+def _skip_css_comment(css: str, i: int) -> int:
+    if css.startswith("/*", i):
+        end = css.find("*/", i + 2)
+        return len(css) if end < 0 else end + 2
+    return i
+
+
+def _matching_brace_end(css: str, open_idx: int) -> int:
+    depth = 1
+    j = open_idx + 1
+    n = len(css)
+    while j < n and depth:
+        j2 = _skip_css_comment(css, j)
+        if j2 != j:
+            j = j2
+            continue
+        ch = css[j]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        j += 1
+    return j
+
+
+def _scope_css_for_message_wrapper(css_text: str) -> str:
+    """Evita que * / body del párrafo IMAP2 rompan el layout de la página."""
+    css = css_text or ""
+    out = []
+    i = 0
+    n = len(css)
+    while i < n:
+        i2 = _skip_css_comment(css, i)
+        if i2 != i:
+            i = i2
+            continue
+        if css[i].isspace():
+            i += 1
+            continue
+        if css[i] == "@":
+            brace = css.find("{", i)
+            if brace < 0:
+                break
+            header = css[i:brace].strip()
+            end = _matching_brace_end(css, brace)
+            inner = css[brace + 1 : end - 1]
+            if header.lower().startswith("@media"):
+                scoped_inner = _scope_css_for_message_wrapper(inner)
+                if scoped_inner.strip():
+                    out.append(f"{header} {{\n{scoped_inner}\n}}")
+            i = end
+            continue
+        brace = css.find("{", i)
+        if brace < 0:
+            break
+        end = _matching_brace_end(css, brace)
+        selectors = css[i:brace]
+        decls = css[brace + 1 : end - 1]
+        scoped = _scope_css_selector_group(selectors)
+        if scoped:
+            out.append(f"{scoped} {{{decls}}}")
+        i = end
+    return "\n".join(out)
+
+
 def _sanitize_style_element(tag) -> None:
     css_text = tag.get_text() or ""
     if _STYLE_UNSAFE.search(css_text):
         tag.decompose()
         return
+    css_text = _scope_css_for_message_wrapper(css_text)
     tag.attrs = {"type": "text/css"}
     tag.clear()
     tag.append(css_text)

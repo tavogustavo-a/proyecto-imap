@@ -12,6 +12,13 @@
   var binancePayPollMeta = null;
   var binancePayPollStartedAt = 0;
   var binancePayRealtimeWired = false;
+  var GATEWAY_POLL_MS = 6000;
+  var GATEWAY_POLL_MAX_MS = 15 * 60 * 1000;
+  var GATEWAY_REF_STORAGE_KEY = 'balanceRechargeGatewayRef';
+  var gatewayPollTimer = null;
+  var gatewayActiveRef = '';
+  var gatewayPollMeta = null;
+  var gatewayPollStartedAt = 0;
 
   function rechargeFetchJson(url, options) {
     if (window.StoreFetchJson && window.StoreFetchJson.fetch) {
@@ -96,6 +103,9 @@
       if (binancePayActiveTradeNo && binancePayPollMeta) {
         checkBinancePayStatusOnce(binancePayPollMeta, binancePayActiveTradeNo);
       }
+      if (gatewayActiveRef && gatewayPollMeta) {
+        checkGatewayStatusOnce(gatewayPollMeta, gatewayActiveRef);
+      }
       patchUserRechargeFromRealtime(eventData, meta).catch(function () {
         if (document.getElementById('balanceRechargeList')) {
           loadList(meta);
@@ -141,6 +151,10 @@
       binancePayStatusUrlTemplate: form
         ? form.getAttribute('data-binance-pay-status-url') || ''
         : '',
+      gatewayOrderUrl: form ? form.getAttribute('data-gateway-order-url') || '' : '',
+      gatewayStatusUrlTemplate: form
+        ? form.getAttribute('data-gateway-status-url') || ''
+        : '',
       eventsUrl:
         (list ? list.getAttribute('data-events-url') : '') ||
         '/tienda/api/user/balance-recharges/events',
@@ -159,6 +173,131 @@
   function isBinancePaySelected() {
     var label = selectedPaymentMethodOption();
     return !!(label && label.getAttribute('data-is-binance-pay') === '1');
+  }
+
+  function isGatewaySelected() {
+    var label = selectedPaymentMethodOption();
+    return !!(label && label.getAttribute('data-is-gateway') === '1');
+  }
+
+  function gatewayStatusUrl(template, ref) {
+    return String(template || '').replace('__REF__', encodeURIComponent(ref || ''));
+  }
+
+  function stopGatewayPolling() {
+    if (gatewayPollTimer) {
+      window.clearInterval(gatewayPollTimer);
+      gatewayPollTimer = null;
+    }
+    gatewayActiveRef = '';
+    gatewayPollMeta = null;
+  }
+
+  function clearStoredGatewayRef() {
+    try {
+      window.sessionStorage.removeItem(GATEWAY_REF_STORAGE_KEY);
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function storeGatewayRef(ref) {
+    try {
+      window.sessionStorage.setItem(GATEWAY_REF_STORAGE_KEY, String(ref || ''));
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function checkGatewayStatusOnce(meta, ref) {
+    if (!ref) return Promise.resolve();
+    var statusUrl = gatewayStatusUrl(meta.gatewayStatusUrlTemplate, ref);
+    if (!statusUrl || statusUrl.indexOf('__REF__') >= 0) return Promise.resolve();
+
+    if (Date.now() - gatewayPollStartedAt > GATEWAY_POLL_MAX_MS) {
+      stopGatewayPolling();
+      clearStoredGatewayRef();
+      showFormMsg(
+        'Tiempo de espera agotado. Si ya pagaste, el saldo se acreditará en breve; revisa la lista o espera unos segundos.',
+        false
+      );
+      return Promise.resolve();
+    }
+
+    return rechargeFetchJson(statusUrl)
+      .then(function (res) {
+        if (!res || !res.success) return;
+        if (res.paid) {
+          stopGatewayPolling();
+          clearStoredGatewayRef();
+          showFormMsg('¡Pago confirmado! Saldo acreditado.', false);
+          refreshRechargeSaldoDisplay();
+          loadList(meta);
+          var form = document.getElementById('balanceRechargeForm');
+          if (form) form.reset();
+          renderPreview(null);
+          updateSelectedMethodQr();
+          updateAmountFieldForMethod();
+          updateBinancePayUi();
+          return;
+        }
+        if ((res.status || '').toLowerCase() === 'rejected') {
+          stopGatewayPolling();
+          clearStoredGatewayRef();
+          showFormMsg('El pago fue rechazado o cancelado.', true);
+        }
+      })
+      .catch(function () {});
+  }
+
+  function startGatewayPolling(meta, ref) {
+    stopGatewayPolling();
+    if (!ref) return;
+    gatewayActiveRef = ref;
+    gatewayPollMeta = meta;
+    gatewayPollStartedAt = Date.now();
+    var statusUrl = gatewayStatusUrl(meta.gatewayStatusUrlTemplate, ref);
+    if (!statusUrl || statusUrl.indexOf('__REF__') >= 0) return;
+
+    checkGatewayStatusOnce(meta, ref);
+    gatewayPollTimer = window.setInterval(function () {
+      checkGatewayStatusOnce(meta, ref);
+    }, GATEWAY_POLL_MS);
+  }
+
+  function resumeGatewayFromReturn(meta) {
+    var ref = '';
+    var canceled = false;
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      ref = String(params.get('gw_ref') || '').trim();
+      canceled = !!String(params.get('gw_cancel') || '').trim();
+      if (ref || canceled) {
+        params.delete('gw_ref');
+        params.delete('gw_cancel');
+        var qs = params.toString();
+        var cleanUrl =
+          window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    } catch (err) {
+      /* ignore */
+    }
+    if (canceled) {
+      clearStoredGatewayRef();
+      showFormMsg('Pago cancelado. Puedes intentarlo de nuevo cuando quieras.', true);
+      return;
+    }
+    if (!ref) {
+      try {
+        ref = String(window.sessionStorage.getItem(GATEWAY_REF_STORAGE_KEY) || '').trim();
+      } catch (err) {
+        ref = '';
+      }
+    }
+    if (!ref) return;
+    showFormMsg('Verificando tu pago…', false);
+    startGatewayPolling(meta, ref);
   }
 
   function stopBinancePayPolling() {
@@ -196,21 +335,27 @@
     var submitBtn = document.getElementById('balanceRechargeSubmit');
     if (!submitBtn || submitBtn.getAttribute('aria-busy') === 'true') return;
     var isBp = isBinancePaySelected();
+    var isGw = isGatewaySelected();
     var textEl = submitBtn.querySelector('.balance-recharge-submit-text');
     var iconEl = submitBtn.querySelector('.balance-recharge-submit-icon');
     var bpIconEl = submitBtn.querySelector('.balance-recharge-submit-bp-icon');
     if (textEl) {
-      textEl.textContent = isBp ? 'Pagar' : 'Enviar solicitud';
+      textEl.textContent = isBp || isGw ? 'Pagar' : 'Enviar solicitud';
     }
     if (iconEl) {
-      iconEl.className = 'balance-recharge-submit-icon fas fa-paper-plane';
+      iconEl.className =
+        'balance-recharge-submit-icon fas ' + (isGw ? 'fa-credit-card' : 'fa-paper-plane');
     }
     if (bpIconEl) {
       bpIconEl.hidden = !isBp;
     }
     submitBtn.setAttribute(
       'aria-label',
-      isBp ? 'Pagar con Binance Pay' : 'Enviar solicitud de recarga'
+      isBp
+        ? 'Pagar con Binance Pay'
+        : isGw
+        ? 'Pagar en línea'
+        : 'Enviar solicitud de recarga'
     );
   }
 
@@ -219,10 +364,11 @@
     var proofGroup = document.getElementById('balanceRechargeProofGroup');
     var fileInput = document.getElementById('balanceRechargeProofs');
     var isBp = isBinancePaySelected();
+    var isGw = isGatewaySelected();
     if (panel) panel.hidden = !isBp;
-    if (proofGroup) proofGroup.hidden = isBp;
+    if (proofGroup) proofGroup.hidden = isBp || isGw;
     if (fileInput) {
-      if (isBp) {
+      if (isBp || isGw) {
         fileInput.removeAttribute('required');
         fileInput.value = '';
         renderPreview(null);
@@ -230,7 +376,7 @@
         fileInput.setAttribute('required', 'required');
       }
     }
-    if (isBp) {
+    if (isBp || isGw) {
       hideMethodQrBlock();
     }
     syncSubmitButtonUi();
@@ -378,7 +524,7 @@
 
   function isPendingVerification(it) {
     var s = (it.status || '').toLowerCase();
-    if (s === 'pending_binance_pay') return true;
+    if (s === 'pending_binance_pay' || s === 'pending_gateway') return true;
     return (
       (s === 'auto_credited' || s === 'auto_accumulated') &&
       (it.admin_verified === null || it.admin_verified === undefined)
@@ -391,7 +537,7 @@
     if (s === 'rejected') return 'balance-recharge-status--rejected';
     if (s === 'auto_credited' || s === 'auto_accumulated') return 'balance-recharge-status--auto';
     if (s === 'accumulated') return 'balance-recharge-status--accumulated';
-    if (s === 'pending_binance_pay') return 'balance-recharge-status--pending';
+    if (s === 'pending_binance_pay' || s === 'pending_gateway') return 'balance-recharge-status--pending';
     return 'balance-recharge-status--pending';
   }
 
@@ -1116,6 +1262,9 @@
         var payCurAttr = payCur ? ' data-payment-currency="' + escapeHtml(payCur) + '"' : '';
         var accumAttr = m.is_accumulator ? ' data-is-accumulator="1"' : '';
         var binanceAttr = m.is_binance_pay ? ' data-is-binance-pay="1"' : '';
+        var gatewayAttr = m.is_gateway
+          ? ' data-is-gateway="1" data-gateway-brand="' + escapeHtml(m.gateway_brand || '') + '"'
+          : '';
         var checked = idx === 0 ? ' checked' : '';
         var accountNumber = methodPaymentAccountBlocks(m);
         var description = m.description
@@ -1136,6 +1285,7 @@
           payCurAttr +
           accumAttr +
           binanceAttr +
+          gatewayAttr +
           '>' +
           '<input type="radio" name="payment_method_id" value="' +
           escapeHtml(m.id || '') +
@@ -1424,6 +1574,64 @@
         return;
       }
 
+      if (isGatewaySelected()) {
+        var gwOrderUrl = meta.gatewayOrderUrl || '';
+        if (!gwOrderUrl) {
+          showFormMsg('El pago en línea no está configurado en el servidor.', true);
+          return;
+        }
+        setSubmitLoading(true, {
+          label: 'Creando pago…',
+          message: 'Conectando con la pasarela de pago…',
+        });
+        var csrfGw = getCsrfToken();
+        var headersGw = {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        };
+        if (csrfGw) headersGw['X-CSRFToken'] = csrfGw;
+        fetch(gwOrderUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: headersGw,
+          body: JSON.stringify({
+            payment_method_id: pmRadio.value,
+            amount: String(amountParsed),
+          }),
+        })
+          .then(function (r) {
+            return r.json().then(function (j) {
+              return { ok: r.ok, data: j };
+            });
+          })
+          .then(function (res) {
+            setSubmitLoading(false);
+            if (!res.ok || !res.data || !res.data.success) {
+              showFormMsg(
+                (res.data && res.data.message) || 'No se pudo iniciar el pago. Intenta de nuevo.',
+                true
+              );
+              return;
+            }
+            var checkoutUrl = String(res.data.checkout_url || '').trim();
+            var ref = String(res.data.reference || '').trim();
+            if (!checkoutUrl || !ref) {
+              showFormMsg('No se pudo iniciar el pago. Intenta de nuevo.', true);
+              return;
+            }
+            storeGatewayRef(ref);
+            startGatewayPolling(meta, ref);
+            loadList(meta);
+            showFormMsg('Redirigiendo a la pasarela de pago…', false);
+            window.location.href = checkoutUrl;
+          })
+          .catch(function () {
+            setSubmitLoading(false);
+            showFormMsg('Error de conexión con la pasarela. Intenta de nuevo.', true);
+          });
+        return;
+      }
+
       if (isBinancePaySelected()) {
         var orderUrl = meta.binancePayOrderUrl || '';
         if (!orderUrl) {
@@ -1570,5 +1778,6 @@
       updateBinancePayUi();
     });
     loadList(meta);
+    resumeGatewayFromReturn(meta);
   });
 })();

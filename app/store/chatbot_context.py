@@ -244,7 +244,7 @@ def _safe_admin_summary(query: str) -> List[str]:
         lines.append(f"Licencias disponibles: {available}; asignadas o vendidas: {assigned}.")
     if _query_mentions(query, ("recarga", "saldo", "pago")):
         pending = BalanceRecharge.query.filter(
-            BalanceRecharge.status.in_(("pending", "pending_binance_pay"))
+            BalanceRecharge.status.in_(("pending", "pending_binance_pay", "pending_gateway"))
         ).count()
         lines.append(f"Solicitudes de recarga pendientes: {pending}.")
     return lines

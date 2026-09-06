@@ -2895,16 +2895,20 @@ def _test_owner_api_binding(owner, token, kind="codes"):
 
 
 def _linked_project_payload(project):
+    from app.store.partner_api import partner_ips_for_user
+
     owner = project.user
     owner_username = owner.username if owner else (project.name or "")
+    user_ips = partner_ips_for_user(owner) if owner else []
     return {
         "id": project.id,
         "owner_user_id": project.user_id,
         "owner_username": owner_username,
-        "name": owner_username,
+        "name": project.name or owner_username,
         "url": project.url,
         "token": project.token,
         "enabled": project.enabled,
+        "ip": user_ips[-1] if user_ips else "",
     }
 
 
@@ -2928,14 +2932,24 @@ def add_global_linked_project():
     owner, err = _validate_principal_owner_user(data.get("owner_user_id"))
     if err:
         return jsonify({"status": "error", "message": err[0]}), err[1]
+    from app.store.partner_api import upsert_partner_ip_for_user
+
+    name = (data.get("name") or "").strip() or owner.username
     token = _apply_owner_api_token(owner, data.get("token"))
+    ip_raw = (data.get("ip") or "").strip()
 
     if not token:
         return jsonify({"status": "error", "message": "Falta el token"}), 400
+    if not ip_raw:
+        return jsonify({"status": "error", "message": "Falta la IP o rango CIDR."}), 400
+
+    _bound, err = upsert_partner_ip_for_user(owner, ip_raw)
+    if err:
+        return jsonify({"status": "error", "message": err}), 400
 
     new_project = LinkedProject(
         user_id=owner.id,
-        name=owner.username,
+        name=name,
         url=_this_project_api_url("/api/external/search"),
         token=token,
     )
@@ -2957,19 +2971,27 @@ def manage_global_linked_project(project_id):
         db.session.delete(project)
     else:
         data = request.get_json() or {}
+        from app.store.partner_api import upsert_partner_ip_for_user
+
         if "owner_user_id" in data:
             owner, err = _validate_principal_owner_user(data.get("owner_user_id"))
             if err:
                 return jsonify({"status": "error", "message": err[0]}), err[1]
             project.user_id = owner.id
-            project.name = owner.username
         else:
             owner = User.query.get(project.user_id)
+        name = (data.get("name") or project.name or "").strip() or (owner.username if owner else "")
         token = (data.get("token") or project.token or "").strip()
-        if not token:
-            return jsonify({"status": "error", "message": "Falta el token"}), 400
+        if not name or not token:
+            return jsonify({"status": "error", "message": "Faltan datos obligatorios (nombre o token)."}), 400
+        project.name = name
         project.token = _apply_owner_api_token(owner, token)
         project.url = _this_project_api_url("/api/external/search")
+        ip_raw = (data.get("ip") or "").strip()
+        if ip_raw:
+            _bound, err = upsert_partner_ip_for_user(owner, ip_raw)
+            if err:
+                return jsonify({"status": "error", "message": err}), 400
 
     try:
         db.session.commit()
