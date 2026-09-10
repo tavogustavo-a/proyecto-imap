@@ -19,7 +19,9 @@ import secrets
 from werkzeug.exceptions import BadRequest
 from app.models.user import AllowedEmail, LinkedProject
 from sqlalchemy.exc import IntegrityError # Para capturar errores de unicidad
-from sqlalchemy import or_ # Importar 'or_'
+from sqlalchemy import func, or_ # Importar 'or_'
+from collections import defaultdict
+from app.utils.allowed_email import normalize_allowed_email
 
 
 def _claim_unique_allowed_emails(owner_user, emails):
@@ -34,7 +36,7 @@ def _claim_unique_allowed_emails(owner_user, emails):
         return 0
     if not getattr(owner_user, "unique_allowed_emails", False):
         return 0
-    email_list = [e for e in (emails or []) if e]
+    email_list = [e.lower() for e in (emails or []) if e]
     if not email_list:
         return 0
 
@@ -45,11 +47,47 @@ def _claim_unique_allowed_emails(owner_user, emails):
 
     deleted = (
         AllowedEmail.query.filter(
-            AllowedEmail.email.in_(email_list),
+            func.lower(AllowedEmail.email).in_(email_list),
             ~AllowedEmail.user_id.in_(keep_ids),
         ).delete(synchronize_session=False)
     )
     return int(deleted or 0)
+
+
+def _unique_principal_ids_holding_emails(emails):
+    """email en minúsculas -> ids de usuarios principales con correos únicos que ya lo tienen."""
+    held = defaultdict(set)
+    email_list = [e.lower() for e in (emails or []) if e]
+    if not email_list:
+        return held
+
+    rows = (
+        db.session.query(AllowedEmail.email, AllowedEmail.user_id)
+        .filter(func.lower(AllowedEmail.email).in_(email_list))
+        .all()
+    )
+    holder_ids = {uid for _em, uid in rows}
+    if not holder_ids:
+        return held
+
+    users_by_id = {
+        u.id: u for u in User.query.filter(User.id.in_(holder_ids)).all()
+    }
+    parent_ids = {u.parent_id for u in users_by_id.values() if u.parent_id}
+    parents_by_id = {}
+    if parent_ids:
+        parents_by_id = {
+            u.id: u for u in User.query.filter(User.id.in_(parent_ids)).all()
+        }
+
+    for raw_email, uid in rows:
+        u = users_by_id.get(uid)
+        if not u:
+            continue
+        principal = u if u.parent_id is None else parents_by_id.get(u.parent_id)
+        if principal is not None and getattr(principal, "unique_allowed_emails", False):
+            held[(raw_email or "").lower()].add(principal.id)
+    return held
 
 
 # --- Función Auxiliar para obtener y formatear usuarios principales ---
@@ -1102,6 +1140,8 @@ def delete_emails_from_all_users_ajax():
 def bulk_add_emails_to_users_ajax():
     """
     Añade correos masivamente a múltiples usuarios seleccionados.
+    Respeta «Correos únicos»: al destinatario con el flag se le quitan a otros
+    clientes; no se asignan a alguien sin el flag correos ya exclusivos de otro.
     """
     try:
         data = request.get_json()
@@ -1114,50 +1154,99 @@ def bulk_add_emails_to_users_ajax():
         if not emails or not isinstance(emails, list):
             return jsonify({"status": "error", "message": "Debes proporcionar al menos un correo."}), 400
 
+        normalized_new_emails = sorted(
+            {
+                em
+                for e in emails
+                if isinstance(e, str)
+                for em in [normalize_allowed_email(e)]
+                if em
+            }
+        )
+        if not normalized_new_emails:
+            return jsonify({"status": "error", "message": "No se encontraron correos válidos."}), 400
+
         added_count = 0
         skipped_count = 0
+        skipped_unique = 0
         errors = []
+        users_unique = []
+        users_regular = []
 
-        for user_id in user_ids:
-            user = User.query.get(user_id)
-            if not user:
-                errors.append(f"Usuario {user_id} no encontrado")
+        for raw_id in user_ids:
+            try:
+                uid = int(raw_id)
+            except (TypeError, ValueError):
+                errors.append(f"Usuario {raw_id} no válido")
                 continue
+            user = User.query.get(uid)
+            if not user:
+                errors.append(f"Usuario {raw_id} no encontrado")
+                continue
+            if user.parent_id is not None:
+                errors.append(f"Usuario {user.username} no es principal")
+                continue
+            if getattr(user, "unique_allowed_emails", False):
+                users_unique.append(user)
+            else:
+                users_regular.append(user)
 
-            # Obtener correos permitidos actuales del usuario
+        if not users_unique and not users_regular:
+            return jsonify({
+                "status": "error",
+                "message": "Ningún usuario principal válido en la selección.",
+                "errors": errors or None,
+            }), 400
+
+        unique_holders = _unique_principal_ids_holding_emails(normalized_new_emails)
+
+        def _add_emails_to_user(user, emails_for_user):
+            nonlocal added_count, skipped_count
             current_emails = set()
             if user.allowed_email_entries:
                 current_emails = {e.email.lower() for e in user.allowed_email_entries.all()}
-
-            # Añadir nuevos correos
-            for email in emails:
-                email_lower = email.lower().strip()
-                if not email_lower or '@' not in email_lower:
-                    continue
-
-                if email_lower not in current_emails:
-                    new_allowed_email = AllowedEmail(user_id=user.id, email=email_lower)
-                    db.session.add(new_allowed_email)
-                    current_emails.add(email_lower)
-                    added_count += 1
-                else:
+            for email_lower in emails_for_user:
+                if email_lower in current_emails:
                     skipped_count += 1
+                    continue
+                db.session.add(AllowedEmail(user_id=user.id, email=email_lower))
+                current_emails.add(email_lower)
+                added_count += 1
 
-            if getattr(user, "unique_allowed_emails", False):
-                claimed = [
-                    (e or "").lower().strip()
-                    for e in emails
-                    if isinstance(e, str) and (e or "").strip() and "@" in e
-                ]
-                _claim_unique_allowed_emails(user, claimed)
+        for user in users_unique:
+            _add_emails_to_user(user, normalized_new_emails)
+            for em in normalized_new_emails:
+                unique_holders[em].add(user.id)
+
+        for user in users_regular:
+            allowed = []
+            for email_lower in normalized_new_emails:
+                holders = unique_holders.get(email_lower, set())
+                if holders and user.id not in holders:
+                    skipped_unique += 1
+                    continue
+                allowed.append(email_lower)
+            _add_emails_to_user(user, allowed)
+
+        removed_elsewhere = 0
+        for user in users_unique:
+            removed_elsewhere += _claim_unique_allowed_emails(user, normalized_new_emails)
 
         db.session.commit()
 
+        parts = [f"Correos añadidos correctamente a {len(users_unique) + len(users_regular)} usuario(s)."]
+        if removed_elsewhere:
+            parts.append(f"Quitados de otros clientes: {removed_elsewhere}.")
+        if skipped_unique:
+            parts.append(f"Omitidos por correos únicos de otro usuario: {skipped_unique}.")
+
         return jsonify({
             "status": "ok",
-            "message": f"Correos añadidos correctamente a {len(user_ids)} usuario(s).",
+            "message": " ".join(parts),
             "added_count": added_count,
             "skipped_count": skipped_count,
+            "skipped_unique": skipped_unique,
+            "removed_elsewhere": removed_elsewhere,
             "errors": errors if errors else None
         })
 
@@ -1186,8 +1275,6 @@ def add_allowed_emails_ajax():
         return jsonify({"status": "error", "message": "Usuario no es principal"}), 403
 
     # Normalizar con la misma regla que Licencias / API (formato email válido)
-    from app.utils.allowed_email import normalize_allowed_email
-
     normalized_new_emails = sorted(
         {
             em

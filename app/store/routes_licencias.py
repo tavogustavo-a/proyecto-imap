@@ -625,18 +625,11 @@ def _store_bp_ensure_license_account_sale_id_schema():
 
 def _user_licencias_viewer_scope(user_obj):
     """
-    IDs de usuario cuyas cuentas asignadas pueden ver en «Licencias» (principal + padre si aplica).
-    Lista de usernames para cruzar con el campo «cliente» en líneas mes a mes.
+    IDs de usuario cuyas cuentas asignadas pueden ver en «Licencias».
+    El sub-usuario solo ve las que compró o tiene vinculadas a su cuenta.
     """
     ids = [user_obj.id]
     names = [(user_obj.username or '').strip()]
-    if getattr(user_obj, 'parent_id', None) and getattr(user_obj, 'can_access_store', False):
-        parent = User.query.get(user_obj.parent_id)
-        if parent:
-            ids.append(parent.id)
-            pu = (parent.username or '').strip()
-            if pu and pu not in names:
-                names.append(pu)
     # únicos preservando orden
     seen = set()
     uids = []

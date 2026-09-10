@@ -24,6 +24,7 @@ from app.utils.timezone import utc_to_colombia
 from . import store_bp
 from .routes import (
     _attach_private_no_cache_headers,
+    _balance_recharge_owner_user,
     _balance_recharge_viewer_billing_user,
     _eligible_tienda_user_licencias_portal,
     _ensure_balance_recharges_table,
@@ -368,8 +369,8 @@ def historial_compras_usuario():
             build_recharge_historial_items(all_users=True, utc_to_colombia_fn=utc_to_colombia)
         )
     else:
-        billing = _balance_recharge_viewer_billing_user(user)
-        uid = int(billing.id) if billing else int(user.id)
+        owner = _balance_recharge_owner_user(user) or user
+        uid = int(owner.id)
         compras_info.extend(
             build_recharge_historial_items(user_id=uid, utc_to_colombia_fn=utc_to_colombia)
         )
@@ -377,10 +378,10 @@ def historial_compras_usuario():
     if mostrar_usuario_comprador:
         compras_info.extend(_build_license_refund_historial_items(all_users=True))
     else:
-        billing = _balance_recharge_viewer_billing_user(user) or user
+        owner = _balance_recharge_owner_user(user) or user
         compras_info.extend(
             _build_license_refund_historial_items(
-                billing_user_id=int(billing.id),
+                billing_user_id=int(owner.id),
             )
         )
 
@@ -427,8 +428,8 @@ def historial_compras_usuario():
                 utc_to_colombia_fn=utc_to_colombia,
             )
         else:
-            billing = _balance_recharge_viewer_billing_user(user)
-            uid = int(billing.id) if billing else int(user.id)
+            owner = _balance_recharge_owner_user(user) or user
+            uid = int(owner.id)
             daily_rows = build_purchase_history_daily_summary_items(
                 viewer_billing_user_id=uid,
                 utc_to_colombia_fn=utc_to_colombia,
@@ -575,8 +576,8 @@ def api_historial_compras_recharges():
     if mostrar_usuario_comprador:
         items = build_recharge_historial_items(all_users=True, utc_to_colombia_fn=utc_to_colombia)
     else:
-        billing = _balance_recharge_viewer_billing_user(user)
-        uid = int(billing.id) if billing else int(user.id)
+        owner = _balance_recharge_owner_user(user) or user
+        uid = int(owner.id)
         items = build_recharge_historial_items(user_id=uid, utc_to_colombia_fn=utc_to_colombia)
     return jsonify({'ok': True, 'items': items})
 

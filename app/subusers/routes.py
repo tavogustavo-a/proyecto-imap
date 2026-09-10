@@ -1910,8 +1910,55 @@ def update_subuser_store_permission():
         return jsonify({"status": "error", "message": "No tienes permiso para modificar este sub-usuario."}), 403
 
     sub_user.can_access_store = bool(can_access_store)
+    if sub_user.can_access_store:
+        from app.store.routes import catalog_products_for_store_user
+        from app.store.subuser_catalog import seed_subuser_catalog_if_needed
+
+        products, tipo = catalog_products_for_store_user(parent_user)
+        seed_subuser_catalog_if_needed(sub_user, parent_user, products, tipo or 'COP')
     db.session.commit()
     return jsonify({"status": "ok", "can_access_store": sub_user.can_access_store})
+
+
+def _editable_subuser_or_error(subuser_id):
+    if not can_access_subusers():
+        return None, None, (jsonify({"status": "error", "message": "No autorizado"}), 403)
+    sub_user = User.query.get_or_404(subuser_id)
+    parent_user = User.query.get(sub_user.parent_id) if sub_user.parent_id else None
+    if not parent_user or (
+        session.get("user_id") != parent_user.id
+        and session.get("username") != current_app.config.get("ADMIN_USER", "admin")
+    ):
+        return None, None, (
+            jsonify({"status": "error", "message": "No tienes permiso para modificar este sub-usuario."}),
+            403,
+        )
+    return sub_user, parent_user, None
+
+
+@subuser_bp.route("/subuser_catalog/<int:subuser_id>", methods=["GET", "POST"])
+def subuser_catalog(subuser_id):
+    """Catálogo de plataformas y precios del sub-usuario (modal en edición)."""
+    sub_user, parent_user, err = _editable_subuser_or_error(subuser_id)
+    if err:
+        return err
+
+    from app.store.routes import catalog_products_for_store_user
+    from app.store.subuser_catalog import catalog_editor_payload, save_subuser_catalog
+
+    products, tipo = catalog_products_for_store_user(parent_user)
+    tipo = tipo or 'COP'
+    if request.method == "GET":
+        payload = catalog_editor_payload(sub_user, parent_user, products, tipo)
+        return jsonify({"status": "ok", **payload})
+
+    data = request.get_json(silent=True) or {}
+    saved, error = save_subuser_catalog(sub_user, parent_user, data, products, tipo)
+    if error:
+        return jsonify({"status": "error", "message": error}), 400
+    db.session.commit()
+    payload = catalog_editor_payload(sub_user, parent_user, products, tipo)
+    return jsonify({"status": "ok", "message": "Catálogo guardado.", **payload})
 
 @subuser_bp.route("/update_subuser_coupons_permission", methods=["POST"])
 def update_subuser_coupons_permission():

@@ -535,7 +535,7 @@ def _is_admin_session():
 
 
 def _is_store_subuser(user):
-    """Sub-usuario de tienda (tiene padre). No usa la API ni ve /docs/."""
+    """Sub-usuario de tienda (tiene padre). La API Partner de compra sigue siendo del principal."""
     if not user:
         return False
     parent_id = getattr(user, 'parent_id', None)
@@ -1825,9 +1825,6 @@ def partner_api_docs():
         return redirect(url_for('user_auth_bp.login'))
 
     docs_user = _session_docs_user()
-    if not _is_admin_session() and _is_store_subuser(docs_user):
-        flash('La documentación de la API es solo para el usuario principal y el administrador.', 'warning')
-        return redirect(url_for('store_bp.store_front'))
     viewer_currency = _partner_currency_or_none(docs_user) if docs_user else None
     can_see_prices = viewer_currency in ('USD', 'COP')
     admin_docs = _is_admin_session()

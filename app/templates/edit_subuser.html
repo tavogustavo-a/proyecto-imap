@@ -42,12 +42,13 @@
   <!-- Permiso de acceso a tienda -->
   {% if parent_has_store_role %}
     <div class="form-section mt-1">
-      <label class="d-flex align-items-center gap-03" for="canAccessStoreCheckbox">
+      <label class="d-flex align-items-center gap-03 flex-wrap" for="canAccessStoreCheckbox">
         <input type="checkbox" id="canAccessStoreCheckbox" name="can_access_store" {% if sub_user.can_access_store %}checked{% endif %}>
         ¿Deseas que el sub-usuario vea la página de tienda?
+        <button type="button" id="btnSubuserCatalog" class="btn-blue btn-small ml-1" data-catalog-url="{{ url_for('subuser_bp.subuser_catalog', subuser_id=sub_user.id) }}">Plataformas y precios</button>
         <span id="store-permission-status" class="ml-1 text-success"></span>
       </label>
-      <small class="text-secondary">Si está activado, el sub-usuario podrá ver productos y existencias (solo visualización; no puede comprar ni reservar).</small>
+      <small class="text-secondary">Si está activado, el sub-usuario verá precios, podrá recargar su propio saldo y comprar las plataformas que marques. Disney no está disponible para sub-usuarios.</small>
     </div>
     <div class="form-section mt-1">
       <label class="d-flex align-items-center gap-03" for="canUseCouponsCheckbox">
@@ -239,11 +240,49 @@
 
 </div>
 
+<div id="subuserCatalogOverlay" class="popup-overlay" hidden></div>
+<div id="subuserCatalogModal" class="popup-base subuser-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="subuserCatalogTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="subuserCatalogTitle" class="mt-0 mb-0">Plataformas y precios del sub-usuario</h4>
+    <button type="button" class="btn-close" id="closeSubuserCatalogBtn" aria-label="Cerrar">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <p class="text-small text-secondary mb-05">
+    Las plataformas chuleadas son las que verá. Disney (Standard, Premium o Básica) no está disponible para sub-usuarios.
+    Una plataforma nueva no aparece hasta que la actives aquí. El recargo general se aplica a todas;
+    si cambias un precio a mano, esa fila queda con el precio manual. No puede ser menor que el precio real.
+  </p>
+  <div class="subuser-catalog-markup-row">
+    <label for="subuserCatalogMarkup">Sumar a todas</label>
+    <input type="number" id="subuserCatalogMarkup" class="flex-grow-1" min="0" step="any" inputmode="decimal" autocomplete="off">
+    <span id="subuserCatalogCurrency" class="text-secondary"></span>
+  </div>
+  <div id="subuserCatalogTableWrap" class="subuser-catalog-table-wrap">
+    <table class="subuser-catalog-table" aria-label="Plataformas visibles y precios">
+      <thead>
+        <tr>
+          <th scope="col">Ver</th>
+          <th scope="col">Plataforma</th>
+          <th scope="col">Precio real</th>
+          <th scope="col">Precio del sub-usuario</th>
+        </tr>
+      </thead>
+      <tbody id="subuserCatalogTableBody"></tbody>
+    </table>
+  </div>
+  <p id="subuserCatalogStatus" class="text-small mt-05" role="status"></p>
+  <div class="d-flex gap-05 mt-1 justify-content-end">
+    <button type="button" class="popup-button-confirm" id="saveSubuserCatalogBtn">Guardar</button>
+    <button type="button" class="popup-button-cancel" id="cancelSubuserCatalogBtn">Cerrar</button>
+  </div>
+</div>
+
 {# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
 {% endblock content %}
 
 {# Cargar el script específico DESPUÉS del bloque de contenido principal #}
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/edit_subuser.js') }}"></script>
+<script src="{{ url_for('static', filename='js/edit_subuser.js') }}?v=20260907-subuser-catalog"></script>
 {% endblock scripts %}

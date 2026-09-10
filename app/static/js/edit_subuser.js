@@ -15,11 +15,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const subuserId = emailSection ? emailSection.dataset.subuserId : null;
     const saveUrl = emailSection ? emailSection.dataset.saveUrl : null;
 
-    // Salir si no se encuentran los elementos necesarios o los datos
+    // Salir del bloque de correos si no se encuentran los elementos necesarios
     if (!emailSection || !subuserId || !saveUrl) {
-        // console.warn("Elementos necesarios para la gestión de correos de subusuario no encontrados."); // Eliminado
-        return; 
-    }
+        // Continúa con permisos / catálogo aunque no haya sección de correos.
+    } else {
 
     // El resto del código original, usando las variables subuserId y saveUrl obtenidas arriba
     // ... (Buscar elementos internos: searchInput, clearSearchBtn, etc.) ...
@@ -145,7 +144,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     } // Fin if (checkboxListDiv)
-    
+    } // Fin gestión de correos
+
     // --- Gestión de Herramientas Públicas Permitidas ---
     const toolsSection = document.getElementById('tools-management-section');
     if (toolsSection) {
@@ -414,5 +414,193 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // --- Modal plataformas y precios del sub-usuario ---
+    (function initSubuserCatalogModal() {
+      const openBtn = document.getElementById('btnSubuserCatalog');
+      const modal = document.getElementById('subuserCatalogModal');
+      const overlay = document.getElementById('subuserCatalogOverlay');
+      const tbody = document.getElementById('subuserCatalogTableBody');
+      const markupInput = document.getElementById('subuserCatalogMarkup');
+      const currencyEl = document.getElementById('subuserCatalogCurrency');
+      const statusEl = document.getElementById('subuserCatalogStatus');
+      const saveBtn = document.getElementById('saveSubuserCatalogBtn');
+      if (!openBtn || !modal || !tbody || !markupInput) return;
+
+      const catalogUrl = openBtn.getAttribute('data-catalog-url') || '';
+      let currencyLabel = 'COP';
+
+      function formatPrice(n, cur) {
+        const x = Number(n);
+        if (!isFinite(x)) return '—';
+        if ((cur || currencyLabel) === 'USD') {
+          return '$' + (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : x.toFixed(2));
+        }
+        return '$' + Math.round(x).toLocaleString('es-CO');
+      }
+
+      function roundSale(n, cur) {
+        const x = Number(n);
+        if (!isFinite(x) || x < 0) return 0;
+        if ((cur || currencyLabel) === 'USD') return Math.round(x * 100) / 100;
+        return Math.round(x);
+      }
+
+      function setStatus(text, isError) {
+        if (!statusEl) return;
+        statusEl.textContent = text || '';
+        statusEl.style.color = isError ? '#b91c1c' : '#15803d';
+      }
+
+      function showModal(show) {
+        modal.hidden = !show;
+        modal.style.display = show ? 'block' : 'none';
+        if (overlay) {
+          overlay.hidden = !show;
+          overlay.style.display = show ? 'block' : 'none';
+        }
+      }
+
+      function currentMarkup() {
+        const n = Number(String(markupInput.value || '').replace(',', '.'));
+        return isFinite(n) && n >= 0 ? n : 0;
+      }
+
+      function applyMarkupToAutoRows() {
+        const markup = currentMarkup();
+        tbody.querySelectorAll('tr').forEach(function (row) {
+          if (row.getAttribute('data-manual') === '1') return;
+          const parent = Number(row.getAttribute('data-parent-price') || 0);
+          const saleInput = row.querySelector('.subuser-catalog-sale');
+          if (!saleInput) return;
+          const sale = roundSale(parent + markup, currencyLabel);
+          saleInput.value = sale;
+        });
+      }
+
+      function renderRows(products) {
+        tbody.innerHTML = (products || []).map(function (p) {
+          const parent = Number(p.parent_price || 0);
+          const sale = Number(p.sale_price || 0);
+          const manual = !!p.manual;
+          return (
+            '<tr data-id="' + p.id + '" data-parent-price="' + parent + '" data-manual="' + (manual ? '1' : '0') + '"' +
+            (manual ? ' class="is-manual"' : '') + '>' +
+            '<td><input type="checkbox" class="subuser-catalog-enabled"' + (p.enabled ? ' checked' : '') + '></td>' +
+            '<td>' + String(p.name || '').replace(/[&<>"]/g, function (c) {
+              return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+            }) + '</td>' +
+            '<td>' + formatPrice(parent, currencyLabel) + '</td>' +
+            '<td><input type="number" class="subuser-catalog-sale" min="' + parent + '" step="' +
+            (currencyLabel === 'USD' ? '0.01' : '1') + '" value="' + sale + '"></td>' +
+            '</tr>'
+          );
+        }).join('');
+      }
+
+      function loadCatalog() {
+        if (!catalogUrl) return;
+        setStatus('Cargando…', false);
+        fetch(catalogUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data || data.status !== 'ok') {
+              throw new Error(data && data.message ? data.message : 'No se pudo cargar el catálogo.');
+            }
+            currencyLabel = data.currency_label || data.tipo_precio || 'COP';
+            if (currencyEl) currencyEl.textContent = currencyLabel;
+            markupInput.value = data.markup != null ? data.markup : data.default_markup;
+            renderRows(data.products || []);
+            setStatus('', false);
+            showModal(true);
+          })
+          .catch(function (err) {
+            setStatus(err.message || 'Error de red.', true);
+            showModal(true);
+          });
+      }
+
+      tbody.addEventListener('input', function (ev) {
+        const input = ev.target.closest('.subuser-catalog-sale');
+        if (!input) return;
+        const row = input.closest('tr');
+        if (!row) return;
+        row.setAttribute('data-manual', '1');
+        row.classList.add('is-manual');
+      });
+
+      markupInput.addEventListener('input', applyMarkupToAutoRows);
+
+      openBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        loadCatalog();
+      });
+
+      function closeModal() {
+        showModal(false);
+        setStatus('', false);
+      }
+
+      const closeBtn = document.getElementById('closeSubuserCatalogBtn');
+      const cancelBtn = document.getElementById('cancelSubuserCatalogBtn');
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+      if (overlay) overlay.addEventListener('click', closeModal);
+
+      if (saveBtn) {
+        saveBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          const markup = currentMarkup();
+          const products = [];
+          let invalid = '';
+          tbody.querySelectorAll('tr').forEach(function (row) {
+            const parent = Number(row.getAttribute('data-parent-price') || 0);
+            const saleInput = row.querySelector('.subuser-catalog-sale');
+            const enabled = !!(row.querySelector('.subuser-catalog-enabled') || {}).checked;
+            const sale = roundSale(saleInput ? saleInput.value : 0, currencyLabel);
+            if (sale < parent) {
+              invalid = 'Hay un precio menor que el precio real. Corrígelo antes de guardar.';
+            }
+            const isManual = row.getAttribute('data-manual') === '1';
+            products.push({
+              id: parseInt(row.getAttribute('data-id'), 10),
+              enabled: enabled,
+              manual: isManual,
+              manual_price: isManual ? sale : null
+            });
+          });
+          if (invalid) {
+            setStatus(invalid, true);
+            return;
+          }
+          setStatus('Guardando…', false);
+          saveBtn.disabled = true;
+          fetch(catalogUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCsrfToken(),
+              Accept: 'application/json'
+            },
+            body: JSON.stringify({ markup: markup, products: products })
+          })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+            .then(function (res) {
+              if (!res.ok || !res.data || res.data.status !== 'ok') {
+                throw new Error((res.data && res.data.message) || 'No se pudo guardar.');
+              }
+              setStatus('Catálogo guardado.', false);
+              setTimeout(closeModal, 700);
+            })
+            .catch(function (err) {
+              setStatus(err.message || 'Error de red.', true);
+            })
+            .finally(function () {
+              saveBtn.disabled = false;
+            });
+        });
+      }
+    })();
     // ======= FIN BOTÓN 'VOLVER' =======
 }); 

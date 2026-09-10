@@ -1140,7 +1140,15 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
-          bulkAddEmailsMessage.textContent = `Correos añadidos correctamente. ${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos.`;
+          let msg = `Correos añadidos correctamente. ${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos`;
+          if (data.removed_elsewhere) {
+            msg += `. Quitados de otros clientes: ${data.removed_elsewhere}`;
+          }
+          if (data.skipped_unique) {
+            msg += `. No asignados (ya únicos de otro usuario): ${data.skipped_unique}`;
+          }
+          msg += ".";
+          bulkAddEmailsMessage.textContent = msg;
           bulkAddEmailsMessage.className = "mt-05 text-center text-color-green";
           bulkAddEmailsInput.value = "";
         } else {

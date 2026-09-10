@@ -1,8 +1,1 @@
-{# API Partner: usuario principal logueado. No sub-usuarios. Admin la ve en Menú2. #}
-{% set _docs_user = user_object if user_object is defined and user_object else none %}
-{% if not _docs_user and current_user is defined and current_user %}
-  {% set _docs_user = current_user %}
-{% endif %}
-{% if is_user and _docs_user and not _docs_user.parent_id %}
-  <a href="{{ url_for('partner_api_bp.partner_api_docs') }}" class="btn-panel btn-blue mobile-menu-btn mb-04" title="Documentación de la API Partner"><i class="fas fa-book" aria-hidden="true"></i> Documentación API</a>
-{% endif %}
+{# Documentación API: no se muestra en el menú de usuarios; acceso solo si conocen la URL. Admin la ve en Menú2. #}

@@ -50,9 +50,9 @@ document.addEventListener("DOMContentLoaded", function() {
       sorted.forEach(r => {
         html += `
           <div class="regex-item">
-            <strong>Remitente:</strong> ${r.sender || "(vacío)"}<br>
-            <strong>Descripción:</strong> ${r.description || "(vacío)"}<br>
-            <strong>Patrón:</strong> ${r.pattern}<br>
+            <strong>Remitente:</strong> ${escapeHtml(r.sender || "(vacío)")}<br>
+            <strong>Descripción:</strong> ${escapeHtml(r.description || "(vacío)")}<br>
+            <strong>Patrón:</strong> ${escapeHtml(r.pattern || "")}<br>
             <div class="mt-05">
         `;
         if (!r.protected) {

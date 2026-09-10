@@ -217,9 +217,13 @@ def _apply_user_discounts_to_product(user, product):
 
 
 def _store_user_unit_price(user, product):
-    """Precio unitario según moneda del usuario (con descuentos de catálogo)."""
+    """Precio unitario según moneda del usuario (con descuentos de catálogo / markup de sub-usuario)."""
     _apply_user_discounts_to_product(user, product)
     tipo_l = (_user_tipo_precio(user) or '').strip().upper()
+    if user and getattr(user, 'parent_id', None):
+        from app.store.subuser_catalog import apply_subuser_sale_to_product
+
+        apply_subuser_sale_to_product(user, product, tipo_l)
     cop = Decimal(str(getattr(product, 'price_cop', 0) or 0))
     usd = Decimal(str(getattr(product, 'price_usd', 0) or 0))
     disc_cop = Decimal(str(getattr(product, 'discount_cop_extra', 0) or 0))

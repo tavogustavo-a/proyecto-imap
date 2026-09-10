@@ -191,23 +191,23 @@ def store_access_required(f):
 
 
 def _user_store_view_only(user_obj):
-    """Subusuario con acceso a tienda: puede ver catálogo/stock, no comprar."""
-    return bool(user_obj and getattr(user_obj, 'parent_id', None) is not None)
+    """Antes los sub-usuarios solo veían el catálogo. Ahora pueden comprar con su saldo."""
+    return False
 
 
 def _user_can_purchase_in_store(user_obj):
-    """Compra/reservas/renovación de carrito: solo usuarios principales (no subusuarios)."""
+    """Compra/reservas/renovación de carrito: principal o sub-usuario con acceso a tienda."""
     if not user_obj:
         return False
-    if _user_store_view_only(user_obj):
-        return False
+    if getattr(user_obj, 'parent_id', None) is not None:
+        return bool(getattr(user_obj, 'can_access_store', False))
     return True
 
 
 def _json_store_purchase_forbidden():
     r = jsonify(
         success=False,
-        error='Tu cuenta solo puede visualizar la tienda y el stock. No puedes comprar ni reservar.',
+        error='Tu cuenta no puede comprar este producto. Revisa las plataformas habilitadas con tu usuario principal.',
     )
     return _attach_private_no_cache_headers(r), 403
 
@@ -1223,19 +1223,13 @@ def _save_proveedor_inventory_on_user(
 
 
 def _user_puede_tener_deuda_effective(user_obj):
-    """Puede comprar con saldo negativo: mismo usuario o padre del subusuario (cualquiera marca el flag)."""
+    """Puede comprar con saldo negativo. Los sub-usuarios solo gastan su propio saldo recargado."""
     if not user_obj:
         return False
-    up_self = user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
-    self_ok = bool(up_self.get('puede_tener_deuda'))
     if getattr(user_obj, 'parent_id', None):
-        parent = User.query.get(user_obj.parent_id)
-        if parent:
-            up_p = parent.user_prices if isinstance(parent.user_prices, dict) else {}
-            if bool(up_p.get('puede_tener_deuda')):
-                return True
-        return self_ok
-    return self_ok
+        return False
+    up_self = user_obj.user_prices if isinstance(user_obj.user_prices, dict) else {}
+    return bool(up_self.get('puede_tener_deuda'))
 
 
 def _user_debt_limit_effective(user_obj, currency):
@@ -2092,6 +2086,11 @@ def catalog_products_for_store_user(user):
                 d = parent_descuentos_productos.get(str(p.id)) or parent_descuentos_productos.get(int(p.id)) or {}
                 p.discount_cop_extra = d.get('cop', 0)
                 p.discount_usd_extra = d.get('usd', 0)
+            from app.store.subuser_catalog import filter_and_price_catalog_for_subuser
+
+            products = filter_and_price_catalog_for_subuser(
+                user, products, tipo_precio_effective, parent
+            )
         return products, tipo_precio_effective
 
     tipo_precio = None
@@ -8404,7 +8403,13 @@ def _balance_recharge_proof_payload(recharge_row):
 
 
 def _balance_recharge_viewer_billing_user(viewer):
+    """Padre (o el propio usuario): medios de pago y tipo_precio de recargas."""
     return _billing_user_for_store_debt_limit(viewer) or viewer
+
+
+def _balance_recharge_owner_user(viewer):
+    """Usuario cuyo saldo se recarga y se lista (el sub-usuario, no el padre)."""
+    return viewer
 
 
 def _recharge_payment_methods_payload(viewer):
@@ -8458,6 +8463,8 @@ def _balance_recharge_row_accessible(recharge_row, viewer):
     billing = _balance_recharge_viewer_billing_user(viewer)
     admin_username = current_app.config.get('ADMIN_USER', 'admin')
     if viewer.username == admin_username:
+        return True
+    if recharge_row.user_id == viewer.id:
         return True
     if billing and recharge_row.user_id == billing.id:
         return True
@@ -8750,8 +8757,9 @@ def recargas_saldo():
     _ensure_balance_recharges_table()
 
     billing = _balance_recharge_viewer_billing_user(user)
+    owner = _balance_recharge_owner_user(user)
     tp, currency_label, pm_rows = _recharge_payment_methods_payload(user)
-    saldo_info = build_recharge_page_balance_display(billing or user)
+    saldo_info = build_recharge_page_balance_display(owner or user)
 
     return render_template(
         'recargas_saldo.html',
@@ -8767,7 +8775,7 @@ def recargas_saldo():
 @store_bp.route('/api/user/balance-recharge/saldo', methods=['GET'])
 @store_access_required
 def api_user_balance_recharge_saldo():
-    """Saldo en tiempo real para recargas (cuenta de facturación, p. ej. padre de subusuario)."""
+    """Saldo en tiempo real para recargas (el propio usuario, también sub-usuarios)."""
     user_id = session.get('user_id')
     user = User.query.get(user_id) if user_id else None
     if not user:
@@ -8775,7 +8783,8 @@ def api_user_balance_recharge_saldo():
     if user.username != current_app.config.get('ADMIN_USER', 'admin') and not _eligible_tienda_user_licencias_portal(user):
         return jsonify({'show': False, 'line': None}), 403
     billing = _balance_recharge_viewer_billing_user(user)
-    return jsonify(build_recharge_page_balance_display(billing or user))
+    owner = _balance_recharge_owner_user(user)
+    return jsonify(build_recharge_page_balance_display(owner or user))
 
 
 @store_bp.route('/api/user/balance-recharges')
@@ -8792,8 +8801,9 @@ def api_user_balance_recharges():
     from app.store.models import BalanceRecharge
 
     billing = _balance_recharge_viewer_billing_user(user)
+    owner = _balance_recharge_owner_user(user)
     status = (request.args.get('status') or 'all').strip().lower()
-    q = BalanceRecharge.query.filter_by(user_id=billing.id).order_by(
+    q = BalanceRecharge.query.filter_by(user_id=owner.id).order_by(
         BalanceRecharge.created_at.desc()
     )
     if status == 'pending':
@@ -8822,7 +8832,7 @@ def api_user_balance_recharges():
         q = q.filter(BalanceRecharge.status == status)
     list_limit = _parse_user_recharge_list_limit(request.args.get('limit'))
     list_offset = _parse_user_recharge_list_offset(request.args.get('offset'))
-    filter_counts = _user_balance_recharge_filter_counts(billing.id)
+    filter_counts = _user_balance_recharge_filter_counts(owner.id)
     status_key = status if status in filter_counts else 'all'
     filter_total = int(filter_counts.get(status_key) or 0)
     rows = q.offset(list_offset).limit(list_limit + 1).all()
@@ -8856,12 +8866,13 @@ def api_user_balance_recharge_one(recharge_id):
     if not user:
         return jsonify({'success': False, 'message': 'No autenticado'}), 401
     billing = _balance_recharge_viewer_billing_user(user)
+    owner = _balance_recharge_owner_user(user)
     if not billing:
         return jsonify({'success': False, 'message': 'Sin acceso'}), 403
 
     row = BalanceRecharge.query.filter_by(
         id=int(recharge_id),
-        user_id=int(billing.id),
+        user_id=int(owner.id),
     ).first()
     if not row:
         return jsonify({'success': False, 'message': 'Solicitud no encontrada'}), 404
@@ -8892,6 +8903,7 @@ def api_user_balance_recharge_submit():
     from app.store.models import BalanceRecharge
 
     billing = _balance_recharge_viewer_billing_user(user)
+    owner = _balance_recharge_owner_user(user)
     _, tipo_precio = catalog_products_for_store_user(billing or user)
     tp = (tipo_precio or '').strip().upper()
     if tp not in ('USD', 'COP'):
@@ -8907,7 +8919,7 @@ def api_user_balance_recharge_submit():
     from app.store.balance_recharge_rate_limit import balance_recharge_submit_rate_limit_error
 
     rl_msg = balance_recharge_submit_rate_limit_error(
-        int(billing.id),
+        int(owner.id),
         (request.remote_addr or '').strip(),
     )
     if rl_msg:
@@ -9250,7 +9262,7 @@ def api_user_balance_recharge_submit():
     duplicate = find_duplicate_recharge(
         receipt_number=receipt_no,
         proof_image_hash=img_hash,
-        user_id=billing.id,
+        user_id=owner.id,
     )
     resubmit_after_reject = bool(duplicate and duplicate.get('resubmit_after_reject'))
     if duplicate and duplicate.get('blocks', True):
@@ -9321,7 +9333,7 @@ def api_user_balance_recharge_submit():
         analysis['resubmitted_from_recharge_id'] = int(duplicate['existing_id'])
 
     row = BalanceRecharge(
-        user_id=billing.id,
+        user_id=owner.id,
         submitted_by_user_id=user.id,
         currency=currency,
         payment_method_id=payment_method_id,
@@ -9377,7 +9389,7 @@ def api_user_balance_recharge_submit():
         dup_after = find_duplicate_recharge(
             receipt_number=receipt_no,
             proof_image_hash=img_hash,
-            user_id=billing.id,
+            user_id=owner.id,
         )
         dup_message = (
             dup_after['message']
@@ -9457,11 +9469,12 @@ def api_user_balance_recharge_events():
     if user.username != current_app.config.get('ADMIN_USER', 'admin') and not _eligible_tienda_user_licencias_portal(user):
         return jsonify({'success': False, 'message': 'Sin acceso'}), 403
     billing = _balance_recharge_viewer_billing_user(user)
+    owner = _balance_recharge_owner_user(user)
     if not billing:
         return jsonify({'success': False, 'message': 'Sin acceso'}), 403
 
     def generate():
-        bid = int(billing.id)
+        bid = int(owner.id)
         q = subscribe_user_recharge_events(bid)
         # Sin Redis, eventos de otros workers no llegan a este proceso: sondear
         # una revisión ligera en BD en cada heartbeat para no perderlos.
@@ -9583,6 +9596,7 @@ def api_user_balance_recharge_binance_pay_order():
 
     _ensure_balance_recharges_table()
     billing = _balance_recharge_viewer_billing_user(user)
+    owner = _balance_recharge_owner_user(user)
     _, tipo_precio = catalog_products_for_store_user(billing or user)
     tp = (tipo_precio or 'COP').upper()
     if tp != 'USD':
@@ -9636,7 +9650,7 @@ def api_user_balance_recharge_binance_pay_order():
     currency = 'USD'
     merchant_trade_no = make_merchant_trade_no(0)
     row = BalanceRecharge(
-        user_id=billing.id,
+        user_id=owner.id,
         submitted_by_user_id=user.id,
         currency=currency,
         payment_method_id=payment_method_id,
@@ -10020,6 +10034,7 @@ def api_user_balance_recharge_gateway_order():
 
     _ensure_balance_recharges_table()
     billing = _balance_recharge_viewer_billing_user(user)
+    owner = _balance_recharge_owner_user(user)
     _, tipo_precio = catalog_products_for_store_user(billing or user)
     tp = (tipo_precio or 'COP').upper()
 
@@ -10081,7 +10096,7 @@ def api_user_balance_recharge_gateway_order():
     currency = tp
     reference = make_gateway_reference(0)
     row = BalanceRecharge(
-        user_id=billing.id,
+        user_id=owner.id,
         submitted_by_user_id=user.id,
         currency=currency,
         payment_method_id=payment_method_id,

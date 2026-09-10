@@ -4,6 +4,7 @@
 
 {% block head %}{{ super() }}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260726-store-alert-modal"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
+{% set store_can_buy = current_user and not (store_view_only|default(false)) %}
 <div class="container container-max-width-900 store-light store-front-main">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
   {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
@@ -148,6 +149,8 @@
           <i class="fas fa-cog" aria-hidden="true"></i>
           <span class="btn-configuracion-tienda__label">Config</span>
         </button>
+        {% endif %}
+        {% if store_can_buy %}
         <button type="button" class="btn-renovacion-tienda" id="btnStoreRenovacion" title="Buscar cuentas en licencias para venta y renovar">
           <i class="fas fa-sync-alt" aria-hidden="true"></i>
           <span>Renovación</span>
@@ -157,7 +160,7 @@
     </form>
   </div>
 
-  {% if products and current_user and not current_user.parent_id %}
+  {% if products and store_can_buy %}
   {% set tipo_precio_table = (tipo_precio_store|default('usd'))|lower %}
   <div id="storePriceTablePanel" class="store-price-table-panel" hidden>
     <div class="store-price-table-panel__toolbar">
@@ -257,7 +260,7 @@
               <th scope="col" class="store-products-table__th store-products-table__th--name">Cuenta</th>
               <th scope="col" class="store-products-table__th store-products-table__th--period">Periodo</th>
               <th scope="col" class="store-products-table__th store-products-table__th--m2m">Mes a mes</th>
-              {% if current_user and not current_user.parent_id %}
+              {% if store_can_buy %}
                 {% if is_admin %}
                   <th scope="col" class="store-products-table__th store-products-table__th--price">COP</th>
                   <th scope="col" class="store-products-table__th store-products-table__th--price">USD</th>
@@ -310,7 +313,7 @@
                 <td class="store-products-table__m2m{% if product_m2m_v6 %} store-products-table__m2m--yes{% else %} store-products-table__m2m--no{% endif %}">
                   {% if product_m2m_v6 %}Sí{% else %}No{% endif %}
                 </td>
-                {% if current_user and not current_user.parent_id %}
+                {% if store_can_buy %}
                   {% if is_admin %}
                     <td class="store-products-table__price">${{ p.price_cop|money_amount }} COP</td>
                     <td class="store-products-table__price">${{ p.price_usd|money_amount }} USD</td>
@@ -391,7 +394,7 @@
               <span class="info-icon info-icon-square btn-show-desc product-card-info-icon product-card-info-icon--name-head" data-desc="{{ p.description|e }}" title="Ver descripción" aria-label="Ver descripción del producto">i</span>
             {% endif %}
           </div>
-          {% if current_user and not current_user.parent_id %}
+          {% if store_can_buy %}
           <div class="product-card-store-action-btns">
           {% if product_renew_customer %}
           <div class="product-renovar-cuenta-block">
@@ -413,7 +416,7 @@
         </div>
         <span class="product-card-meta product-card-meta--period">{{ product_billing_period }}</span>
         <span class="product-card-meta product-card-meta--m2m{% if product_m2m %} product-card-meta--m2m-yes{% else %} product-card-meta--m2m-no{% endif %}">{% if product_m2m %}Sí{% else %}No{% endif %}</span>
-        {% if current_user and not current_user.parent_id %}
+        {% if store_can_buy %}
           <div class="product-card-actions-col">
           <div class="product-card-qty-add-row d-flex align-items-center justify-content-center mt-05">
             <div class="input-group-cantidad">
@@ -429,14 +432,14 @@
         {% if current_user %}
           <div class="d-flex align-items-center justify-content-center mt-02 product-card-stock-row">
             <span class="product-stock-info{% if _sock <= 0 %} product-stock-info--zero{% endif %}" data-product-id="{{ p.id }}" data-initial-stock="{{ _sock }}">{{ _sock }} existencias</span>
-            {% if not current_user.parent_id %}
+            {% if store_can_buy %}
             <span class="product-price-period product-price-period--with-stock">{{ product_billing_period }}</span>
             {% endif %}
           </div>
         {% endif %}
         <!-- Fin campo de cantidad y botones + y - integrados -->
         <div class="d-flex align-items-center justify-content-center mt-05 product-card-price-row">
-          {% if current_user and not current_user.parent_id %}
+          {% if store_can_buy %}
             <div class="product-price-col">
               {% if is_admin %}
                 <span class="product-price-cop">${{ p.price_cop|money_amount }} COP</span>
