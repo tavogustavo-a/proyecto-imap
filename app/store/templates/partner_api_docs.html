@@ -697,10 +697,10 @@
     <a href="#auth">Autenticación</a><a href="#limites">Límites y seguridad</a><a href="#perfil">Perfil</a>
     <a href="#productos">Productos</a><a href="#compras">Compras</a><a href="#renovaciones">Renovaciones</a>
     <a href="#reportes">Reportes</a><a href="#codigos">Códigos</a>
-    <a href="#errores">Errores</a>{% if is_admin %}<a href="#apiLicenciasAdmin">API licencias</a>{% endif %}
+    <a href="#errores">Errores</a>{% if show_partner_admin %}<a href="#apiLicenciasAdmin">API licencias</a>{% endif %}
   </p>
 
-  {% if is_admin %}
+  {% if show_partner_admin %}
   <section id="adminPanel">
     <h2>Panel del administrador (solo tú ves esto)</h2>
     <div class="sec-body">
@@ -714,8 +714,8 @@
         </div>
       </div>
       <div class="admin-box">
-        <p style="margin-top:0"><strong>IPs permitidas</strong> — la lista no puede quedar vacía: sin IPs vinculadas la API no acepta ninguna conexión.
-          Cada IP o rango CIDR (<code>190.85.10.20</code> / <code>190.85.10.0/24</code>) debe tener un usuario dueño.
+        <p style="margin-top:0"><strong>IPs permitidas</strong> — cada IP o rango CIDR (<code>190.85.10.20</code> / <code>190.85.10.0/24</code>) debe tener un usuario dueño.
+          Sin entradas vinculadas la API no acepta ninguna conexión. Puedes quitar la última: nadie podrá conectar hasta que añadas otra.
           Esta misma lista vale para la API Partner, para <strong>Mi API</strong> de Códigos (APIs Vinculadas proyectos, más abajo) y para <strong>Mi API</strong> de licencias.
           Tu IP actual: <code id="clientIp">…</code></p>
         <div id="ipList"></div>
@@ -733,7 +733,26 @@
         </div>
         <p class="status-msg" id="saveMsg" role="status"></p>
       </div>
+      <div class="admin-box">
+        <p style="margin-top:0"><strong>Token de códigos por usuario</strong> — busca el usuario y copia el token que es <em>solo de él</em>.
+          Ese token es el que pegas en Unir plataformas junto con ese mismo usuario. No uses el de <strong>Mi API</strong> (ese es del administrador).</p>
+        <div class="ip-add-row">
+          <div class="pd-owner-picker" data-owner-picker>
+            <input type="hidden" id="codesTokenUserId" value="">
+            <button type="button" id="codesTokenUserSearch" class="pd-owner-picker-btn" data-placeholder="Buscar usuario…" aria-haspopup="dialog" aria-label="Buscar usuario del token">
+              <i class="fas fa-user" aria-hidden="true"></i>
+              <span class="pd-owner-picker-btn-label">Buscar usuario…</span>
+              <i class="fas fa-chevron-down" aria-hidden="true"></i>
+            </button>
+          </div>
+          <input type="text" id="codesTokenValue" placeholder="Elige un usuario para ver su token" autocomplete="off" readonly>
+          <button type="button" id="codesTokenCopyBtn">Copiar token</button>
+        </div>
+        <p class="status-msg" id="codesTokenMsg" role="status"></p>
+      </div>
+      {% if is_admin %}
       {% include 'includes/admin_api_licencias_panels.html' %}
+      {% endif %}
     </div>
   </section>
   {% endif %}
@@ -788,7 +807,7 @@
         <tr><td>Vida del token access</td><td>{{ limits.access_minutes }} min</td><td><code>401 token_expired</code></td></tr>
         <tr><td>Vida del token refresh</td><td>{{ limits.refresh_days }} días</td><td>volver a hacer login</td></tr>
       </table>
-      <p class="mut">Además el administrador restringe por IP: cada IP va vinculada a un usuario y la lista no puede quedar vacía. También puede apagar la API por completo.
+      <p class="mut">Además el administrador restringe por IP: cada IP va vinculada a un usuario. Si la lista está vacía, la API no acepta conexiones. También puede apagar la API por completo.
         Con lista activa, una IP fuera de ella recibe <code>403 ip_not_allowed</code>.
         Sin tipo de precio COP/USD el login responde <code>403 forbidden</code>.</p>
     </div>
@@ -1008,7 +1027,9 @@
   {% if is_admin %}
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/partner_api_docs.js') }}?v={{ licencias_static_version }}-ipbind9" defer></script>
   <script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v={{ licencias_static_version }}-apidocs8" defer></script>
+  {% endif %}
+  {% if show_partner_admin %}
+  <script src="{{ url_for('store_bp.static', filename='js/partner_api_docs.js') }}?v={{ licencias_static_version }}-ipbind11" defer></script>
   {% endif %}
 {% endblock %}

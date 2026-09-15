@@ -17,6 +17,7 @@ Envelope de respuestas:
 from __future__ import annotations
 
 import hmac
+import secrets
 import threading
 import time
 from collections import deque
@@ -350,16 +351,11 @@ def _allowlist_status(user=None):
     if user is not None:
         if getattr(user, 'enabled', True) is False:
             return 'owner_disabled'
-        # App de escritorio firmada (Cambios plataformas): basta el HWID, sin IP.
-        if hwid:
-            return 'ok'
         if _ip_allowed_for_user(ip, wl, user, hwid=hwid):
             return 'ok'
         if _ip_bound_to_disabled_owner(ip, wl, hwid=hwid):
             return 'owner_disabled'
         return 'ip_not_allowed'
-    if hwid:
-        return 'ok'
     if _ip_allowed(ip, wl, hwid=hwid):
         return 'ok'
     if _ip_bound_to_disabled_owner(ip, wl, hwid=hwid):
@@ -549,10 +545,22 @@ def partner_auth_required(f):
 
 
 def _is_admin_session():
-    if not session.get('logged_in') or session.get('is_user'):
+    """Admin de la web o usuario principal id 1 (cuenta raíz de tienda)."""
+    if not session.get('logged_in'):
+        return False
+    user = _session_docs_user()
+    if not user or getattr(user, 'parent_id', None) is not None:
         return False
     admin_name = (current_app.config.get('ADMIN_USER') or 'admin').strip()
-    return (session.get('username') or '').strip() == admin_name
+    if (user.username or '').strip() == admin_name:
+        return True
+    uname = (user.username or '').strip()
+    if uname == '1':
+        return True
+    try:
+        return int(user.id) == 1
+    except (TypeError, ValueError):
+        return False
 
 
 def _is_store_subuser(user):
@@ -1808,17 +1816,35 @@ def partner_admin_settings_post():
             'Cada IP debe estar vinculada a un usuario. Falta dueño en: ' + ', '.join(unbound[:5]) + '.',
             400,
         )
-    if not cleaned:
-        return _err(
-            'bad_request',
-            'La lista no puede quedar vacía. Añade al menos una IP vinculada a un usuario.',
-            400,
-        )
     save_partner_settings(enabled, cleaned)
     settings = get_partner_settings()
     settings['client_ip'] = _client_ip()
     settings['users'] = _partner_ip_bind_users()
     return _ok(settings)
+
+
+@partner_api_bp.route('/admin/codes-token/', methods=['GET'])
+def partner_admin_codes_token():
+    """Token de Códigos del usuario elegido (solo para ese usuario)."""
+    if not _is_admin_session():
+        return _err('forbidden', 'Solo el administrador puede ver este token.', 403)
+    try:
+        uid = int(request.args.get('user_id') or 0)
+    except (TypeError, ValueError):
+        return _err('bad_request', 'Usuario inválido.', 400)
+    owner = User.query.get(uid)
+    if not owner or owner.parent_id is not None:
+        return _err('not_found', 'Usuario no encontrado.', 404)
+    if getattr(owner, 'enabled', True) is False:
+        return _err('owner_disabled', 'Ese usuario está apagado.', 403)
+    if not (owner.master_token or '').strip():
+        owner.master_token = secrets.token_hex(32)
+        db.session.commit()
+    return _ok({
+        'user_id': int(owner.id),
+        'username': owner.username,
+        'token': owner.master_token,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -1901,4 +1927,5 @@ def partner_api_docs():
             'refresh_days': REFRESH_TOKEN_MAX_AGE // 86400,
         },
         generated_at=datetime.utcnow(),
+        show_partner_admin=admin_docs,
     )

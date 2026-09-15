@@ -46,7 +46,7 @@
   }
 
   function fetchUsers(q) {
-    var url = '/admin/search_users_ajax?query=' + encodeURIComponent(q || '') + '&per_page=all';
+    var url = '/api/partner/v1/admin/settings/';
     return fetch(url, {
       credentials: 'same-origin',
       headers: { 'X-CSRFToken': getCsrf(), Accept: 'application/json' }
@@ -55,13 +55,14 @@
         return r.json();
       })
       .then(function (data) {
-        if (data && data.status === 'ok' && Array.isArray(data.users)) {
-          return mergeUsers(data.users);
+        var list = data && data.data && Array.isArray(data.data.users) ? data.data.users : [];
+        if (list.length) {
+          mergeUsers(list);
         }
-        return cache;
+        return searchLocal(q);
       })
       .catch(function () {
-        return cache;
+        return searchLocal(q);
       });
   }
 
@@ -203,6 +204,11 @@
         var hidden = activeWrap.querySelector('input[type="hidden"]');
         if (hidden) {
           hidden.value = String(u.id);
+          hidden.dispatchEvent(new Event('change', { bubbles: true }));
+          document.dispatchEvent(new CustomEvent('partner-owner-picked', {
+            bubbles: true,
+            detail: { id: u.id, username: u.username || '', hidden: hidden }
+          }));
         }
         setTriggerText(activeWrap, u.username || '');
         closeOverlay();
@@ -349,7 +355,7 @@
       if (!ips.length) {
         var empty = document.createElement('span');
         empty.className = 'mut';
-        empty.textContent = 'Debes añadir al menos una IP vinculada a un usuario. Sin eso la API no acepta conexiones.';
+        empty.textContent = 'No hay IPs vinculadas. La API no acepta conexiones hasta que añadas una.';
         listEl.appendChild(empty);
         return;
       }
@@ -369,10 +375,6 @@
         del.textContent = '×';
         del.title = 'Quitar ' + entry.ip;
         del.addEventListener('click', function () {
-          if (ips.length <= 1) {
-            setMsg('No puedes dejar la lista vacía. Añade otra IP con usuario antes de quitar esta.', false);
-            return;
-          }
           var prev = ips.slice();
           ips.splice(i, 1);
           persist('IP quitada.').then(function (ok) {
@@ -429,10 +431,6 @@
         var e = asEntry(item);
         return !e.ip || !e.user_id;
       });
-      if (!ips.length) {
-        setMsg('Añade al menos una IP vinculada a un usuario.', false);
-        return Promise.resolve(false);
-      }
       if (missing.length) {
         setMsg('Todas las IPs deben tener usuario dueño.', false);
         return Promise.resolve(false);
@@ -540,9 +538,6 @@
       }
     });
     chk.addEventListener('change', function () {
-      if (!ips.length) {
-        return;
-      }
       persist(chk.checked ? 'API activa.' : 'API desactivada.');
     });
 
@@ -554,5 +549,124 @@
     document.addEventListener('DOMContentLoaded', initPartnerApiDocsAdmin);
   } else {
     initPartnerApiDocsAdmin();
+  }
+})();
+
+(function () {
+  'use strict';
+
+  function getCsrf() {
+    var meta = document.querySelector('meta[name="csrf_token"]');
+    return (meta && meta.getAttribute('content')) || '';
+  }
+
+  function setTokenMsg(text, ok) {
+    var el = document.getElementById('codesTokenMsg');
+    if (!el) {
+      return;
+    }
+    el.textContent = text || '';
+    el.style.color = ok ? '#86efac' : '#fca5a5';
+  }
+
+  function fillTokenFields(token, sourceId) {
+    var valueEl = document.getElementById('codesTokenValue');
+    if (valueEl && (sourceId === 'codesTokenUserId' || !sourceId)) {
+      valueEl.value = token || '';
+    }
+    if (sourceId === 'newGlobalApiOwner') {
+      var g = document.getElementById('newGlobalApiToken');
+      if (g) {
+        g.value = token || '';
+      }
+    }
+    if (sourceId === 'newLicenciasApiOwner') {
+      var l = document.getElementById('newLicenciasApiToken');
+      if (l) {
+        l.value = token || '';
+      }
+    }
+  }
+
+  function loadOwnerToken(userId, sourceId) {
+    if (!userId) {
+      fillTokenFields('', sourceId);
+      return;
+    }
+    setTokenMsg('Cargando token…', true);
+    fetch('/api/partner/v1/admin/codes-token/?user_id=' + encodeURIComponent(userId), {
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': getCsrf(), Accept: 'application/json' }
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          return { ok: r.ok, data: data };
+        });
+      })
+      .then(function (res) {
+        var payload = (res.data && res.data.data) || {};
+        var token = payload.token || '';
+        if (!res.ok || !token) {
+          var err = res.data && res.data.error && res.data.error.message;
+          setTokenMsg(err || 'No se pudo leer el token de ese usuario.', false);
+          fillTokenFields('', sourceId);
+          return;
+        }
+        fillTokenFields(token, sourceId);
+        if (sourceId === 'codesTokenUserId') {
+          setTokenMsg('Token de «' + (payload.username || '') + '». Úsalo solo con ese usuario.', true);
+        } else {
+          setTokenMsg('', true);
+        }
+      })
+      .catch(function () {
+        setTokenMsg('Error de red al leer el token.', false);
+      });
+  }
+
+  function initCodesTokenBox() {
+    var copyBtn = document.getElementById('codesTokenCopyBtn');
+    var valueEl = document.getElementById('codesTokenValue');
+    if (copyBtn && valueEl) {
+      copyBtn.addEventListener('click', function () {
+        var token = (valueEl.value || '').trim();
+        if (!token) {
+          setTokenMsg('Elige un usuario primero.', false);
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(token).then(function () {
+            setTokenMsg('Token copiado.', true);
+          }).catch(function () {
+            valueEl.select();
+            setTokenMsg('Selecciona el token y cópialo (Ctrl+C).', false);
+          });
+        } else {
+          valueEl.select();
+          setTokenMsg('Selecciona el token y cópialo (Ctrl+C).', false);
+        }
+      });
+    }
+    document.addEventListener('partner-owner-picked', function (e) {
+      var hidden = e.detail && e.detail.hidden;
+      if (!hidden || !hidden.id) {
+        return;
+      }
+      if (
+        hidden.id === 'codesTokenUserId' ||
+        hidden.id === 'newGlobalApiOwner' ||
+        hidden.id === 'newLicenciasApiOwner' ||
+        hidden.id === 'editGlobalApiOwner' ||
+        hidden.id === 'editLicenciasApiOwner'
+      ) {
+        loadOwnerToken(hidden.value, hidden.id);
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCodesTokenBox);
+  } else {
+    initCodesTokenBox();
   }
 })();
