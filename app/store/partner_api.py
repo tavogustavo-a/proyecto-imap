@@ -263,8 +263,17 @@ def _allowlist_token_matches(token, client_ip, hwid=None):
     token = str(token or '').strip()
     if not token:
         return False
-    if hwid and is_hwid_token(token):
-        return hmac.compare_digest(token.lower(), str(hwid).lower())
+    token_hwid = normalize_hwid_token(token)
+    if not token_hwid and len(token) > 64:
+        token_hwid = normalize_hwid_token(token[:64])
+    presented = normalize_hwid_token(hwid) if hwid else None
+    if token_hwid and presented:
+        if len(token_hwid) == len(presented):
+            try:
+                return hmac.compare_digest(token_hwid, presented)
+            except (TypeError, ValueError):
+                return token_hwid == presented
+        return token_hwid == presented
     try:
         ip = ipaddress.ip_address(str(client_ip).strip())
     except ValueError:
@@ -272,7 +281,7 @@ def _allowlist_token_matches(token, client_ip, hwid=None):
     try:
         if '/' in token:
             return ip in ipaddress.ip_network(token, strict=False)
-        if is_hwid_token(token):
+        if is_hwid_token(token) or token_hwid:
             return False
         return ip == ipaddress.ip_address(token)
     except ValueError:
