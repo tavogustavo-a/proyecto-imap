@@ -350,11 +350,16 @@ def _allowlist_status(user=None):
     if user is not None:
         if getattr(user, 'enabled', True) is False:
             return 'owner_disabled'
+        # App de escritorio firmada (Cambios plataformas): basta el HWID, sin IP.
+        if hwid:
+            return 'ok'
         if _ip_allowed_for_user(ip, wl, user, hwid=hwid):
             return 'ok'
         if _ip_bound_to_disabled_owner(ip, wl, hwid=hwid):
             return 'owner_disabled'
         return 'ip_not_allowed'
+    if hwid:
+        return 'ok'
     if _ip_allowed(ip, wl, hwid=hwid):
         return 'ok'
     if _ip_bound_to_disabled_owner(ip, wl, hwid=hwid):
