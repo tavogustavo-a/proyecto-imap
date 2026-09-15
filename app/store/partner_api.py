@@ -16,6 +16,7 @@ Envelope de respuestas:
 
 from __future__ import annotations
 
+import hmac
 import threading
 import time
 from collections import deque
@@ -28,6 +29,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
 from app.models.user import User
+from app.store.partner_hwid import is_hwid_token, normalize_hwid_token, verified_hwid_from_request
 from app.store.models import StoreSetting
 
 partner_api_bp = Blueprint('partner_api_bp', __name__)
@@ -238,12 +240,15 @@ def _whitelist_owner_is_enabled(entry, enabled_cache=None):
 
 
 def _normalize_ip_entry(raw):
-    """IP exacta o rango CIDR válido; None si no es válido."""
+    """IP exacta, rango CIDR o token de lista blanca; None si no es válido."""
     import ipaddress
 
     s = str(raw or '').strip()
     if not s:
         return None
+    hwid = normalize_hwid_token(s)
+    if hwid:
+        return hwid
     try:
         if '/' in s:
             return str(ipaddress.ip_network(s, strict=False))
@@ -252,14 +257,30 @@ def _normalize_ip_entry(raw):
         return None
 
 
-def _ip_allowed(client_ip, whitelist):
+def _allowlist_token_matches(token, client_ip, hwid=None):
     import ipaddress
 
-    if not whitelist:
+    token = str(token or '').strip()
+    if not token:
         return False
+    if hwid and is_hwid_token(token):
+        return hmac.compare_digest(token.lower(), str(hwid).lower())
     try:
         ip = ipaddress.ip_address(str(client_ip).strip())
     except ValueError:
+        return False
+    try:
+        if '/' in token:
+            return ip in ipaddress.ip_network(token, strict=False)
+        if is_hwid_token(token):
+            return False
+        return ip == ipaddress.ip_address(token)
+    except ValueError:
+        return False
+
+
+def _ip_allowed(client_ip, whitelist, hwid=None):
+    if not whitelist:
         return False
     enabled_cache = {}
     for entry in whitelist:
@@ -268,22 +289,15 @@ def _ip_allowed(client_ip, whitelist):
         token = _entry_ip(entry)
         if not token:
             continue
-        try:
-            matched = False
-            if '/' in token:
-                if ip in ipaddress.ip_network(token, strict=False):
-                    matched = True
-            elif ip == ipaddress.ip_address(token):
-                matched = True
-            if matched and _whitelist_owner_is_enabled(entry, enabled_cache):
-                return True
-        except ValueError:
-            continue
+        if _allowlist_token_matches(token, client_ip, hwid) and _whitelist_owner_is_enabled(
+            entry, enabled_cache
+        ):
+            return True
     return False
 
 
-def _ip_allowed_for_user(client_ip, whitelist, user):
-    """La IP debe estar en la lista, vinculada a ese usuario y el usuario encendido."""
+def _ip_allowed_for_user(client_ip, whitelist, user, hwid=None):
+    """La entrada debe estar en la lista, vinculada a ese usuario y el usuario encendido."""
     if not user:
         return False
     if getattr(user, 'enabled', True) is False:
@@ -301,57 +315,48 @@ def _ip_allowed_for_user(client_ip, whitelist, user):
                 scoped.append(entry)
         except (TypeError, ValueError):
             continue
-    return _ip_allowed(client_ip, scoped)
+    return _ip_allowed(client_ip, scoped, hwid=hwid)
 
 
-def _ip_bound_to_disabled_owner(client_ip, whitelist):
-    """True si la IP coincide pero el dueño está apagado."""
-    import ipaddress
-
-    try:
-        ip = ipaddress.ip_address(str(client_ip).strip())
-    except ValueError:
-        return False
+def _ip_bound_to_disabled_owner(client_ip, whitelist, hwid=None):
+    """True si la entrada coincide pero el dueño está apagado."""
     cache = {}
     for entry in whitelist or []:
         token = _entry_ip(entry)
         if not token:
             continue
-        try:
-            matched = False
-            if '/' in token:
-                matched = ip in ipaddress.ip_network(token, strict=False)
-            else:
-                matched = ip == ipaddress.ip_address(token)
-        except ValueError:
-            continue
-        if matched and not _whitelist_owner_is_enabled(entry, cache):
+        if _allowlist_token_matches(token, client_ip, hwid) and not _whitelist_owner_is_enabled(
+            entry, cache
+        ):
             return True
     return False
 
 
-def partner_external_ip_forbidden(user=None):
-    """403 JSON para APIs de códigos/licencias si la IP no está en Documentación API."""
+def _allowlist_status(user=None):
+    """ok | owner_disabled | ip_not_allowed"""
     settings = get_partner_settings()
     wl = settings.get('ip_whitelist') or []
     ip = _client_ip()
-    if user is not None and getattr(user, 'enabled', True) is False:
-        return (
-            jsonify(
-                {
-                    'error': (
-                        'El usuario dueño de esta IP está apagado. '
-                        'La IP no funciona en la API hasta que un administrador lo encienda.'
-                    ),
-                    'code': 'owner_disabled',
-                }
-            ),
-            403,
-        )
-    ok = _ip_allowed_for_user(ip, wl, user) if user is not None else _ip_allowed(ip, wl)
-    if ok:
+    hwid = verified_hwid_from_request()
+    if user is not None:
+        if getattr(user, 'enabled', True) is False:
+            return 'owner_disabled'
+        if _ip_allowed_for_user(ip, wl, user, hwid=hwid):
+            return 'ok'
+        if _ip_bound_to_disabled_owner(ip, wl, hwid=hwid):
+            return 'owner_disabled'
+        return 'ip_not_allowed'
+    if _ip_allowed(ip, wl, hwid=hwid):
+        return 'ok'
+    if _ip_bound_to_disabled_owner(ip, wl, hwid=hwid):
+        return 'owner_disabled'
+    return 'ip_not_allowed'
+
+
+def _allowlist_error_tuple(status):
+    if status == 'ok':
         return None
-    if _ip_bound_to_disabled_owner(ip, wl):
+    if status == 'owner_disabled':
         return (
             jsonify(
                 {
@@ -376,6 +381,23 @@ def partner_external_ip_forbidden(user=None):
         ),
         403,
     )
+
+
+def _allowlist_partner_err(status):
+    if status == 'ok':
+        return None
+    if status == 'owner_disabled':
+        return _err(
+            'owner_disabled',
+            'El usuario dueño de esta IP está apagado. La IP no funciona en la API hasta que lo enciendan.',
+            403,
+        )
+    return _err('ip_not_allowed', 'Esta IP no está autorizada para usar la API.', 403)
+
+
+def partner_external_ip_forbidden(user=None):
+    """403 JSON para APIs de códigos/licencias si la IP no está en Documentación API."""
+    return _allowlist_error_tuple(_allowlist_status(user))
 
 
 def _client_ip():
@@ -476,16 +498,7 @@ def _gate_error():
     settings = get_partner_settings()
     if not settings['enabled']:
         return _err('api_disabled', 'La API está desactivada por el administrador.', 503)
-    client_ip = _client_ip()
-    if _ip_allowed(client_ip, settings['ip_whitelist']):
-        return None
-    if _ip_bound_to_disabled_owner(client_ip, settings['ip_whitelist']):
-        return _err(
-            'owner_disabled',
-            'El usuario dueño de esta IP está apagado. La IP no funciona en la API hasta que lo enciendan.',
-            403,
-        )
-    return _err('ip_not_allowed', 'Esta IP no está autorizada para usar la API.', 403)
+    return _allowlist_partner_err(_allowlist_status())
 
 
 def partner_auth_required(f):
@@ -508,15 +521,9 @@ def partner_auth_required(f):
             return _err(terr, msg, 401)
         if _is_store_subuser(user):
             return _subuser_api_forbidden()
-        settings = get_partner_settings()
-        if not _ip_allowed_for_user(_client_ip(), settings['ip_whitelist'], user):
-            return _err(
-                'ip_not_allowed',
-                'Esta IP no está vinculada a tu usuario. El administrador debe añadirla en Documentación API.',
-                403,
-            )
-        if not getattr(user, 'can_access_store', False):
-            return _err('forbidden', 'Tu usuario no tiene acceso a la tienda.', 403)
+        scoped = _allowlist_partner_err(_allowlist_status(user))
+        if scoped is not None:
+            return scoped
         if not _partner_currency_or_none(user):
             return _partner_no_currency_error()
         if not _rate_limit(f'gen:{user.id}', LIMIT_GENERAL_PER_MIN):
@@ -661,15 +668,9 @@ def partner_auth_token():
         return _err('invalid_credentials', 'Usuario o contraseña incorrectos.', 401)
     if _is_store_subuser(user):
         return _subuser_api_forbidden()
-    settings = get_partner_settings()
-    if not _ip_allowed_for_user(_client_ip(), settings['ip_whitelist'], user):
-        return _err(
-            'ip_not_allowed',
-            'Esta IP no está vinculada a tu usuario. El administrador debe añadirla en Documentación API.',
-            403,
-        )
-    if not getattr(user, 'can_access_store', False):
-        return _err('forbidden', 'Tu usuario no tiene acceso a la tienda.', 403)
+    scoped = _allowlist_partner_err(_allowlist_status(user))
+    if scoped is not None:
+        return scoped
     tipo = _partner_currency_or_none(user)
     if not tipo:
         return _partner_no_currency_error()
@@ -704,13 +705,9 @@ def partner_auth_token_refresh():
         return _err(terr, msg, 401)
     if _is_store_subuser(user):
         return _subuser_api_forbidden()
-    settings = get_partner_settings()
-    if not _ip_allowed_for_user(_client_ip(), settings['ip_whitelist'], user):
-        return _err(
-            'ip_not_allowed',
-            'Esta IP no está vinculada a tu usuario. El administrador debe añadirla en Documentación API.',
-            403,
-        )
+    scoped = _allowlist_partner_err(_allowlist_status(user))
+    if scoped is not None:
+        return scoped
     access, new_refresh = _issue_tokens(user)
     return _ok({'access': access, 'refresh': new_refresh, 'expires_in': ACCESS_TOKEN_MAX_AGE})
 

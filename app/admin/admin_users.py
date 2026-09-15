@@ -8,6 +8,7 @@ import re
 from werkzeug.security import generate_password_hash
 from app.extensions import db
 from app.models import User
+from app.models.chat import ChatMessage
 from app.models.filters import FilterModel, RegexModel
 from app.models.service import ServiceModel
 from app.admin.decorators import admin_required
