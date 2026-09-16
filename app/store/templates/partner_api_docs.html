@@ -176,6 +176,42 @@
       width: auto !important;
       min-width: 8rem !important;
     }
+    .partner-docs .ip-add-row--token {
+      flex-wrap: wrap;
+    }
+    .partner-docs .ip-add-row #codesTokenValue {
+      flex: 1 1 12rem;
+      min-width: 10rem !important;
+    }
+    .partner-docs .ip-add-row #codesTokenCopyBtn,
+    .partner-docs .ip-add-row #codesTokenRegenBtn {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      padding: 0 .8rem !important;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      cursor: pointer;
+      height: 2.15rem;
+      min-height: 2.15rem;
+      max-height: 2.15rem;
+      margin: 0 !important;
+      font-size: .9rem;
+      line-height: 1.25;
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+    .partner-docs .ip-add-row #codesTokenCopyBtn {
+      background: linear-gradient(180deg, #2f73bc, #1d5696);
+      border: 1px solid #9ac8f6;
+      color: #fff;
+    }
+    .partner-docs .ip-add-row #codesTokenRegenBtn {
+      background: linear-gradient(180deg, #c47a2b, #9a5a16);
+      border: 1px solid #f0c48a;
+      color: #fff;
+    }
     .partner-docs .ip-add-row #ipAddBtn {
       flex: 0 0 auto;
       white-space: nowrap;
@@ -735,8 +771,9 @@
       </div>
       <div class="admin-box">
         <p style="margin-top:0"><strong>Token de códigos por usuario</strong> — busca el usuario y copia el token que es <em>solo de él</em>.
-          Ese token es el que pegas en Unir plataformas junto con ese mismo usuario. No uses el de <strong>Mi API</strong> (ese es del administrador).</p>
-        <div class="ip-add-row">
+          Otros proyectos lo usan para consultar esta API cuando el usuario se llama igual en ambos lados.
+          <strong>Cambiar token</strong> genera uno nuevo y el anterior deja de servir.</p>
+        <div class="ip-add-row ip-add-row--token">
           <div class="pd-owner-picker" data-owner-picker>
             <input type="hidden" id="codesTokenUserId" value="">
             <button type="button" id="codesTokenUserSearch" class="pd-owner-picker-btn" data-placeholder="Buscar usuario…" aria-haspopup="dialog" aria-label="Buscar usuario del token">
@@ -747,6 +784,7 @@
           </div>
           <input type="text" id="codesTokenValue" placeholder="Elige un usuario para ver su token" autocomplete="off" readonly>
           <button type="button" id="codesTokenCopyBtn">Copiar token</button>
+          <button type="button" id="codesTokenRegenBtn" title="Generar un token nuevo">Cambiar token</button>
         </div>
         <p class="status-msg" id="codesTokenMsg" role="status"></p>
       </div>
@@ -1030,6 +1068,6 @@
   <script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v={{ licencias_static_version }}-apidocs8" defer></script>
   {% endif %}
   {% if show_partner_admin %}
-  <script src="{{ url_for('store_bp.static', filename='js/partner_api_docs.js') }}?v={{ licencias_static_version }}-ipbind11" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/partner_api_docs.js') }}?v={{ licencias_static_version }}-ipbind12" defer></script>
   {% endif %}
 {% endblock %}

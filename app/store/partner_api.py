@@ -29,7 +29,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
-from app.models.user import User
+from app.models.user import LinkedProject, User
 from app.store.partner_hwid import is_hwid_token, normalize_hwid_token, verified_hwid_from_request
 from app.store.models import StoreSetting
 
@@ -1823,28 +1823,54 @@ def partner_admin_settings_post():
     return _ok(settings)
 
 
-@partner_api_bp.route('/admin/codes-token/', methods=['GET'])
-def partner_admin_codes_token():
-    """Token de Códigos del usuario elegido (solo para ese usuario)."""
-    if not _is_admin_session():
-        return _err('forbidden', 'Solo el administrador puede ver este token.', 403)
+def _codes_token_owner(user_id):
     try:
-        uid = int(request.args.get('user_id') or 0)
+        uid = int(user_id or 0)
     except (TypeError, ValueError):
-        return _err('bad_request', 'Usuario inválido.', 400)
+        return None, _err('bad_request', 'Usuario inválido.', 400)
     owner = User.query.get(uid)
     if not owner or owner.parent_id is not None:
-        return _err('not_found', 'Usuario no encontrado.', 404)
+        return None, _err('not_found', 'Usuario no encontrado.', 404)
     if getattr(owner, 'enabled', True) is False:
-        return _err('owner_disabled', 'Ese usuario está apagado.', 403)
-    if not (owner.master_token or '').strip():
-        owner.master_token = secrets.token_hex(32)
-        db.session.commit()
-    return _ok({
+        return None, _err('owner_disabled', 'Ese usuario está apagado.', 403)
+    return owner, None
+
+
+def _codes_token_payload(owner):
+    return {
         'user_id': int(owner.id),
         'username': owner.username,
         'token': owner.master_token,
-    })
+    }
+
+
+@partner_api_bp.route('/admin/codes-token/', methods=['GET', 'POST'])
+def partner_admin_codes_token():
+    """Token de Códigos del usuario elegido. POST genera uno nuevo y anula el anterior."""
+    if not _is_admin_session():
+        return _err('forbidden', 'Solo el administrador puede ver este token.', 403)
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        user_id = data.get('user_id') or request.args.get('user_id')
+    else:
+        user_id = request.args.get('user_id')
+    owner, err = _codes_token_owner(user_id)
+    if err:
+        return err
+    if request.method == 'POST':
+        previous = (owner.master_token or '').strip()
+        owner.master_token = secrets.token_hex(32)
+        if previous:
+            LinkedProject.query.filter_by(user_id=owner.id, token=previous).update(
+                {'token': owner.master_token},
+                synchronize_session=False,
+            )
+        db.session.commit()
+        return _ok(_codes_token_payload(owner), message='Token cambiado. El anterior ya no sirve.')
+    if not (owner.master_token or '').strip():
+        owner.master_token = secrets.token_hex(32)
+        db.session.commit()
+    return _ok(_codes_token_payload(owner))
 
 
 # ---------------------------------------------------------------------------

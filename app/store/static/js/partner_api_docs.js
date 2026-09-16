@@ -614,7 +614,7 @@
         }
         fillTokenFields(token, sourceId);
         if (sourceId === 'codesTokenUserId') {
-          setTokenMsg('Token de «' + (payload.username || '') + '». Úsalo solo con ese usuario.', true);
+          setTokenMsg('Token de «' + (payload.username || '') + '». Válido solo para ese usuario.', true);
         } else {
           setTokenMsg('', true);
         }
@@ -624,9 +624,55 @@
       });
   }
 
+  function regenOwnerToken() {
+    var hidden = document.getElementById('codesTokenUserId');
+    var userId = hidden && hidden.value;
+    if (!userId) {
+      setTokenMsg('Elige un usuario primero.', false);
+      return;
+    }
+    if (!confirm('¿Cambiar el token de este usuario? El anterior dejará de servir en los demás proyectos.')) {
+      return;
+    }
+    setTokenMsg('Cambiando token…', true);
+    fetch('/api/partner/v1/admin/codes-token/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf(),
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({ user_id: parseInt(userId, 10) })
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          return { ok: r.ok, data: data };
+        });
+      })
+      .then(function (res) {
+        var payload = (res.data && res.data.data) || {};
+        var token = payload.token || '';
+        if (!res.ok || !token) {
+          var err = res.data && res.data.error && res.data.error.message;
+          setTokenMsg(err || 'No se pudo cambiar el token.', false);
+          return;
+        }
+        fillTokenFields(token, 'codesTokenUserId');
+        setTokenMsg('Token nuevo de «' + (payload.username || '') + '». El anterior ya no sirve.', true);
+      })
+      .catch(function () {
+        setTokenMsg('Error de red al cambiar el token.', false);
+      });
+  }
+
   function initCodesTokenBox() {
     var copyBtn = document.getElementById('codesTokenCopyBtn');
+    var regenBtn = document.getElementById('codesTokenRegenBtn');
     var valueEl = document.getElementById('codesTokenValue');
+    if (regenBtn) {
+      regenBtn.addEventListener('click', regenOwnerToken);
+    }
     if (copyBtn && valueEl) {
       copyBtn.addEventListener('click', function () {
         var token = (valueEl.value || '').trim();

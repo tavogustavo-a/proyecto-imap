@@ -1258,6 +1258,14 @@ def external_search():
         )
         return jsonify({"error": "Unauthorized: Security conditions not met"}), 403
 
+    email_normalized = email_to_search.lower().strip()
+    # Correo de prueba de conexión: no consultar IMAP ni SMS.
+    if email_normalized in {
+        "linked-api-probe@example.com",
+        "linked-licenses-api-probe@example.com",
+    }:
+        return jsonify({"results": []}), 200
+
     # ===== SEGURIDAD: Logging seguro (no exponer datos sensibles) =====
     current_app.logger.info(
         f"[EXTERNAL-SEARCH] Authorized! User: {user.username} | "
@@ -1272,8 +1280,6 @@ def external_search():
     )
 
     # --- VALIDACIONES DE CORREOS (misma idea que search_mails: sin usar TwoFAConfig) ---
-    email_normalized = email_to_search.lower().strip()
-
     # Aplicar las mismas validaciones que search_mails
     # IMPORTANTE: El admin del proyecto B NO tiene restricciones (incluso si está inhabilitado)
     if is_admin_project_b:
