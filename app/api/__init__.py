@@ -54,6 +54,18 @@ def _user_has_allowed_email(user, email_normalized: str) -> bool:
     return False
 
 
+def _user_can_use_email_2fa(user) -> bool:
+    """True si puede ver/consultar códigos 2FA de correos (editar usuario / gestión de permisos)."""
+    if not user:
+        return False
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    if user.username == admin_username and user.parent_id is None:
+        return True
+    if not getattr(user, "enabled", True):
+        return False
+    return bool(getattr(user, "can_manage_2fa_emails", False))
+
+
 def _is_support_user(user) -> bool:
     """
     True si el usuario es de soporte: username soporte, soporte1, soporte2, ...
@@ -613,7 +625,7 @@ def search_sms_messages(email_to_search, user=None, origin_domain=None):
         # Si es admin, puede consultar sin restricciones
         if is_admin_user:
             pass  # Admin puede consultar cualquier correo sin restricciones
-        elif has_2fa_config:
+        elif has_2fa_config and _user_can_use_email_2fa(user):
             # Si existe configuración 2FA, validar permisos ANTES de permitir búsqueda
             # Esto evita mostrar el spinner cuando el usuario no tiene permisos
             if not user.enabled:
@@ -641,7 +653,7 @@ def search_sms_messages(email_to_search, user=None, origin_domain=None):
     # Si es admin o tiene configuración 2FA, buscar en TODAS las configuraciones SMS habilitadas
     # Si no, buscar solo en las configuraciones donde el correo esté agregado en AllowedSMSNumber
     
-    if is_admin_user or has_2fa_config:
+    if is_admin_user or (has_2fa_config and _user_can_use_email_2fa(user)):
         # Admin o correo con 2FA: buscar en TODAS las configuraciones SMS habilitadas
         enabled_configs = SMSConfig.query.filter_by(is_enabled=True).all()
         if not enabled_configs:
@@ -781,6 +793,8 @@ def get_2fa_code_for_email(email):
         if not is_admin:
             if not user.enabled:
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403
+            if not _user_can_use_email_2fa(user):
+                return jsonify({"error": "No tienes permiso para consultar 2FA."}), 403
             # Correos únicos: reservados para su dueño (y sub-usuarios); soporte exento
             if not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
                 return jsonify({"error": "No tienes permiso al consultar este correo."}), 403

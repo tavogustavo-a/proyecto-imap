@@ -801,7 +801,8 @@ def update_user_ajax():
             user_to_update.position = int(new_position)
         except (ValueError, TypeError):
             user_to_update.position = 1
-        user_to_update.can_search_any = bool(can_search_any)
+        if "can_search_any" in data:
+            user_to_update.can_search_any = bool(data.get("can_search_any"))
         if new_full_name is not None:
             user_to_update.full_name = new_full_name
         if new_phone is not None:
@@ -815,21 +816,23 @@ def update_user_ajax():
 
         # Manejo de can_create_subusers
         old_can_sub = user_to_update.can_create_subusers
-        new_can_sub = bool(new_can_create_subusers)
-        user_to_update.can_create_subusers = new_can_sub
+        if "can_create_subusers" in data:
+            new_can_sub = bool(data.get("can_create_subusers"))
+            user_to_update.can_create_subusers = new_can_sub
+        else:
+            new_can_sub = old_can_sub
         
-        # Manejo de can_add_own_emails
-        user_to_update.can_add_own_emails = bool(new_can_add_own_emails)
+        if "can_add_own_emails" in data:
+            user_to_update.can_add_own_emails = bool(data.get("can_add_own_emails"))
         
-        # Manejo de can_bulk_delete_emails
-        user_to_update.can_bulk_delete_emails = bool(new_can_bulk_delete_emails)
+        if "can_bulk_delete_emails" in data:
+            user_to_update.can_bulk_delete_emails = bool(data.get("can_bulk_delete_emails"))
         
-        # Manejo de can_manage_2fa_emails
-        user_to_update.can_manage_2fa_emails = bool(new_can_manage_2fa_emails)
+        if "can_manage_2fa_emails" in data:
+            user_to_update.can_manage_2fa_emails = bool(data.get("can_manage_2fa_emails"))
 
-        # Manejo de email_notify_enabled (notificaciones de tienda por correo)
-        if hasattr(user_to_update, 'email_notify_enabled'):
-            user_to_update.email_notify_enabled = bool(new_email_notify_enabled)
+        if "email_notify_enabled" in data and hasattr(user_to_update, 'email_notify_enabled'):
+            user_to_update.email_notify_enabled = bool(data.get("email_notify_enabled"))
 
         # --- INICIO: Lógica de Inicialización/Limpieza de Defaults ---
         if not old_can_sub and new_can_sub:

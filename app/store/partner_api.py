@@ -1316,20 +1316,124 @@ def partner_codes_search(user):
     if not getattr(user, 'can_search_any', False) and not _user_has_allowed_email(user, email):
         return _err('forbidden', 'No tienes permiso para consultar este correo.', 403)
 
+    mail = None
     try:
         mail = search_and_apply_filters(email, service_id=service.id, user=user)
     except Exception:
         current_app.logger.exception('partner codes search %s/%s', service.id, email)
-        return _err('search_failed', 'No se pudo completar la búsqueda; inténtalo de nuevo.', 502)
+        mail = None
+
+    if mail:
+        return _ok(
+            {
+                'service': {'id': service.id, 'name': service.name},
+                'email': email,
+                'found': True,
+                'result': _mail_delivery_payload(mail),
+            }
+        )
+
+    from app.api import _user_can_use_email_2fa
+
+    if _user_can_use_email_2fa(user):
+        totp = _partner_totp_for_email(email)
+        if totp:
+            return _ok(
+                {
+                    'service': {'id': service.id, 'name': service.name},
+                    'email': email,
+                    'found': True,
+                    'result': totp,
+                }
+            )
 
     return _ok(
         {
             'service': {'id': service.id, 'name': service.name},
             'email': email,
-            'found': bool(mail),
-            'result': _mail_delivery_payload(mail),
+            'found': False,
+            'result': None,
         }
     )
+
+
+def _partner_totp_for_email(email):
+    """Igual que la web: si el correo no trae mail, generar el TOTP actual."""
+    import base64
+    import pyotp
+
+    email_normalized = (email or '').strip().lower()
+    if not email_normalized or '@' not in email_normalized:
+        return None
+    secret = None
+    try:
+        from app.store.models import TwoFAConfig
+
+        for cfg in TwoFAConfig.query.filter_by(is_enabled=True).all():
+            if email_normalized in (cfg.get_emails_list() or []):
+                secret = cfg.secret_key
+                break
+    except Exception:
+        secret = None
+    if not secret:
+        try:
+            from app.models.imap2 import IMAP2TwoFAConfig
+
+            for cfg in IMAP2TwoFAConfig.query.filter_by(is_enabled=True).all():
+                if email_normalized in (cfg.get_emails_list() or []):
+                    secret = cfg.secret_key
+                    break
+        except Exception:
+            secret = None
+    if not secret:
+        return None
+    raw = str(secret).strip().upper().replace(' ', '').replace('-', '')
+    code = None
+    try:
+        code = pyotp.TOTP(raw).now()
+    except Exception:
+        try:
+            s_b32 = base64.b32encode(raw.encode()).decode().replace('=', '')
+            code = pyotp.TOTP(s_b32).now()
+        except Exception:
+            return None
+    remain = 30 - (int(time.time()) % 30)
+    return {
+        'type': 'totp',
+        'code': code,
+        'time_remaining': remain,
+        'remaining': remain,
+    }
+
+
+@partner_api_bp.route('/codes/2fa/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required
+def partner_codes_2fa(user):
+    from app.api import EMAIL_REGEX, _email_reserved_for_other_user, _is_support_user, _user_has_allowed_email
+
+    if not _rate_limit(f'codes:{user.id}', LIMIT_CODES_PER_MIN):
+        return _err(
+            'rate_limited',
+            f'Límite de {LIMIT_CODES_PER_MIN} consultas por minuto alcanzado.',
+            429,
+        )
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email') or '').strip().lower()
+    if not email or not EMAIL_REGEX.match(email):
+        return _err('bad_request', 'Envía un email válido a consultar.', 400)
+    if not _is_support_user(user) and _email_reserved_for_other_user(user, email):
+        return _err('forbidden', 'No tienes permiso para consultar este correo.', 403)
+    if not getattr(user, 'can_search_any', False) and not _user_has_allowed_email(user, email):
+        return _err('forbidden', 'No tienes permiso para consultar este correo.', 403)
+    from app.api import _user_can_use_email_2fa
+
+    if not _user_can_use_email_2fa(user):
+        return _err('forbidden', 'No tienes permiso para consultar 2FA.', 403)
+    totp = _partner_totp_for_email(email)
+    if not totp:
+        return _ok({'email': email, 'found': False, 'result': None})
+    return _ok({'email': email, 'found': True, 'result': totp})
 
 
 # ---------------------------------------------------------------------------

@@ -1007,7 +1007,8 @@
     <div class="sec-body">
       <p>Cada botón agrupa filtros y reglas internas que extraen lo que se entrega
         (código, enlace, contraseña…). <strong>Solo se exponen los nombres</strong>: los filtros y regex son internos.
-        Tu usuario debe tener permiso sobre el correo consultado (igual que en la página de Códigos).</p>
+        Tu usuario debe tener permiso sobre el correo consultado (igual que en la página de Códigos).
+        Los códigos 2FA solo salen si el usuario tiene <strong>Gestionar 2FA</strong> (editar usuario o gestión de permisos).</p>
 
       <p><span class="verb get">GET</span><span class="ep">/codes/services/</span></p>
       <p>Botones disponibles ahora ({{ services|length }}):</p>
