@@ -48,6 +48,7 @@ LIMIT_PURCHASES_PER_MIN = 30   # cuentas compradas por minuto (igual que MP)
 LIMIT_CART_LINES = 20          # líneas por pedido (igual que MP)
 LIMIT_CODES_PER_MIN = 60       # consultas de códigos por minuto
 LIMIT_GENERAL_PER_MIN = 120    # peticiones generales por minuto
+LIMIT_INBOX_PER_MIN = 600      # avisos del buzón (sin leer el correo)
 LIMIT_AUTH_PER_MIN = 10        # intentos de login por IP y minuto
 
 _SALT_ACCESS = 'partner-api-access'
@@ -511,37 +512,46 @@ def _gate_error():
     return _allowlist_partner_err(_allowlist_status())
 
 
-def partner_auth_required(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        gate = _gate_error()
-        if gate is not None:
-            return gate
-        auth = request.headers.get('Authorization') or ''
-        token = auth[7:].strip() if auth.lower().startswith('bearer ') else ''
-        if not token:
-            return _err('auth_required', 'Falta el token Bearer (Authorization).', 401)
-        user, terr = _user_from_token(token, _SALT_ACCESS, ACCESS_TOKEN_MAX_AGE)
-        if terr:
-            msg = (
-                'El token de acceso expiró; usa /auth/token/refresh/.'
-                if terr == 'token_expired'
-                else 'Token inválido.'
-            )
-            return _err(terr, msg, 401)
-        if _is_store_subuser(user):
-            return _subuser_api_forbidden()
-        scoped = _allowlist_partner_err(_allowlist_status(user))
-        if scoped is not None:
-            return scoped
-        if not _partner_currency_or_none(user):
-            return _partner_no_currency_error()
-        if not _rate_limit(f'gen:{user.id}', LIMIT_GENERAL_PER_MIN):
-            return _err('rate_limited', 'Demasiadas peticiones; espera un momento.', 429)
-        request.partner_user = user
-        return f(user, *args, **kwargs)
+def partner_auth_required(func=None, *, rate_bucket='gen', rate_limit=None):
+    """Bearer + IP/HWID de siempre. rate_bucket separa el aviso del buzón del resto."""
+    if rate_limit is None:
+        rate_limit = LIMIT_GENERAL_PER_MIN
 
-    return wrapper
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            gate = _gate_error()
+            if gate is not None:
+                return gate
+            auth = request.headers.get('Authorization') or ''
+            token = auth[7:].strip() if auth.lower().startswith('bearer ') else ''
+            if not token:
+                return _err('auth_required', 'Falta el token Bearer (Authorization).', 401)
+            user, terr = _user_from_token(token, _SALT_ACCESS, ACCESS_TOKEN_MAX_AGE)
+            if terr:
+                msg = (
+                    'El token de acceso expiró; usa /auth/token/refresh/.'
+                    if terr == 'token_expired'
+                    else 'Token inválido.'
+                )
+                return _err(terr, msg, 401)
+            if _is_store_subuser(user):
+                return _subuser_api_forbidden()
+            scoped = _allowlist_partner_err(_allowlist_status(user))
+            if scoped is not None:
+                return scoped
+            if not _partner_currency_or_none(user):
+                return _partner_no_currency_error()
+            if not _rate_limit(f'{rate_bucket}:{user.id}', rate_limit):
+                return _err('rate_limited', 'Demasiadas peticiones; espera un momento.', 429)
+            request.partner_user = user
+            return f(user, *args, **kwargs)
+
+        return wrapper
+
+    if func is not None and callable(func):
+        return decorator(func)
+    return decorator
 
 
 def _is_admin_session():
@@ -1353,6 +1363,83 @@ def partner_codes_search(user):
             'email': email,
             'found': False,
             'result': None,
+        }
+    )
+
+
+def _inbox_match_addresses(email):
+    """El buzón a veces guarda el Gmail sin el +alias."""
+    raw = (email or '').strip().lower()
+    out = []
+    if raw and '@' in raw:
+        out.append(raw)
+    local, sep, domain = raw.partition('@')
+    if sep and '+' in local and domain in {
+        'gmail.com',
+        'googlemail.com',
+        'outlook.com',
+        'hotmail.com',
+        'live.com',
+        'msn.com',
+    }:
+        base = f"{local.split('+', 1)[0]}@{domain}"
+        if base not in out:
+            out.append(base)
+    return out
+
+
+@partner_api_bp.route('/codes/inbox/', methods=['POST'])
+@_csrf_exempt
+@partner_auth_required(rate_bucket='inbox', rate_limit=LIMIT_INBOX_PER_MIN)
+def partner_codes_inbox(user):
+    """Aviso del buzón: si llegó un correo nuevo. No devuelve asunto ni cuerpo."""
+    from sqlalchemy import func, or_
+
+    from app.api import EMAIL_REGEX, _email_reserved_for_other_user, _is_support_user, _user_has_allowed_email
+    from app.models.email_buzon import ReceivedEmail
+
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email') or '').strip().lower()
+    if not email or not EMAIL_REGEX.match(email):
+        return _err('bad_request', 'Envía un email válido a consultar.', 400)
+    if not _is_support_user(user) and _email_reserved_for_other_user(user, email):
+        return _err('forbidden', 'No tienes permiso para consultar este correo.', 403)
+    if not getattr(user, 'can_search_any', False) and not _user_has_allowed_email(user, email):
+        return _err('forbidden', 'No tienes permiso para consultar este correo.', 403)
+
+    addrs = _inbox_match_addresses(email)
+    row = None
+    if addrs:
+        try:
+            row = (
+                ReceivedEmail.query.filter(
+                    ReceivedEmail.deleted.is_(False),
+                    or_(
+                        func.lower(func.trim(ReceivedEmail.to_email)).in_(addrs),
+                        func.lower(func.trim(ReceivedEmail.original_to_email)).in_(addrs),
+                    ),
+                )
+                .order_by(ReceivedEmail.id.desc())
+                .first()
+            )
+        except Exception:
+            current_app.logger.exception('partner codes inbox %s', email)
+            row = None
+
+    latest_id = int(row.id) if row is not None else 0
+    age_sec = None
+    fresh = False
+    if row is not None and row.received_at is not None:
+        age_sec = int((datetime.utcnow() - row.received_at).total_seconds())
+        if age_sec < 0:
+            age_sec = 0
+        fresh = age_sec <= 180
+    return _ok(
+        {
+            'email': email,
+            'latest_id': latest_id,
+            'fresh': fresh,
+            'age_sec': age_sec,
         }
     )
 

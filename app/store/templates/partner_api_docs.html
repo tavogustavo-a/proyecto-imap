@@ -1035,6 +1035,15 @@
                "text": "...", "html": "..." }}}
 
 // found = false → aún no llega el correo; reintenta después.</pre>
+
+      <p><span class="verb post">POST</span><span class="ep">/codes/inbox/</span> —
+        aviso del buzón. Mismo acceso que la búsqueda. No devuelve el correo, solo si llegó uno nuevo.</p>
+<pre>curl -X POST "{{ base_url }}/codes/inbox/" \
+  -H "Authorization: Bearer &lt;access&gt;" -H "Content-Type: application/json" \
+  -d '{"email": "cliente@mail.com"}'
+
+→ {"data": {"email": "cliente@mail.com", "latest_id": 1204, "fresh": true, "age_sec": 3}}</pre>
+      <p class="mut">Si <code>fresh</code> es true o <code>latest_id</code> sube, ahí sí se llama a <code>/codes/search/</code>.</p>
     </div>
   </section>
 
