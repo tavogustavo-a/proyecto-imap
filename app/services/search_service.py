@@ -713,7 +713,14 @@ def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
     return out
 
 
-def search_and_apply_filters(to_address, service_id=None, user=None, origin_domain=None, public_access=False):
+def search_and_apply_filters(
+    to_address,
+    service_id=None,
+    user=None,
+    origin_domain=None,
+    public_access=False,
+    mailbox_only=False,
+):
     """
     Realiza la búsqueda de correos en servidores IMAP habilitados.
     
@@ -855,6 +862,8 @@ def search_and_apply_filters(to_address, service_id=None, user=None, origin_doma
     found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
     if found_mail:
         return found_mail
+    if mailbox_only:
+        return None
 
     # 4) Servidores IMAP solo si están activos (enabled=True; en admin suele mostrarse como OFF)
     servers = []

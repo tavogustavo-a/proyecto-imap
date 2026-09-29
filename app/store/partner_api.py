@@ -47,8 +47,9 @@ REFRESH_TOKEN_MAX_AGE = 7 * 24 * 3600   # 7 días
 LIMIT_PURCHASES_PER_MIN = 30   # cuentas compradas por minuto (igual que MP)
 LIMIT_CART_LINES = 20          # líneas por pedido (igual que MP)
 LIMIT_CODES_PER_MIN = 60       # consultas de códigos por minuto
+LIMIT_CODES_HWID_PER_MIN = 6000  # Cambios plataformas: solo buzón BD, muchas conexiones
 LIMIT_GENERAL_PER_MIN = 120    # peticiones generales por minuto
-LIMIT_INBOX_PER_MIN = 600      # avisos del buzón (sin leer el correo)
+LIMIT_INBOX_PER_MIN = 12000    # avisos del buzón (sin leer el correo); muchas sesiones HWID
 LIMIT_AUTH_PER_MIN = 10        # intentos de login por IP y minuto
 
 _SALT_ACCESS = 'partner-api-access'
@@ -1276,6 +1277,7 @@ def _mail_delivery_payload(mail):
         'type': 'mail',
         'subject': mail.get('subject'),
         'from': mail.get('from'),
+        'to': mail.get('to'),
         'date': mail.get('formatted_date') or mail.get('date'),
         'code': code,
         'matches': matches,
@@ -1286,17 +1288,28 @@ def _mail_delivery_payload(mail):
 
 @partner_api_bp.route('/codes/search/', methods=['POST'])
 @_csrf_exempt
-@partner_auth_required
+@partner_auth_required(rate_bucket='codes', rate_limit=LIMIT_CODES_HWID_PER_MIN)
 def partner_codes_search(user):
     from app.api import EMAIL_REGEX, _email_reserved_for_other_user, _is_support_user, _user_has_allowed_email
     from app.services.search_service import search_and_apply_filters
+    from app.store.partner_hwid import verified_hwid_app_from_request
 
-    if not _rate_limit(f'codes:{user.id}', LIMIT_CODES_PER_MIN):
-        return _err(
-            'rate_limited',
-            f'Límite de {LIMIT_CODES_PER_MIN} consultas por minuto alcanzado.',
-            429,
-        )
+    app_id, _hwid = verified_hwid_app_from_request()
+    from_cambios = (app_id or '').strip().lower() == 'cambios-plataformas'
+    if from_cambios:
+        if not _rate_limit(f'codes-hwid:{user.id}', LIMIT_CODES_HWID_PER_MIN):
+            return _err(
+                'rate_limited',
+                f'Límite de {LIMIT_CODES_HWID_PER_MIN} consultas por minuto alcanzado.',
+                429,
+            )
+    else:
+        if not _rate_limit(f'codes:{user.id}', LIMIT_CODES_PER_MIN):
+            return _err(
+                'rate_limited',
+                f'Límite de {LIMIT_CODES_PER_MIN} consultas por minuto alcanzado.',
+                429,
+            )
 
     data = request.get_json(silent=True) or {}
     email = str(data.get('email') or '').strip().lower()
@@ -1328,7 +1341,12 @@ def partner_codes_search(user):
 
     mail = None
     try:
-        mail = search_and_apply_filters(email, service_id=service.id, user=user)
+        mail = search_and_apply_filters(
+            email,
+            service_id=service.id,
+            user=user,
+            mailbox_only=from_cambios,
+        )
     except Exception:
         current_app.logger.exception('partner codes search %s/%s', service.id, email)
         mail = None
@@ -1345,7 +1363,7 @@ def partner_codes_search(user):
 
     from app.api import _user_can_use_email_2fa
 
-    if _user_can_use_email_2fa(user):
+    if not from_cambios and _user_can_use_email_2fa(user):
         totp = _partner_totp_for_email(email)
         if totp:
             return _ok(
@@ -1368,24 +1386,11 @@ def partner_codes_search(user):
 
 
 def _inbox_match_addresses(email):
-    """El buzón a veces guarda el Gmail sin el +alias."""
+    """Solo el correo que se está consultando, con su +alias. No el buzón completo."""
     raw = (email or '').strip().lower()
-    out = []
     if raw and '@' in raw:
-        out.append(raw)
-    local, sep, domain = raw.partition('@')
-    if sep and '+' in local and domain in {
-        'gmail.com',
-        'googlemail.com',
-        'outlook.com',
-        'hotmail.com',
-        'live.com',
-        'msn.com',
-    }:
-        base = f"{local.split('+', 1)[0]}@{domain}"
-        if base not in out:
-            out.append(base)
-    return out
+        return [raw]
+    return []
 
 
 @partner_api_bp.route('/codes/inbox/', methods=['POST'])

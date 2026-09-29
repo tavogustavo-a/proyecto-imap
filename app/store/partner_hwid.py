@@ -134,8 +134,8 @@ def _proof_ok(app_id: str, hwid: str, proof: str, secret: str) -> bool:
     return False
 
 
-def verified_hwid_from_request():
-    """Identificador de PC en minúsculas si la app es conocida y la firma cuadra."""
+def verified_hwid_app_from_request():
+    """(app_id, hwid) si la app es conocida y la firma cuadra."""
     for app_id, hwid_raw, proof in _identity_candidates():
         hwid = normalize_hwid_token(hwid_raw)
         if not app_id or not hwid or not proof:
@@ -146,5 +146,11 @@ def verified_hwid_from_request():
         if _proof_ok(app_id, hwid_raw.strip(), proof, secret) or _proof_ok(
             app_id, hwid, proof, secret
         ):
-            return hwid
-    return None
+            return str(app_id).strip(), hwid
+    return "", None
+
+
+def verified_hwid_from_request():
+    """Identificador de PC en minúsculas si la app es conocida y la firma cuadra."""
+    _app_id, hwid = verified_hwid_app_from_request()
+    return hwid
