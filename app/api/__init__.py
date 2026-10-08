@@ -71,12 +71,21 @@ def _has_soporte_licencias_flag(user) -> bool:
     if not user:
         return False
     try:
-        from app.store.license_bloc_movements import user_has_soporte_licencias_flag
-
-        return bool(user_has_soporte_licencias_flag(user))
-    except Exception:
         up = user.user_prices if isinstance(getattr(user, "user_prices", None), dict) else {}
-        return bool(up.get("soporte_licencias"))
+        if up.get("soporte_licencias"):
+            return True
+        parent_id = getattr(user, "parent_id", None)
+        if not parent_id:
+            return False
+        parent = User.query.get(parent_id)
+        pup = parent.user_prices if parent and isinstance(getattr(parent, "user_prices", None), dict) else {}
+        return bool(pup.get("soporte_licencias"))
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _is_support_user(user) -> bool:

@@ -1915,7 +1915,8 @@ def _filter_cta_label(anchor) -> str:
 
 
 def _filter_cta_is_hidden_node(tag) -> bool:
-    if tag is None:
+    # Tras decompose(), BeautifulSoup deja attrs en None y .get() revienta.
+    if tag is None or getattr(tag, "attrs", None) is None:
         return False
     classes = " ".join(tag.get("class") or []).lower()
     style = re.sub(r"\s+", "", (tag.get("style") or "").lower())
@@ -2014,7 +2015,9 @@ def _restyle_filter_cta_as_single_button(anchor, bg_color: str):
         'line-height:1.2;padding:14px 20px;border:0;border-radius:0;">'
         f"{safe_label}</a></div>"
     )
-    replacement = BeautifulSoup(new_html, "html.parser")
+    replacement = BeautifulSoup(new_html, "html.parser").find("div")
+    if replacement is None or getattr(anchor, "attrs", None) is None:
+        return
     border = anchor.find_parent("span")
     border_classes = " ".join((border.get("class") or []) if border is not None else []).lower()
     if border is not None and "es-button-border" in border_classes:
@@ -2041,11 +2044,29 @@ def _dedupe_filter_duplicate_cta_buttons(mail):
     except Exception:
         return
 
+    try:
+        _dedupe_filter_duplicate_cta_buttons_impl(mail, html, BeautifulSoup)
+    except Exception:
+        # Nunca tumbar la consulta si una plantilla trae HTML raro.
+        return
+
+
+def _dedupe_filter_duplicate_cta_buttons_impl(mail, html, BeautifulSoup):
     soup = BeautifulSoup(html, "html.parser")
     changed = False
 
-    for tag in list(soup.find_all(True)):
-        if not _filter_cta_is_hidden_node(tag):
+    hidden = [tag for tag in soup.find_all(True) if _filter_cta_is_hidden_node(tag)]
+    # Solo el contenedor más externo: si se borra el padre, los hijos quedan inválidos.
+    hidden_ids = {id(tag) for tag in hidden}
+    for tag in hidden:
+        parent = getattr(tag, "parent", None)
+        covered = False
+        while parent is not None and getattr(parent, "name", None):
+            if id(parent) in hidden_ids:
+                covered = True
+                break
+            parent = getattr(parent, "parent", None)
+        if covered or getattr(tag, "attrs", None) is None:
             continue
         tag.decompose()
         changed = True
