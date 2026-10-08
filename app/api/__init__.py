@@ -66,18 +66,38 @@ def _user_can_use_email_2fa(user) -> bool:
     return bool(getattr(user, "can_manage_2fa_emails", False))
 
 
+def _has_soporte_licencias_flag(user) -> bool:
+    """True si el usuario (o su padre) tiene el permiso «Soporte licencias» en user_prices."""
+    if not user:
+        return False
+    try:
+        from app.store.license_bloc_movements import user_has_soporte_licencias_flag
+
+        return bool(user_has_soporte_licencias_flag(user))
+    except Exception:
+        up = user.user_prices if isinstance(getattr(user, "user_prices", None), dict) else {}
+        return bool(up.get("soporte_licencias"))
+
+
 def _is_support_user(user) -> bool:
     """
     True si el usuario es de soporte: username soporte, soporte1, soporte2, ...
-    o con el permiso de soporte activado (is_support). Los usuarios de soporte
-    quedan exentos de la restricción de «Correos únicos».
+    o con el permiso de soporte activado (is_support). También cuentan como
+    soporte los usuarios con «Soporte licencias» + «Consultar Correos Sin
+    Restricciones» (can_search_any): trabajan como casi-admin y quedan exentos
+    de todas las reglas de consulta de correos (incl. «Correos únicos»), para
+    no tener que liberar un correo y quitárselo al cliente.
     """
     if not user:
         return False
     username = (user.username or "").strip().lower()
     if re.fullmatch(r"soporte\d*", username):
         return True
-    return bool(getattr(user, "is_support", False))
+    if bool(getattr(user, "is_support", False)):
+        return True
+    if bool(getattr(user, "can_search_any", False)) and _has_soporte_licencias_flag(user):
+        return True
+    return False
 
 
 def _email_reserved_for_other_user(user, email_normalized: str) -> bool:

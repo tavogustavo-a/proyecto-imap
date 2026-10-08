@@ -1156,12 +1156,18 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
                 _normalize_crunchyroll_login_action_buttons(mail)
 
             # Netflix: Aprobar, Obtener código, o actualizar Hogar.
+            netflix_cta_normalized = False
             if (
                 _is_netflix_approve_session_filter(matched_filter)
                 or _looks_like_netflix_get_code_mail(mail)
                 or _looks_like_netflix_hogar_mail(mail)
             ):
                 _normalize_netflix_approve_session_content(mail)
+                netflix_cta_normalized = True
+
+            # ViX y similares: el HTML trae el mismo botón 2 veces (desktop + móvil).
+            if not netflix_cta_normalized:
+                _dedupe_filter_duplicate_cta_buttons(mail)
 
             mail["filter_matched"] = True
             if _is_netflix_login_6_digits_filter(matched_filter):
@@ -1884,6 +1890,208 @@ def _extract_universal_activation_code(mail_dict):
     if preferred:
         return preferred[0]
     return fallback[0] if fallback else None
+
+
+_FILTER_CTA_SKIP_LABELS = (
+    "privacidad",
+    "terminos",
+    "condiciones",
+    "ayuda",
+    "contactanos",
+    "unsubscribe",
+    "cancelar suscripcion",
+    "darse de baja",
+    "ver en el navegador",
+    "view in browser",
+    "privacy",
+    "terms of use",
+    "help center",
+    "centro de ayuda",
+)
+
+
+def _filter_cta_label(anchor) -> str:
+    return " ".join((anchor.get_text(" ", strip=True) or "").split())
+
+
+def _filter_cta_is_hidden_node(tag) -> bool:
+    if tag is None:
+        return False
+    classes = " ".join(tag.get("class") or []).lower()
+    style = re.sub(r"\s+", "", (tag.get("style") or "").lower())
+    if any(
+        token in classes
+        for token in ("es-desk-hidden", "es-hidden", "gmail-fix")
+    ):
+        return True
+    if "mso-hide:all" in style:
+        return True
+    if "display:none" in style and (
+        "max-height:0" in style or "width:0" in style or "overflow:hidden" in style
+    ):
+        return True
+    return False
+
+
+def _filter_cta_looks_like_button(anchor) -> bool:
+    label = _filter_cta_label(anchor)
+    if not label or len(label) > 60:
+        return False
+    href = (anchor.get("href") or "").strip()
+    if not href or href.startswith(("#", "mailto:", "tel:")):
+        return False
+    if href.lower().startswith("http") and "/wf/open" in href.lower():
+        return False
+    label_n = _normalize_for_filter_match(label)
+    if any(skip in label_n for skip in _FILTER_CTA_SKIP_LABELS):
+        return False
+    classes = " ".join(anchor.get("class") or []).lower()
+    parent_classes = " ".join(
+        (anchor.parent.get("class") or []) if anchor.parent else []
+    ).lower()
+    if "es-button" in classes or "button" in classes or "es-button-border" in parent_classes:
+        return True
+    style = " ".join(
+        [
+            anchor.get("style") or "",
+            (anchor.parent.get("style") if anchor.parent else "") or "",
+        ]
+    ).lower()
+    if "background" in style and 1 <= len(label.split()) <= 8:
+        return True
+    return 1 <= len(label.split()) <= 6
+
+
+def _filter_cta_bg_color(anchor) -> str:
+    for node in (anchor, anchor.parent, anchor.find_parent("span"), anchor.find_parent("td")):
+        if node is None:
+            continue
+        style = node.get("style") or ""
+        m = re.search(r"background(?:-color)?\s*:\s*([^;]+)", style, flags=re.I)
+        if not m:
+            continue
+        color = m.group(1).strip()
+        if color and color.lower() not in ("transparent", "none", "inherit"):
+            if color.lower() in ("#ffffff", "#fff", "white", "#f6f6f6"):
+                continue
+            return color
+    return "#ff5900"
+
+
+def _remove_filter_cta_anchor(anchor):
+    row = anchor.find_parent("tr")
+    if row is not None:
+        other = [
+            a
+            for a in row.find_all("a")
+            if a is not anchor and _filter_cta_looks_like_button(a)
+        ]
+        if not other:
+            row.decompose()
+            return
+    border = anchor.find_parent("span")
+    if border is not None and "es-button-border" in " ".join(border.get("class") or []).lower():
+        border.decompose()
+        return
+    anchor.decompose()
+
+
+def _restyle_filter_cta_as_single_button(anchor, bg_color: str):
+    import html as html_module
+    from bs4 import BeautifulSoup
+
+    href = (anchor.get("href") or "").strip() or "#"
+    label = _filter_cta_label(anchor) or "Iniciar sesión"
+    safe_href = html_module.escape(href, quote=True)
+    safe_label = html_module.escape(label)
+    safe_bg = html_module.escape(bg_color, quote=True)
+    new_html = (
+        '<div class="filter-single-cta" style="text-align:center;padding:8px 0;max-width:100%;margin:0 auto;">'
+        f'<a href="{safe_href}" target="_blank" rel="noopener noreferrer" '
+        f'style="display:block;width:100%;box-sizing:border-box;background:{safe_bg};'
+        "color:#fff;text-decoration:none;text-align:center;font-weight:700;"
+        "font-family:Helvetica Neue,Roboto,Segoe UI,Verdana,sans-serif;font-size:16px;"
+        'line-height:1.2;padding:14px 20px;border:0;border-radius:0;">'
+        f"{safe_label}</a></div>"
+    )
+    replacement = BeautifulSoup(new_html, "html.parser")
+    border = anchor.find_parent("span")
+    border_classes = " ".join((border.get("class") or []) if border is not None else []).lower()
+    if border is not None and "es-button-border" in border_classes:
+        border.replace_with(replacement)
+        return
+    td = anchor.find_parent("td")
+    if td is not None:
+        td.clear()
+        td.append(replacement)
+        return
+    anchor.replace_with(replacement)
+
+
+def _dedupe_filter_duplicate_cta_buttons(mail):
+    """
+    Plantillas tipo ViX incluyen el mismo CTA dos veces (escritorio y móvil).
+    Tras el recorte del filtro, CSS/media-query deja de ocultar uno y salen 2 botones.
+    """
+    html = mail.get("html") or ""
+    if not html.strip():
+        return
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return
+
+    soup = BeautifulSoup(html, "html.parser")
+    changed = False
+
+    for tag in list(soup.find_all(True)):
+        if not _filter_cta_is_hidden_node(tag):
+            continue
+        tag.decompose()
+        changed = True
+
+    cta_anchors = [
+        a for a in soup.find_all("a") if a is not None and a.parent is not None and _filter_cta_looks_like_button(a)
+    ]
+    groups = {}
+    for anchor in cta_anchors:
+        key = _normalize_for_filter_match(_filter_cta_label(anchor))
+        if not key:
+            continue
+        groups.setdefault(key, []).append(anchor)
+
+    for anchors in groups.values():
+        alive = [a for a in anchors if a.parent is not None]
+        if not alive:
+            continue
+        keep = alive[0]
+        keep_classes = " ".join(keep.get("class") or []).lower()
+        is_styled_button = "es-button" in keep_classes or "button" in keep_classes
+        if len(alive) < 2 and not is_styled_button:
+            continue
+        bg = _filter_cta_bg_color(keep)
+        for extra in alive[1:]:
+            if extra.parent is not None:
+                _remove_filter_cta_anchor(extra)
+                changed = True
+        if keep.parent is not None:
+            _restyle_filter_cta_as_single_button(keep, bg)
+            changed = True
+
+    if changed:
+        mail["html"] = str(soup)
+
+    text = mail.get("text") or ""
+    if not text.strip():
+        return
+    # Texto plano de ViX: "Iniciar sesión ( url ) Iniciar sesión ( url )"
+    collapsed = re.sub(
+        r"(?is)((?:iniciar\s+sesi[oó]n|cambiar\s+contrase[nñ]a)\s*\(\s*https?://[^)]+\s*\))\s*\1",
+        r"\1",
+        text,
+    )
+    if collapsed != text:
+        mail["text"] = collapsed
 
 
 def apply_cut_after_html(mail, cut_str):

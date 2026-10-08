@@ -2970,6 +2970,11 @@ body.dark-mode .filter-match * {
   padding-right: 0 !important;
 }
 
+body.dark-mode .filter-match .filter-single-cta a {
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+}
+
 /* Forzar fondo blanco en elementos con estilo inline gris */
 .filter-match *[style*="background-color: #e5e5e5"],
 .filter-match *[style*="background-color:#e5e5e5"] {
@@ -4477,6 +4482,32 @@ a.btn-search.btn-rounded:hover {
   margin: 10px 0 0 !important;
   letter-spacing: normal !important;
   white-space: normal !important;
+}
+
+.regex-result-container .mail-content.filter-match .filter-single-cta,
+.regex-result-container .mail-content.filter-match .filter-single-cta div {
+  margin: 0 !important;
+  box-shadow: none !important;
+  letter-spacing: normal !important;
+  overflow: hidden !important;
+  white-space: normal !important;
+}
+
+.regex-result-container .mail-content.filter-match .filter-single-cta a {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-height: 48px !important;
+  margin: 0 !important;
+  padding: 14px 20px !important;
+  line-height: 1.2 !important;
+  letter-spacing: normal !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  color: #fff !important;
+  text-decoration: none !important;
 }
 
 /* overflow-x: auto en .mail-content fuerza overflow-y: auto y muestra un scroll innecesario */
