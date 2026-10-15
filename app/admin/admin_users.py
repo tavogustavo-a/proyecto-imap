@@ -91,6 +91,40 @@ def _unique_principal_ids_holding_emails(emails):
     return held
 
 
+def _release_unique_holders(emails, keep_principal_ids):
+    """
+    Quita estos correos de cada usuario principal con «correos únicos»
+    (y de sus sub-usuarios), salvo los principales en keep_principal_ids.
+    Así, al asignar el correo a otro usuario, no queda duplicado en 1, 2 o más
+    clientes que lo tenían en exclusivo.
+    """
+    email_list = [e.lower() for e in (emails or []) if e]
+    if not email_list:
+        return 0
+    keep = set(keep_principal_ids or [])
+    held = _unique_principal_ids_holding_emails(email_list)
+    deleted = 0
+    for em, principal_ids in held.items():
+        drop_ids = [pid for pid in principal_ids if pid not in keep]
+        if not drop_ids:
+            continue
+        user_ids = set(drop_ids)
+        user_ids.update(
+            uid
+            for (uid,) in User.query.filter(User.parent_id.in_(drop_ids))
+            .with_entities(User.id)
+            .all()
+        )
+        deleted += (
+            AllowedEmail.query.filter(
+                func.lower(AllowedEmail.email) == em,
+                AllowedEmail.user_id.in_(user_ids),
+            ).delete(synchronize_session=False)
+            or 0
+        )
+    return int(deleted)
+
+
 # --- Función Auxiliar para obtener y formatear usuarios principales ---
 def _get_principal_users_data(admin_username):
     """Consulta y formatea la lista de usuarios principales para respuesta JSON."""
@@ -1144,8 +1178,8 @@ def delete_emails_from_all_users_ajax():
 def bulk_add_emails_to_users_ajax():
     """
     Añade correos masivamente a múltiples usuarios seleccionados.
-    Respeta «Correos únicos»: al destinatario con el flag se le quitan a otros
-    clientes; no se asignan a alguien sin el flag correos ya exclusivos de otro.
+    Si el correo ya está en uno o más usuarios con «correos únicos», se les quita
+    de inmediato (a ellos y a sus sub-usuarios) y queda en los usuarios elegidos.
     """
     try:
         data = request.get_json()
@@ -1172,7 +1206,6 @@ def bulk_add_emails_to_users_ajax():
 
         added_count = 0
         skipped_count = 0
-        skipped_unique = 0
         errors = []
         users_unique = []
         users_regular = []
@@ -1202,7 +1235,11 @@ def bulk_add_emails_to_users_ajax():
                 "errors": errors or None,
             }), 400
 
-        unique_holders = _unique_principal_ids_holding_emails(normalized_new_emails)
+        selected_ids = {u.id for u in users_unique + users_regular}
+        # El correo pasa a los elegidos: se suelta de quienes lo tenían en exclusivo.
+        removed_from_unique = _release_unique_holders(
+            normalized_new_emails, keep_principal_ids=selected_ids
+        )
 
         def _add_emails_to_user(user, emails_for_user):
             nonlocal added_count, skipped_count
@@ -1217,22 +1254,10 @@ def bulk_add_emails_to_users_ajax():
                 current_emails.add(email_lower)
                 added_count += 1
 
-        for user in users_unique:
+        for user in users_unique + users_regular:
             _add_emails_to_user(user, normalized_new_emails)
-            for em in normalized_new_emails:
-                unique_holders[em].add(user.id)
 
-        for user in users_regular:
-            allowed = []
-            for email_lower in normalized_new_emails:
-                holders = unique_holders.get(email_lower, set())
-                if holders and user.id not in holders:
-                    skipped_unique += 1
-                    continue
-                allowed.append(email_lower)
-            _add_emails_to_user(user, allowed)
-
-        removed_elsewhere = 0
+        removed_elsewhere = removed_from_unique
         for user in users_unique:
             removed_elsewhere += _claim_unique_allowed_emails(user, normalized_new_emails)
 
@@ -1240,16 +1265,16 @@ def bulk_add_emails_to_users_ajax():
 
         parts = [f"Correos añadidos correctamente a {len(users_unique) + len(users_regular)} usuario(s)."]
         if removed_elsewhere:
-            parts.append(f"Quitados de otros clientes: {removed_elsewhere}.")
-        if skipped_unique:
-            parts.append(f"Omitidos por correos únicos de otro usuario: {skipped_unique}.")
+            parts.append(
+                f"Quitados de usuarios con correos únicos: {removed_elsewhere}."
+            )
 
         return jsonify({
             "status": "ok",
             "message": " ".join(parts),
             "added_count": added_count,
             "skipped_count": skipped_count,
-            "skipped_unique": skipped_unique,
+            "skipped_unique": 0,
             "removed_elsewhere": removed_elsewhere,
             "errors": errors if errors else None
         })
@@ -1309,10 +1334,14 @@ def add_allowed_emails_ajax():
     # Añadir los que realmente son nuevos
     db.session.bulk_save_objects(new_email_objects)
 
-    removed_elsewhere = 0
+    # Aunque este usuario no tenga correos únicos, el correo deja de estar
+    # en los otros que sí lo tenían marcado (1, 2, 3 o más).
+    removed_elsewhere = _release_unique_holders(
+        normalized_new_emails, keep_principal_ids={user.id}
+    )
     if getattr(user, "unique_allowed_emails", False):
         # Incluye también los que ya tenía: al añadir con exclusividad, reclama todos los enviados
-        removed_elsewhere = _claim_unique_allowed_emails(user, normalized_new_emails)
+        removed_elsewhere += _claim_unique_allowed_emails(user, normalized_new_emails)
     
     try:
         db.session.commit()
@@ -1714,69 +1743,89 @@ def list_allowed_emails_paginated():
 @admin_required
 def get_tools_resources_ajax():
     """
-    Obtiene todos los recursos de herramientas admin (ToolInfo, HtmlInfo, YouTubeListing, ApiInfo)
-    con sus usuarios vinculados.
+    Recursos de herramientas (título y usuarios vinculados) sin cargar el texto
+    completo de cada recurso. Una consulta por tipo, no una por fila.
     """
     try:
-        from app.store.models import ToolInfo, HtmlInfo, YouTubeListing, ApiInfo
-        
-        # Obtener todos los recursos
-        tools = ToolInfo.query.order_by(ToolInfo.id.desc()).all()
-        htmls = HtmlInfo.query.order_by(HtmlInfo.id.desc()).all()
-        youtube_listings = YouTubeListing.query.order_by(YouTubeListing.id.desc()).all()
-        apis = ApiInfo.query.order_by(ApiInfo.id.desc()).all()
-        
-        # Serializar recursos con sus usuarios vinculados
+        from collections import defaultdict
+
+        from app.store.models import (
+            ApiInfo,
+            HtmlInfo,
+            ToolInfo,
+            YouTubeListing,
+            apiinfo_users,
+            htmlinfo_users,
+            toolinfo_users,
+            youtube_listing_users,
+        )
+
+        def user_ids_by(table, parent_column):
+            grouped = defaultdict(list)
+            rows = db.session.query(table.c[parent_column], table.c.user_id).all()
+            for parent_id, user_id in rows:
+                grouped[parent_id].append(user_id)
+            return grouped
+
+        tool_users = user_ids_by(toolinfo_users, "toolinfo_id")
+        html_users = user_ids_by(htmlinfo_users, "htmlinfo_id")
+        youtube_users = user_ids_by(youtube_listing_users, "youtube_listing_id")
+        api_users = user_ids_by(apiinfo_users, "apiinfo_id")
+
         resources = []
-        
-        # ToolInfo (Información añadida)
-        for tool in tools:
-            user_ids = [u.id for u in tool.usuarios_vinculados.all()]
+        for tool_id, title, enabled in (
+            db.session.query(ToolInfo.id, ToolInfo.title, ToolInfo.enabled)
+            .order_by(ToolInfo.id.desc())
+            .all()
+        ):
             resources.append({
-                "id": tool.id,
+                "id": tool_id,
                 "type": "tool",
-                "title": tool.title,
+                "title": title,
                 "category": "Información añadida",
-                "enabled": tool.enabled,
-                "user_ids": user_ids
+                "enabled": enabled,
+                "user_ids": tool_users.get(tool_id, []),
             })
-        
-        # HtmlInfo (HTML añadidos)
-        for html in htmls:
-            user_ids = [u.id for u in html.users.all()]
+        for html_id, title, enabled in (
+            db.session.query(HtmlInfo.id, HtmlInfo.title, HtmlInfo.enabled)
+            .order_by(HtmlInfo.id.desc())
+            .all()
+        ):
             resources.append({
-                "id": html.id,
+                "id": html_id,
                 "type": "html",
-                "title": html.title,
+                "title": title,
                 "category": "HTML añadidos",
-                "enabled": html.enabled,
-                "user_ids": user_ids
+                "enabled": enabled,
+                "user_ids": html_users.get(html_id, []),
             })
-        
-        # YouTubeListing (Listado de YouTube)
-        for yt in youtube_listings:
-            user_ids = [u.id for u in yt.users.all()]
+        for yt_id, title, enabled in (
+            db.session.query(YouTubeListing.id, YouTubeListing.title, YouTubeListing.enabled)
+            .order_by(YouTubeListing.id.desc())
+            .all()
+        ):
             resources.append({
-                "id": yt.id,
+                "id": yt_id,
                 "type": "youtube",
-                "title": yt.title,
+                "title": title,
                 "category": "Listado de YouTube",
-                "enabled": yt.enabled,
-                "user_ids": user_ids
+                "enabled": enabled,
+                "user_ids": youtube_users.get(yt_id, []),
             })
-        
-        # ApiInfo (Lista de Creación de APIs)
-        for api in apis:
-            user_ids = [u.id for u in api.users.all()]
+        for api_id, title, enabled in (
+            db.session.query(ApiInfo.id, ApiInfo.title, ApiInfo.enabled)
+            .order_by(ApiInfo.id.desc())
+            .all()
+        ):
             resources.append({
-                "id": api.id,
+                "id": api_id,
                 "type": "api",
-                "title": api.title,
+                "title": title,
                 "category": "Lista de Creación de APIs",
-                "enabled": api.enabled,
-                "user_ids": user_ids
+                "enabled": enabled,
+                "user_ids": api_users.get(api_id, []),
             })
-        
+
         return jsonify({
             "status": "ok",
             "resources": resources

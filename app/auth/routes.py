@@ -97,6 +97,7 @@ def login():
                 return make_response(_post_login_redirect(username))
 
             if user.twofa_method == "TOTP":
+                session.permanent = True
                 session["2fa_user_id"] = user.id
                 session["2fa_username"] = user.username
                 db.session.commit()
@@ -108,6 +109,7 @@ def login():
                 code = str(random.randint(100000, 999999))
                 user.pending_2fa_code = code
                 user.pending_2fa_code_expires = datetime.utcnow() + timedelta(minutes=10)
+                session.permanent = True
                 session["2fa_user_id"] = user.id
                 session["2fa_username"] = user.username
                 try:

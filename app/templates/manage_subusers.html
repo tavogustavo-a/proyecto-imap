@@ -24,7 +24,7 @@
   <!-- CONTORNO 1: Panel Sub-usuarios + Crear Sub-usuario -->
   <div class="admin-card mb-1">
     <div class="d-flex align-items-center">
-      <button id="menuToggleBtn" class="btn-panel btn-blue">&#9776; Menú</button>
+      <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
     </div>
     <hr class="hr-margin-08">
 
@@ -75,7 +75,7 @@
       </div>
       <div class="d-flex gap-05 justify-content-end align-items-center">
         <div id="subuserDeleteDisplayedContainer" class="d-none">
-          <button type="button" id="subuserDeleteDisplayedBtn" class="btn-red btn-small">
+          <button type="button" id="subuserDeleteDisplayedBtn" class="btn-red">
             Eliminar X Mostrados
           </button>
         </div>
@@ -106,12 +106,12 @@
       </div>
       <div id="subuserAllowedEmailsPagination" class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
         <span id="subuserPaginationInfo" class="text-small"></span>
-        <button id="subuserDeleteAllEmailsBtn" class="btn-red btn-small btn-small-font" title="Eliminar TODOS los correos permitidos">
+        <button id="subuserDeleteAllEmailsBtn" class="btn-red" title="Eliminar TODOS los correos permitidos">
           <i class="fas fa-trash"></i> Eliminar Todos
         </button>
         <div class="d-flex gap-05">
-          <button id="subuserPrevPageBtn" class="btn-blue btn-small btn-small-font" disabled>&lt; Anterior</button>
-          <button id="subuserNextPageBtn" class="btn-blue btn-small btn-small-font" disabled>Siguiente &gt;</button>
+          <button id="subuserPrevPageBtn" class="btn-blue" disabled>&lt; Anterior</button>
+          <button id="subuserNextPageBtn" class="btn-blue" disabled>Siguiente &gt;</button>
         </div>
       </div>
     </div>
@@ -130,7 +130,7 @@
         autocomplete="off"
       ></textarea>
       <div class="text-center">
-        <button type="button" id="subuserAddEmailsBtn" class="btn-blue btn-small">Añadir Correos</button>
+        <button type="button" id="subuserAddEmailsBtn" class="btn-blue">Añadir Correos</button>
       </div>
       <div class="text-center mt-05">
         <span id="subuserAddEmailsMsg" class="text-italic text-success text-small"></span>
@@ -380,7 +380,7 @@
           class="flex-grow-1"
           autocomplete="off"
         >
-        <button type="submit" class="btn-search">Limpiar</button>
+        <button type="submit" class="btn-blue">Limpiar</button>
       </form>
       <div>
         <label for="showSubuserCount" class="sr-only">Mostrar cantidad sub-usuarios</label>

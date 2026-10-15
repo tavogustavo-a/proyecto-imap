@@ -59,7 +59,7 @@
     <form id="searchEmailsForm" name="searchEmailsForm">
       <label for="searchEmailsInput" class="sr-only">Buscar y eliminar correos</label>
       <textarea id="searchEmailsInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
-      <button type="submit" class="btn-search">Limpiar</button>
+      <button type="submit" class="btn-blue">Limpiar</button>
     </form>
     <div id="emailsSearchResults" class="search-results-container">
         <!-- Resultados aquí -->
@@ -70,7 +70,7 @@
       <div id="searchStatus" class="text-italic text-secondary"></div>
        {# Clase #delete-displayed-container aplicada desde CSS #}
       <div id="delete-displayed-container">
-          <button id="deleteDisplayedBtn" class="btn-red btn-small">
+          <button id="deleteDisplayedBtn" class="btn-red">
               Eliminar X Mostrados
           </button>
       </div>
@@ -93,13 +93,13 @@
         <p>Cargando correos...</p>
       </div>
       <div id="allowedEmailsPagination" class="d-flex justify-content-between align-items-center">
-        <button id="deleteAllEmailsBtn" class="btn-panel btn-red btn-sm" title="Eliminar TODOS los correos permitidos para este usuario">
+        <button id="deleteAllEmailsBtn" class="btn-red" title="Eliminar TODOS los correos permitidos para este usuario">
           Eliminar Todo
         </button>
         <div class="allowed-emails-page-nav d-flex align-items-center">
-          <button id="prevPageBtn" class="btn-panel btn-blue" disabled>Anterior</button>
+          <button id="prevPageBtn" class="btn-blue" disabled>Anterior</button>
           <span id="paginationInfo"></span>
-          <button id="nextPageBtn" class="btn-panel btn-blue" disabled>Siguiente</button>
+          <button id="nextPageBtn" class="btn-blue" disabled>Siguiente</button>
         </div>
       </div>
       

@@ -816,3 +816,36 @@
   cursor: not-allowed;
 }
 
+/* Misma caja que el panel de administración en pantallas pequeñas.
+   store.css baja .btn-panel a 12px por debajo de 480px. */
+#sms-management-container .admin-card .menu-toggle-btn,
+#sms-management-container .admin-card .btn-blue,
+#sms-management-container .admin-card .btn-red,
+#sms-management-container .admin-card .btn-green,
+#sms-management-container .mobile-menu-btn,
+.sms-modal-content .btn-blue,
+.sms-modal-content .btn-red,
+.sms-modal-content .btn-green {
+  font-size: 1.08rem !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  padding: 2px 7px !important;
+  min-width: 60px !important;
+  width: auto !important;
+  height: auto !important;
+  line-height: normal !important;
+  border-width: 2px !important;
+  box-sizing: border-box !important;
+}
+
+#sms-management-container .mobile-menu-btn {
+  width: calc(100% - 2rem) !important;
+  min-width: 0 !important;
+}
+
+#sms-management-container .twofa-api-key-toggle {
+  min-width: 0 !important;
+  width: auto !important;
+  padding: 2px 8px !important;
+}
+

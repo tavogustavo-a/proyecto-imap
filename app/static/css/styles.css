@@ -17,6 +17,16 @@ body.theme-active {
   background-size: cover;
 }
 
+/* Gestión de permisos: el fondo fijo congela el scroll de Chrome en tablas grandes. */
+body.theme-active:has(.perm-page) {
+  background-attachment: scroll !important;
+}
+
+.perm-page .permissions-table tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+
 /* LOG: Esta regla controla el ancho y margen general del contenedor principal. Si el layout se descuadra, revisa aqu�. */
 body:has(.search-page-container) > .container {
   width: 100%;
@@ -1803,11 +1813,12 @@ noscript p {
 #allowedEmailsPagination > #deleteAllEmailsBtn {
   flex: 0 1 auto;
   width: auto !important;
-  min-width: 0 !important;
-  font-size: 0.75rem !important;
+  min-width: 60px !important;
+  font-size: 1.08rem !important;
   font-weight: 600;
-  padding: 0.14rem 0.42rem !important;
-  line-height: 1.2;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  line-height: normal;
   white-space: nowrap;
 }
 
@@ -1820,11 +1831,13 @@ noscript p {
   min-width: 0;
 }
 
-#allowedEmailsPagination .allowed-emails-page-nav .btn-panel {
-  min-width: 0 !important;
+#allowedEmailsPagination .allowed-emails-page-nav .btn-panel,
+#allowedEmailsPagination .allowed-emails-page-nav .btn-blue {
+  min-width: 60px !important;
   width: auto !important;
-  font-size: 0.75rem !important;
-  padding: 0.14rem 0.42rem !important;
+  font-size: 1.08rem !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
   white-space: nowrap;
 }
 
@@ -1850,13 +1863,14 @@ noscript p {
 
   #allowedEmailsPagination > #deleteAllEmailsBtn {
     width: auto !important;
-    font-size: 0.68rem !important;
-    padding: 0.1rem 0.32rem !important;
+    font-size: 1.08rem !important;
+    padding: 2px 7px !important;
   }
 
-  #allowedEmailsPagination .allowed-emails-page-nav .btn-panel {
-    font-size: 0.68rem !important;
-    padding: 0.1rem 0.32rem !important;
+  #allowedEmailsPagination .allowed-emails-page-nav .btn-panel,
+  #allowedEmailsPagination .allowed-emails-page-nav .btn-blue {
+    font-size: 1.08rem !important;
+    padding: 2px 7px !important;
   }
 
   #paginationInfo {
@@ -5588,5 +5602,63 @@ body:not(.theme-active) .site-footer__social-config-btn {
   .subuser-catalog-table th:nth-child(3),
   .subuser-catalog-table td:nth-child(3) {
     display: none;
+  }
+}
+
+/* Menús y botones de paneles admin en pantallas pequeñas.
+   store.css baja .btn-panel a 12px y .store-light .btn-green a 0.95rem.
+   Aquí vuelven al tamaño de /admin/. La tienda pública y los botones .btn-sm no entran. */
+@media (max-width: 768px) {
+  #menuToggleBtn.btn-panel,
+  #menu2ToggleBtn.btn-panel,
+  #menuToggleBtnAuto.btn-panel,
+  #menu2ToggleBtnAuto.btn-panel,
+  #menuToggleBtnMethods.btn-panel,
+  #menu2ToggleBtnMethods.btn-panel,
+  #menuToggleBtnAccum.btn-panel,
+  #menu2ToggleBtnAccum.btn-panel,
+  .menu-toggle-btn.btn-panel,
+  .mobile-menu-store .mobile-menu-btn,
+  .btn-panel.btn-blue:not(.btn-sm):not(.mobile-menu-btn),
+  .btn-panel.btn-red:not(.btn-sm):not(.mobile-menu-btn),
+  .btn-panel.btn-green:not(.btn-sm):not(.mobile-menu-btn),
+  .btn-panel.btn-orange:not(.btn-sm):not(.mobile-menu-btn),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-red:not(.btn-sm):not(.btn-small),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-green:not(.btn-sm):not(.btn-small),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-orange:not(.btn-sm):not(.btn-small) {
+    font-size: 1.08rem !important;
+    font-weight: 600 !important;
+    padding: 2px 7px !important;
+    min-width: 60px !important;
+    border-radius: 6px !important;
+    height: auto !important;
+    line-height: normal !important;
+    box-sizing: border-box !important;
+  }
+
+  .mobile-menu-store .mobile-menu-btn {
+    width: calc(100% - 2rem) !important;
+    min-width: 0 !important;
+    text-align: left !important;
+  }
+
+  .worksheet-panel .btn-panel.btn-blue:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn),
+  .worksheet-panel .btn-panel.btn-red:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn),
+  .worksheet-panel .btn-panel.btn-green:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn),
+  .worksheet-panel .btn-panel.btn-orange:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn) {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+    min-width: unset !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .worksheet-panel .btn-panel.btn-blue:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn),
+  .worksheet-panel .btn-panel.btn-red:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn),
+  .worksheet-panel .btn-panel.btn-green:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn),
+  .worksheet-panel .btn-panel.btn-orange:not(.btn-sm):not(.mobile-menu-btn):not(.menu-toggle-btn) {
+    font-size: 12px !important;
+    padding: 6px 10px !important;
   }
 }

@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}?v=20261014-sms-btns">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -36,9 +36,11 @@
   <div id="menuOverlay" class="menu-overlay"></div>
 
   <div class="admin-card">
-    <div class="d-flex gap-05 mb-1">
-      <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
-      <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex gap-05">
+        <button id="menuToggleBtn" type="button" class="btn-panel btn-blue ml-2 menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+      </div>
     </div>
     <h2 class="m-0 mb-1 text-center w-100">Consulta de SMS</h2>
 
@@ -47,7 +49,7 @@
     <form id="searchNumbersForm" name="searchNumbersForm">
       <label for="searchNumbersInput" class="sr-only">Buscar y eliminar correos</label>
       <textarea id="searchNumbersInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
-      <button type="submit" class="btn-search">Limpiar</button>
+      <button type="submit" class="btn-blue">Limpiar</button>
     </form>
     <div id="numbersSearchResults" class="search-results-container">
         <!-- Resultados aquí -->
@@ -55,7 +57,7 @@
     <div class="d-flex justify-content-between align-items-center min-height-2-5rem">
       <div id="searchStatus" class="text-italic text-secondary"></div>
       <div id="delete-displayed-container">
-          <button id="deleteDisplayedBtn" class="btn-red btn-small d-none">
+          <button id="deleteDisplayedBtn" class="btn-red d-none">
               Eliminar X Mostrados
           </button>
       </div>
@@ -78,12 +80,12 @@
       </div>
       <div id="allowedNumbersPagination" class="d-flex justify-content-between align-items-center">
         <span id="paginationInfoNumbers"></span>
-        <button id="deleteAllNumbersBtn" class="btn-panel btn-red btn-sm" title="Eliminar TODOS los correos permitidos">
+        <button id="deleteAllNumbersBtn" class="btn-red" title="Eliminar TODOS los correos permitidos">
           <i class="fas fa-trash"></i> Eliminar Todos
         </button>
         <div class="ml-auto">
-          <button id="prevPageBtnNumbers" class="btn-panel btn-blue" disabled>&lt; Anterior</button>
-          <button id="nextPageBtnNumbers" class="btn-panel btn-blue ml-05" disabled>Siguiente &gt;</button>
+          <button id="prevPageBtnNumbers" class="btn-blue" disabled>&lt; Anterior</button>
+          <button id="nextPageBtnNumbers" class="btn-blue ml-05" disabled>Siguiente &gt;</button>
         </div>
       </div>
       
@@ -147,13 +149,13 @@
             <button 
               type="button" 
               id="toggle-api-key-visibility" 
-              class="btn-blue btn-small twofa-api-key-toggle" 
+              class="btn-blue twofa-api-key-toggle" 
               title="Mostrar/Ocultar API Key"
             >
               <i class="fas fa-eye" id="api-key-eye-icon"></i>
             </button>
           </div>
-          <button type="button" id="generate-api-key-btn" class="btn-blue btn-small" title="Generar API Key aleatoria">
+          <button type="button" id="generate-api-key-btn" class="btn-blue" title="Generar API Key aleatoria">
             <i class="fas fa-key"></i> Generar
           </button>
         </div>
@@ -330,11 +332,11 @@
           accept="image/*"
           class="d-none"
         >
-        <button type="button" id="twofa-upload-qr-btn" class="btn-blue btn-small">
+        <button type="button" id="twofa-upload-qr-btn" class="btn-blue">
           <i class="fas fa-qrcode"></i> QR
         </button>
-        <button type="submit" id="twofa-save-btn" class="btn-green btn-small">Agregar</button>
-        <button type="button" id="twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
+        <button type="submit" id="twofa-save-btn" class="btn-green">Agregar</button>
+        <button type="button" id="twofa-cancel-btn" class="btn-blue d-none">Cancelar</button>
       </div>
       
       <!-- Preview del QR (oculto por defecto) -->
@@ -376,8 +378,8 @@
     
     <!-- Botones de paginación -->
     <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
-      <button id="prevTwofaPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
-      <button id="nextTwofaPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
+      <button id="prevTwofaPageBtn" class="btn-blue" type="button">&lt; Anterior</button>
+      <button id="nextTwofaPageBtn" class="btn-blue" type="button">Siguiente &gt;</button>
     </div>
   </div>
 </div>
@@ -424,7 +426,7 @@
           accept="image/*"
           class="d-none"
         >
-        <button type="button" id="edit-twofa-upload-qr-btn" class="btn-blue btn-small">
+        <button type="button" id="edit-twofa-upload-qr-btn" class="btn-blue">
           <i class="fas fa-qrcode"></i> QR
         </button>
       </div>
@@ -529,13 +531,13 @@
             <button 
               type="button" 
               id="toggle-edit-api-key-visibility" 
-              class="btn-blue btn-small twofa-api-key-toggle" 
+              class="btn-blue twofa-api-key-toggle" 
               title="Mostrar/Ocultar API Key"
             >
               <i class="fas fa-eye" id="edit-api-key-eye-icon"></i>
             </button>
           </div>
-          <button type="button" id="generate-edit-api-key-btn" class="btn-blue btn-small" title="Generar API Key aleatoria">
+          <button type="button" id="generate-edit-api-key-btn" class="btn-blue" title="Generar API Key aleatoria">
             <i class="fas fa-key"></i> Generar
           </button>
         </div>
@@ -545,7 +547,7 @@
           <strong>URL del Webhook:</strong>
           <div class="d-flex align-items-center gap-05 mt-05">
             <code id="edit-webhook-url" class="flex-grow-1 twofa-webhook-code">Cargando...</code>
-            <button type="button" id="copy-edit-webhook-btn" class="btn-blue btn-small" title="Copiar URL">
+            <button type="button" id="copy-edit-webhook-btn" class="btn-blue" title="Copiar URL">
               <i class="fas fa-copy"></i> Copiar
             </button>
           </div>
@@ -611,7 +613,7 @@
       <label for="new-regex-pattern" class="sr-only">Patrón regex</label>
       <input type="text" id="new-regex-pattern" placeholder="Patrón regex (ej: código|code)" class="d-block mb-05 w-100" autocomplete="off">
       <div class="text-center mt-1">
-        <button type="button" id="create-regex-btn" class="btn-green btn-sm">Crear Regex</button>
+        <button type="button" id="create-regex-btn" class="btn-green">Crear Regex</button>
       </div>
     </div>
     

@@ -44890,9 +44890,9 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   .admin-proveedores-anadir-fuera-page #menu2ToggleBtn.menu-toggle-btn,
   .admin-plex-emby-media-page #menuToggleBtn.menu-toggle-btn,
   .admin-plex-emby-media-page #menu2ToggleBtn.menu-toggle-btn {
-    min-width: 78px !important;
+    min-width: 60px !important;
     padding: 2px 7px !important;
-    font-size: 0.92rem !important;
-    min-height: calc(0.92rem + 8px) !important;
+    font-size: 1.08rem !important;
+    min-height: 0 !important;
   }
 }

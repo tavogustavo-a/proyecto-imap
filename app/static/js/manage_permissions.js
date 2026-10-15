@@ -55,30 +55,43 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
   
+  let usersLoadPromise = null;
+
+  function fetchAllUsers(force) {
+    if (force) usersLoadPromise = null;
+    if (!usersLoadPromise) {
+      usersLoadPromise = fetch('/admin/search_users_ajax?query=', {
+        method: 'GET',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (!data || data.status !== 'ok') {
+            usersLoadPromise = null;
+            const err = new Error((data && data.message) || 'No se pudieron cargar los usuarios');
+            err.data = data;
+            throw err;
+          }
+          return data.users || [];
+        })
+        .catch(err => {
+          usersLoadPromise = null;
+          throw err;
+        });
+    }
+    return usersLoadPromise;
+  }
+
   // Cargar usuarios al iniciar
   function loadUsers() {
-    fetch('/admin/search_users_ajax?query=', {
-      method: 'GET',
-      headers: {
-        'X-CSRFToken': getCsrfToken()
-      }
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === "ok") {
-        allUsers = data.users || [];
-        filteredUsers = allUsers;
-        renderTable();
-        updateStats();
-      } else {
-        const errorP = document.createElement('p');
-        errorP.className = 'text-danger';
-        errorP.textContent = `Error: ${data.message || 'No se pudieron cargar los usuarios'}`;
-        while(permissionsTableBody.firstChild) {
-          permissionsTableBody.removeChild(permissionsTableBody.firstChild);
-        }
-        permissionsTableBody.appendChild(errorP);
-      }
+    fetchAllUsers(true)
+    .then(users => {
+      allUsers = users;
+      filteredUsers = allUsers;
+      renderTable();
+      updateStats();
     })
     .catch(err => {
       console.error("Error al cargar usuarios:", err);
@@ -371,7 +384,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // Cargar recursos y usuarios
   function loadResources() {
     if (!resourcesPermissionsTableBody) return;
-    
+
     Promise.all([
       fetch('/admin/get_tools_resources_ajax', {
         method: 'GET',
@@ -379,14 +392,10 @@ document.addEventListener("DOMContentLoaded", function() {
           'X-CSRFToken': getCsrfToken()
         }
       }).then(res => res.json()),
-      fetch('/admin/search_users_ajax?query=', {
-        method: 'GET',
-        headers: {
-          'X-CSRFToken': getCsrfToken()
-        }
-      }).then(res => res.json())
+      fetchAllUsers(false)
     ])
-    .then(([resourcesData, usersData]) => {
+    .then(([resourcesData, users]) => {
+      const usersData = { status: 'ok', users: users };
       if (resourcesData.status === "ok" && usersData.status === "ok") {
         allResources = resourcesData.resources || [];
         filteredResources = allResources;
@@ -473,21 +482,27 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
     
-    // Crear una fila por cada usuario
+    const accessByResource = new Map();
+    allResources.forEach(resource => {
+      accessByResource.set(
+        resource.id + '-' + resource.type,
+        new Set(resource.user_ids || [])
+      );
+    });
+
+    const fragment = document.createDocumentFragment();
     users.forEach(user => {
       const row = document.createElement('tr');
       row.dataset.userId = user.id;
-      
-      // Celda de nombre de usuario
+
       const usernameCell = document.createElement('td');
       usernameCell.textContent = user.username;
       row.appendChild(usernameCell);
-      
-      // Checkbox para cada recurso (mostrar todos los recursos, no solo los filtrados)
+
       allResources.forEach(resource => {
         const cell = document.createElement('td');
         cell.className = 'text-center';
-        
+
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = 'resource-permission-checkbox';
@@ -496,34 +511,28 @@ document.addEventListener("DOMContentLoaded", function() {
         checkbox.dataset.userId = user.id;
         checkbox.id = `resource-${resource.id}-${resource.type}-user-${user.id}`;
         checkbox.name = `resource_${resource.id}_${resource.type}_user_${user.id}`;
-        
-        // Establecer estado del checkbox según si el usuario tiene acceso
-        // Primero verificar si hay cambios pendientes para este recurso
+
         const key = `${resource.id}-${resource.type}`;
         let hasAccess = false;
-        
         if (resourcesPendingChanges.has(key)) {
-          // Si hay cambios pendientes, usar la lista de cambios pendientes
           const pendingData = resourcesPendingChanges.get(key);
-          hasAccess = pendingData.user_ids && pendingData.user_ids.includes(user.id);
+          hasAccess = pendingData.user_ids && pendingData.user_ids.indexOf(user.id) !== -1;
         } else {
-          // Si no hay cambios pendientes, usar la lista original
-          hasAccess = resource.user_ids && resource.user_ids.includes(user.id);
+          const allowed = accessByResource.get(key);
+          hasAccess = !!(allowed && allowed.has(user.id));
         }
-        
         checkbox.checked = hasAccess;
-        
-        // Agregar listener para cambios
         checkbox.addEventListener('change', function() {
           handleResourcePermissionChange(resource.id, resource.type, user.id, this.checked);
         });
-        
+
         cell.appendChild(checkbox);
         row.appendChild(cell);
       });
-      
-      resourcesPermissionsTableBody.appendChild(row);
+
+      fragment.appendChild(row);
     });
+    resourcesPermissionsTableBody.appendChild(fragment);
   }
   
   // Manejar cambios de permisos de recursos
@@ -772,9 +781,8 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
   
-  // Inicializar recursos
+  // Inicializar recursos después de pintar la tabla de permisos.
   if (resourcesPermissionsTableBody) {
-    loadResources();
     updateResourcesSaveButton();
   }
   
@@ -1606,32 +1614,13 @@ document.addEventListener("DOMContentLoaded", function() {
   // Cargar usuarios para la tabla de precios
   function loadUsersForPrices() {
     if (!userPricesTableBody) return;
-    
-    fetch('/admin/search_users_ajax?query=', {
-      method: 'GET',
-      headers: {
-        'X-CSRFToken': getCsrfToken()
-      }
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === "ok") {
-        allUsersForPrices = data.users || [];
-        userPricesData = {};
-        rebuildUserPricesBaselineFromUsers(allUsersForPrices);
-        filterUsersForPrices();
-      } else {
-        while (userPricesTableBody.firstChild) {
-          userPricesTableBody.removeChild(userPricesTableBody.firstChild);
-        }
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 3;
-        td.className = 'text-center text-danger';
-        td.textContent = 'Error al cargar usuarios';
-        tr.appendChild(td);
-        userPricesTableBody.appendChild(tr);
-      }
+
+    fetchAllUsers(false)
+    .then(users => {
+      allUsersForPrices = users;
+      userPricesData = {};
+      rebuildUserPricesBaselineFromUsers(allUsersForPrices);
+      filterUsersForPrices();
     })
     .catch(err => {
       console.error('Error:', err);
@@ -2315,7 +2304,7 @@ document.addEventListener("DOMContentLoaded", function() {
   
   // Inicializar tabla de precios por usuario
   if (userPricesTableBody) {
-    loadUsersForPrices();
+    /* Se carga al abrir la sección, no al entrar a la página. */
   }
   
   // Modal para añadir saldo
@@ -2803,6 +2792,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function connectAdminBalanceStream() {
       if (adminBalanceRealtimeConn) return;
+      if (!document.getElementById('userPricesTableBody')) return;
+      var pricesTitle = document.querySelector('[data-section-key="precios"]');
+      var pricesBody = pricesTitle && pricesTitle.closest('.admin-card')
+        ? pricesTitle.closest('.admin-card').querySelector('.perm-section-body')
+        : null;
+      if (pricesBody && pricesBody.style.display === 'none') return;
       adminBalanceRealtimeConn = window.BalanceRechargeRealtime.connect(
         ADMIN_EVENTS_URL,
         onAdminBalanceRealtime
@@ -2819,12 +2814,10 @@ document.addEventListener("DOMContentLoaded", function() {
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') {
         connectAdminBalanceStream();
-        refreshUserPricesSaldosAll();
       } else {
         disconnectAdminBalanceStream();
       }
     });
-    window.addEventListener('focus', refreshUserPricesSaldosAll);
   })();
 
   /* Secciones plegables por título (estado recordado por sección en este navegador). */
@@ -2853,6 +2846,9 @@ document.addEventListener("DOMContentLoaded", function() {
         try {
           localStorage.setItem(key, collapsed ? '1' : '0');
         } catch (e) {}
+        if (!collapsed) {
+          setTimeout(maybeLoadHeavySections, 0);
+        }
       }
 
       titleEl.addEventListener('click', toggle);
@@ -2864,4 +2860,49 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     });
   })();
+
+  function sectionBodyOpen(sectionKey) {
+    const title = document.querySelector('.perm-section-toggle[data-section-key="' + sectionKey + '"]');
+    const card = title ? title.closest('.admin-card') : null;
+    const body = card ? card.querySelector('.perm-section-body') : null;
+    return !body || body.style.display !== 'none';
+  }
+
+  let resourcesStarted = false;
+  let pricesStarted = false;
+  let resourcesWatched = false;
+  let pricesWatched = false;
+  function watchHeavySection(sectionKey, start) {
+    if (!sectionBodyOpen(sectionKey)) return;
+    const title = document.querySelector('.perm-section-toggle[data-section-key="' + sectionKey + '"]');
+    if (!title || !('IntersectionObserver' in window)) {
+      start();
+      return;
+    }
+    const io = new IntersectionObserver(function (entries) {
+      if (!entries.some(function (e) { return e.isIntersecting; })) return;
+      io.disconnect();
+      start();
+    }, { rootMargin: '120px' });
+    io.observe(title);
+  }
+  function maybeLoadHeavySections() {
+    if (!resourcesStarted && !resourcesWatched && resourcesPermissionsTableBody && sectionBodyOpen('herramientas')) {
+      resourcesWatched = true;
+      watchHeavySection('herramientas', function () {
+        if (resourcesStarted) return;
+        resourcesStarted = true;
+        loadResources();
+      });
+    }
+    if (!pricesStarted && !pricesWatched && userPricesTableBody && sectionBodyOpen('precios')) {
+      pricesWatched = true;
+      watchHeavySection('precios', function () {
+        if (pricesStarted) return;
+        pricesStarted = true;
+        loadUsersForPrices();
+      });
+    }
+  }
+  setTimeout(maybeLoadHeavySections, 0);
 });

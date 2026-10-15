@@ -1142,10 +1142,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (data.status === "ok") {
           let msg = `Correos añadidos correctamente. ${data.added_count || 0} añadidos, ${data.skipped_count || 0} omitidos`;
           if (data.removed_elsewhere) {
-            msg += `. Quitados de otros clientes: ${data.removed_elsewhere}`;
-          }
-          if (data.skipped_unique) {
-            msg += `. No asignados (ya únicos de otro usuario): ${data.skipped_unique}`;
+            msg += `. Quitados de usuarios con correos únicos: ${data.removed_elsewhere}`;
           }
           msg += ".";
           bulkAddEmailsMessage.textContent = msg;

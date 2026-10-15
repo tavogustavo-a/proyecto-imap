@@ -6,13 +6,13 @@
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20260728-proveedor-renovar-v1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20261014-scroll2">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.min.css') }}">
 {% endblock %}
 
 {% block content %}
 
-<div class="container container-max-width-1200"
+<div class="container container-max-width-1200 perm-page"
      data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
      data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
 
@@ -394,5 +394,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20260729-tipo-precio-confirm" defer></script>
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20261014-scroll-vivo" defer></script>
 {% endblock %}
