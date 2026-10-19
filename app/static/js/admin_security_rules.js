@@ -23,11 +23,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div><strong>Patrón Activador:</strong> <code>${escapeHTML(rule.trigger_pattern)}</code></div>
                 <div><strong>Patrón Observador:</strong> <code>${escapeHTML(rule.observer_pattern)}</code></div>
                 <div>
-                    ${rule.enabled
-                        ? `<button class="btn btn-red toggle-security-rule" data-id="${rule.id}" data-enabled="true">Off</button>`
-                        : `<button class="btn btn-green toggle-security-rule" data-id="${rule.id}" data-enabled="false">On</button>`
-                    }
-                    <a href="/admin/edit_security_rule/${rule.id}" class="btn-panel btn-orange btn-sm btn-edit-security-rule">Editar</a>
+                    ${stateSwitchHtml(!!rule.enabled, 'toggle-security-rule', `data-id="${rule.id}" data-enabled="${rule.enabled ? 'true' : 'false'}"`)}
+                    <a href="/admin/edit_security_rule/${rule.id}" class="btn-panel btn-orange btn-sm btn-edit-security-rule row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                     <button class="btn-panel btn-red btn-sm delete-security-rule" data-id="${rule.id}" title="Eliminar">
                       <i class="fas fa-trash"></i>
                     </button>
@@ -143,18 +140,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
 
-            if (target.classList.contains('toggle-security-rule')) {
+            const ruleToggle = event.target.closest('.toggle-security-rule');
+            if (ruleToggle) {
                 event.preventDefault();
                 event.stopPropagation();
                 
                 isProcessing = true;
-                target.disabled = true;
+                ruleToggle.disabled = true;
                 
-                // Feedback visual inmediato
-                const originalText = target.innerHTML;
-                target.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                
-                const ruleId = target.dataset.id;
+                const ruleId = ruleToggle.dataset.id;
                 fetch('/admin/toggle_security_rule_ajax', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
@@ -178,10 +172,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     alert('Error al cambiar estado: ' + err.message);
                 })
                 .finally(() => {
-                    // Resetear estado más rápido
                     setTimeout(() => {
-                        target.disabled = false;
-                        target.innerHTML = originalText;
+                        ruleToggle.disabled = false;
                         isProcessing = false;
                     }, 100); // Solo 100ms de delay
                 });

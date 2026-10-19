@@ -2,6 +2,8 @@
 import re
 import urllib.parse
 
+from app.services.sender_list import any_sender_in_text
+
 FLAGS = re.IGNORECASE | re.MULTILINE | re.DOTALL
 
 _REDIRECT_PREFIX = '/admin/redirect_to?url='
@@ -53,7 +55,7 @@ def passes_any_regex(mail_dict, regexes):
     for r in regexes:
         if not r.enabled:
             continue
-        if r.sender and (r.sender.lower() not in sender_lower):
+        if not any_sender_in_text(r.sender, sender_lower):
             continue
 
         try:
@@ -77,7 +79,7 @@ def extract_regex(mail_dict, regexes):
     for r in regexes:
         if not r.enabled:
             continue
-        if r.sender and (r.sender.lower() not in sender_lower):
+        if not any_sender_in_text(r.sender, sender_lower):
             continue
 
         try:

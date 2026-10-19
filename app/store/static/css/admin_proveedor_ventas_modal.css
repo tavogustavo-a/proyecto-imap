@@ -227,8 +227,8 @@
 .admin-lic-proveedor-ventas-item {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.42rem 0.55rem;
+  gap: 0.4rem;
+  padding: 0.08rem 0.5rem;
   border-bottom: 1px solid #e2e8f0;
   background: #ffffff;
 }
@@ -312,10 +312,12 @@
   margin-top: 0.65rem;
   padding-top: 0.55rem;
   border-top: 1px solid #e2e8f0;
+  text-align: center;
 }
 .admin-lic-proveedor-ventas-day__label {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
   margin: 0 0 0.35rem;
   font-size: 0.78rem;
@@ -323,22 +325,28 @@
   color: #1e40af;
 }
 .admin-lic-proveedor-ventas-day__input {
+  display: block;
   width: 100%;
   max-width: 12.5rem;
-  font-size: 0.86rem;
+  margin-left: auto;
+  margin-right: auto;
   margin-bottom: 0.45rem;
+  font-size: 0.86rem;
+  text-align: center;
 }
 .admin-lic-proveedor-ventas-day__body {
   font-size: 0.78rem;
   color: #334155;
   max-height: 11.5rem;
   overflow: auto;
+  text-align: center;
 }
 .admin-lic-proveedor-ventas-day__empty,
 .admin-lic-proveedor-ventas-day__loading,
 .admin-lic-proveedor-ventas-day__error {
   margin: 0;
   color: #64748b;
+  text-align: center;
 }
 .admin-lic-proveedor-ventas-day__error {
   color: #b91c1c;
@@ -346,6 +354,7 @@
 .admin-lic-proveedor-ventas-day__chips {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.3rem;
   margin: 0 0 0.4rem;
 }

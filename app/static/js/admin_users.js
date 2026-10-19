@@ -412,16 +412,17 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // Toggle user On/Off
-    if (target.classList.contains("toggle-user")) {
+    const toggleBtn = target.closest(".toggle-user");
+    if (toggleBtn) {
       e.preventDefault();
       e.stopPropagation();
       
       // Prevenir múltiples clicks rápidos
-      if (target.disabled) return;
-      target.disabled = true;
+      if (toggleBtn.disabled) return;
+      toggleBtn.disabled = true;
       
-      const userId = target.getAttribute("data-id");
-      const currentlyEnabled = (target.getAttribute("data-enabled") === "true");
+      const userId = toggleBtn.getAttribute("data-id");
+      const currentlyEnabled = (toggleBtn.getAttribute("data-enabled") === "true");
       const payload = { user_id: parseInt(userId), currently_enabled: currentlyEnabled };
       
       fetch("/admin/toggle_user_ajax", {
@@ -456,7 +457,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
       })
       .finally(() => {
-        target.disabled = false;
+        toggleBtn.disabled = false;
       });
     }
 
@@ -627,12 +628,22 @@ document.addEventListener("DOMContentLoaded", function() {
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'user-item-actions';
       
-      // Botón Off/On
+      // Interruptor: verde a la derecha si el usuario está activo
       const toggleBtn = document.createElement('button');
-      toggleBtn.className = u.enabled ? 'btn-red toggle-user' : 'btn-green toggle-user';
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'user-switch toggle-user' + (u.enabled ? ' is-on' : '');
       toggleBtn.dataset.id = u.id;
       toggleBtn.dataset.enabled = u.enabled ? 'true' : 'false';
-      toggleBtn.textContent = u.enabled ? 'Off' : 'On';
+      toggleBtn.setAttribute('aria-pressed', u.enabled ? 'true' : 'false');
+      toggleBtn.title = u.enabled ? 'Usuario activo. Clic para desactivar' : 'Usuario inactivo. Clic para activar';
+      toggleBtn.setAttribute('aria-label', toggleBtn.title);
+      const track = document.createElement('span');
+      track.className = 'user-switch-track';
+      track.setAttribute('aria-hidden', 'true');
+      const knob = document.createElement('span');
+      knob.className = 'user-switch-knob';
+      track.appendChild(knob);
+      toggleBtn.appendChild(track);
       actionsDiv.appendChild(toggleBtn);
       
       // Botón Email
@@ -644,7 +655,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Botón Editar
       const editBtn = document.createElement('button');
-      editBtn.className = 'btn-orange edit-user-btn';
+      editBtn.className = 'btn-orange edit-user-btn row-icon-btn';
       editBtn.dataset.id = u.id;
       editBtn.dataset.username = escapeHtml(u.username || '');
       editBtn.dataset.color = escapeHtml(u.color || '');
@@ -658,7 +669,12 @@ document.addEventListener("DOMContentLoaded", function() {
       editBtn.dataset.fullname = escapeHtml(u.full_name || '');
       editBtn.dataset.phone = escapeHtml(u.phone || '');
       editBtn.dataset.email = escapeHtml(u.email || '');
-      editBtn.textContent = 'Editar';
+      editBtn.title = 'Editar';
+      editBtn.setAttribute('aria-label', 'Editar');
+      const editIcon = document.createElement('i');
+      editIcon.className = 'fas fa-pen';
+      editIcon.setAttribute('aria-hidden', 'true');
+      editBtn.appendChild(editIcon);
       actionsDiv.appendChild(editBtn);
       
       // Botón Eliminar
@@ -962,6 +978,17 @@ document.addEventListener("DOMContentLoaded", function() {
   let selectedUserIds = new Set();
   let searchTimeoutBulkAdd = null;
 
+  function rememberBulkAddUser(user) {
+    if (!user || user.id == null) return;
+    const idx = allUsersForBulkAdd.findIndex(u => u.id === user.id);
+    if (idx >= 0) allUsersForBulkAdd[idx] = Object.assign({}, allUsersForBulkAdd[idx], user);
+    else allUsersForBulkAdd.push(user);
+  }
+
+  function userHasUniqueEmails(user) {
+    return !!(user && user.unique_allowed_emails);
+  }
+
   // Cargar usuarios al iniciar
   if (bulkAddEmailsUserSearch) {
     fetch("/admin/search_users_ajax?query=&per_page=all", {
@@ -971,7 +998,7 @@ document.addEventListener("DOMContentLoaded", function() {
     .then(res => res.json())
     .then(data => {
       if (data.status === "ok") {
-        allUsersForBulkAdd = data.users || [];
+        (data.users || []).forEach(rememberBulkAddUser);
         renderUserSearchResults([]);
       }
     })
@@ -1000,6 +1027,7 @@ document.addEventListener("DOMContentLoaded", function() {
           .then(res => res.json())
           .then(data => {
             if (data.status === "ok") {
+              (data.users || []).forEach(rememberBulkAddUser);
               renderUserSearchResults(data.users || []);
             }
           })
@@ -1039,6 +1067,14 @@ document.addEventListener("DOMContentLoaded", function() {
       addBtn.className = "btn-blue btn-small";
       addBtn.textContent = "Seleccionar";
       addBtn.addEventListener("click", function() {
+        rememberBulkAddUser(user);
+        if (userHasUniqueEmails(user)) {
+          Array.from(selectedUserIds).forEach(function(id) {
+            if (id === user.id) return;
+            const existing = allUsersForBulkAdd.find(u => u.id === id);
+            if (userHasUniqueEmails(existing)) selectedUserIds.delete(id);
+          });
+        }
         selectedUserIds.add(user.id);
         renderSelectedUsers();
         // Mantener el texto de búsqueda y actualizar los resultados para ocultar el usuario seleccionado

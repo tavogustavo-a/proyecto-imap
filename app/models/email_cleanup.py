@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, time
 from app import db
 from app.utils.timezone import get_colombia_now, COLOMBIA_TZ
@@ -7,8 +8,9 @@ class EmailCleanup(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     time = db.Column(db.Time, nullable=False)  # Hora diaria de ejecución
-    folder_type = db.Column(db.String(20), nullable=False)  # 'inbox', 'trash', 'tag'
+    folder_type = db.Column(db.String(20), nullable=False)  # 'inbox', 'trash', 'tag', 'spam'
     tag_id = db.Column(db.Integer, db.ForeignKey('email_tags_table.id'), nullable=True)  # Solo para folder_type='tag'
+    folders_json = db.Column(db.Text, nullable=True)
     enabled = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -20,16 +22,46 @@ class EmailCleanup(db.Model):
         folder_name = self.get_folder_name()
         return f'<EmailCleanup {self.time.strftime("%H:%M")} - {folder_name}>'
     
-    def get_folder_name(self):
-        """Obtiene el nombre de la carpeta a limpiar"""
-        if self.folder_type == 'inbox':
-            return 'Recibidos'
-        elif self.folder_type == 'trash':
-            return 'Papelera'
-        elif self.folder_type == 'tag' and self.tag:
-            return self.tag.name
+    def folder_keys(self):
+        """Carpetas de esta regla. Las filas antiguas usan la carpeta única guardada."""
+        from app.models.email_forwarding import normalize_folder_keys
+        stored = normalize_folder_keys(self.folders_json, empty_as_none=True)
+        if stored:
+            return stored
+        if self.folder_type == 'tag' and self.tag_id:
+            return [f'tag:{self.tag_id}']
+        if self.folder_type in ('inbox', 'trash', 'spam'):
+            return [self.folder_type]
+        return ['inbox']
+
+    def apply_folders(self, raw):
+        from app.models.email_forwarding import normalize_folder_keys
+        keys = normalize_folder_keys(raw, empty_as_none=False)
+        self.folders_json = json.dumps(keys)
+        first = keys[0]
+        if first.startswith('tag:'):
+            self.folder_type = 'tag'
+            self.tag_id = int(first.split(':', 1)[1])
         else:
-            return 'Carpeta desconocida'
+            self.folder_type = first if first in ('inbox', 'trash', 'spam') else 'inbox'
+            self.tag_id = None
+        return keys
+
+    def get_folder_name(self):
+        """Nombres de las carpetas, separados por coma."""
+        from app.models.email_buzon import EmailTag
+        labels = {'inbox': 'Recibidos', 'trash': 'Papelera', 'spam': 'Spam'}
+        names = []
+        for key in self.folder_keys():
+            if key in labels:
+                names.append(labels[key])
+            elif key.startswith('tag:'):
+                try:
+                    tag = EmailTag.query.get(int(key.split(':', 1)[1]))
+                except ValueError:
+                    tag = None
+                names.append(tag.name if tag else 'Etiqueta')
+        return ', '.join(names) or 'Recibidos'
     
     @property
     def folder_name(self):
@@ -61,9 +93,11 @@ class EmailCleanup(db.Model):
         return {
             'id': self.id,
             'time': self.time.strftime('%H:%M'),
+            'time_24h': self.get_time_24h(),
             'time_12h': self.get_time_12h(),
             'folder_type': self.folder_type,
             'tag_id': self.tag_id,
+            'folders': self.folder_keys(),
             'folder_name': self.get_folder_name(),
             'enabled': self.enabled,
             'created_at': self.created_at.isoformat(),

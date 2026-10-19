@@ -123,37 +123,67 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const testBtn = document.createElement("button");
       testBtn.type = "submit";
-      testBtn.className = "btn-blue btn-imap-action btn-imap-small";
-      testBtn.textContent = "Probar";
+      testBtn.className = "btn-blue row-test-btn";
+      testBtn.title = "Probar";
+      testBtn.setAttribute("aria-label", "Probar");
+      const testIcon = document.createElement("i");
+      testIcon.className = "fas fa-plug";
+      testIcon.setAttribute("aria-hidden", "true");
+      testBtn.appendChild(testIcon);
       testForm.appendChild(testBtn);
       actionsDiv.appendChild(testForm);
 
       // Botón Toggle
       const toggleBtn = document.createElement("button");
       toggleBtn.type = "button";
-      toggleBtn.className = s.enabled ? "btn-red toggle-imap2-btn ml-03 btn-imap-action btn-imap-small" : "btn-green toggle-imap2-btn ml-03 btn-imap-action btn-imap-small";
+      toggleBtn.className = "toggle-imap2-btn ml-03";
       toggleBtn.setAttribute("data-id", s.id);
       toggleBtn.setAttribute("data-enabled", s.enabled ? "true" : "false");
-      toggleBtn.textContent = s.enabled ? "Off" : "On";
+      paintStateSwitch(toggleBtn, !!s.enabled);
       actionsDiv.appendChild(toggleBtn);
 
       // Botón Editar
       const editBtn = document.createElement("button");
       editBtn.type = "button";
-      editBtn.className = "btn-orange ml-03 edit-imap2-btn btn-imap-action btn-imap-small";
+      editBtn.className = "btn-orange ml-03 edit-imap2-btn row-icon-btn";
       editBtn.setAttribute("data-url", `/admin/edit_imap2/${s.id}`);
-      editBtn.textContent = "Editar";
+      editBtn.title = "Editar";
+      editBtn.setAttribute("aria-label", "Editar");
+      const editIcon = document.createElement("i");
+      editIcon.className = "fas fa-pen";
+      editIcon.setAttribute("aria-hidden", "true");
+      editBtn.appendChild(editIcon);
       actionsDiv.appendChild(editBtn);
 
       // Botón URL (Dominio personalizado)
       const urlBtn = document.createElement("button");
       urlBtn.type = "button";
-      urlBtn.className = "btn-blue ml-03 url-imap2-btn btn-imap-action btn-imap-small";
+      urlBtn.className = "btn-blue ml-03 url-imap2-btn row-test-btn";
       urlBtn.setAttribute("data-id", s.id);
       urlBtn.setAttribute("data-domain", s.custom_domain || "");
-      urlBtn.textContent = "URL";
       urlBtn.title = s.custom_domain ? `Dominio: ${s.custom_domain}` : "Configurar dominio personalizado";
+      urlBtn.setAttribute("aria-label", "URL");
+      const urlIcon = document.createElement("i");
+      urlIcon.className = "fas fa-link";
+      urlIcon.setAttribute("aria-hidden", "true");
+      urlBtn.appendChild(urlIcon);
       actionsDiv.appendChild(urlBtn);
+
+      const buzonBtn = document.createElement("button");
+      buzonBtn.type = "button";
+      buzonBtn.className = "btn-blue ml-03 buzon-imap2-btn row-test-btn";
+      buzonBtn.setAttribute("data-id", s.id);
+      buzonBtn.setAttribute("data-buzon-folders", JSON.stringify(s.buzon_folders || []));
+      buzonBtn.title = "Buzón";
+      buzonBtn.setAttribute("aria-label", "Buzón");
+      const buzonIcon = document.createElement("i");
+      buzonIcon.className = "fas fa-inbox";
+      buzonIcon.setAttribute("aria-hidden", "true");
+      const buzonLabel = document.createElement("span");
+      buzonLabel.textContent = "Buzón";
+      buzonBtn.appendChild(buzonIcon);
+      buzonBtn.appendChild(buzonLabel);
+      actionsDiv.appendChild(buzonBtn);
 
       // Botón Eliminar
       const deleteBtn = document.createElement("button");
@@ -190,9 +220,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Feedback visual
       if (submitBtn) {
-        submitBtn.disabled = true;
-        const originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Probando...';
+        paintTestButtonBusy(submitBtn, true);
         
         fetch('/admin/test_imap2_ajax', {
           method: 'POST',
@@ -224,18 +252,17 @@ document.addEventListener("DOMContentLoaded", function() {
         })
         .then(data => {
           if (data.status === 'ok') {
-            alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
+            alertImapTestResult(true, data.message || 'Conexión correcta.');
           } else {
-            alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
+            alertImapTestResult(false, data.message);
           }
         })
         .catch(err => {
-          alert('Error: ' + err.message);
+          alertImapTestOffline();
         })
         .finally(() => {
           if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = originalText;
+            paintTestButtonBusy(submitBtn, false);
           }
         });
       }
@@ -244,7 +271,14 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   document.addEventListener("click", function(e) {
-    const target = e.target;
+    const buzonBtn = e.target.closest(".buzon-imap2-btn");
+    if (buzonBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      showImap2BuzonModal(buzonBtn);
+      return;
+    }
+    const target = e.target.closest(".toggle-imap2-btn") || e.target.closest(".edit-imap2-btn") || e.target.closest(".url-imap2-btn") || e.target;
 
     // Toggle IMAP2
     if (target.classList.contains("toggle-imap2-btn")) {
@@ -257,8 +291,7 @@ document.addEventListener("DOMContentLoaded", function() {
       // Actualización optimista: cambiar el estado del botón inmediatamente
       const newEnabled = !currentlyEnabled;
       target.setAttribute("data-enabled", newEnabled.toString());
-      target.className = newEnabled ? "btn-red toggle-imap2-btn" : "btn-green toggle-imap2-btn";
-      target.textContent = newEnabled ? "Off" : "On";
+      paintStateSwitch(target, newEnabled);
       
       // Feedback visual mínimo
       target.disabled = true;
@@ -281,16 +314,14 @@ document.addEventListener("DOMContentLoaded", function() {
         } else {
           // Revertir cambio optimista en caso de error
           target.setAttribute("data-enabled", currentlyEnabled.toString());
-          target.className = currentlyEnabled ? "btn-red toggle-imap2-btn" : "btn-green toggle-imap2-btn";
-          target.textContent = currentlyEnabled ? "Off" : "On";
+          paintStateSwitch(target, currentlyEnabled);
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
         // Revertir cambio optimista en caso de error de red
         target.setAttribute("data-enabled", currentlyEnabled.toString());
-        target.className = currentlyEnabled ? "btn-red toggle-imap2-btn" : "btn-green toggle-imap2-btn";
-        target.textContent = currentlyEnabled ? "Off" : "On";
+        paintStateSwitch(target, currentlyEnabled);
         alert("Error de red: " + err.message);
       })
       .finally(() => {
@@ -389,6 +420,158 @@ document.addEventListener("DOMContentLoaded", function() {
       showUrlModal(serverId, currentDomain);
     }
   });
+
+  function imap2BuzonCatalog() {
+    const node = document.getElementById("imap2BuzonFolderCatalog");
+    const fallback = [
+      {value: "inbox", label: "Recibidos"},
+      {value: "trash", label: "Papelera"},
+      {value: "spam", label: "Spam"}
+    ];
+    if (!node) return fallback;
+    try {
+      const data = JSON.parse(node.textContent || "[]");
+      return Array.isArray(data) && data.length ? data : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function parseBuzonFolders(raw) {
+    if (!raw) return [];
+    try {
+      const data = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function showImap2BuzonModal(button) {
+    const serverId = button.getAttribute("data-id");
+    const selected = parseBuzonFolders(button.getAttribute("data-buzon-folders"));
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "admin-card";
+    const title = document.createElement("h3");
+    title.className = "text-center mb-1 imap2-buzon-heading";
+    title.appendChild(document.createTextNode("Carpetas del buzón"));
+    const infoBtn = document.createElement("button");
+    infoBtn.type = "button";
+    infoBtn.className = "btn-panel btn-blue admin-global-api-info-btn";
+    infoBtn.title = "Información";
+    infoBtn.setAttribute("aria-label", "Información sobre carpetas del buzón");
+    const infoIcon = document.createElement("i");
+    infoIcon.className = "fas fa-info-circle";
+    infoIcon.setAttribute("aria-hidden", "true");
+    infoBtn.appendChild(infoIcon);
+    title.appendChild(infoBtn);
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "imap2-buzon-folder-search";
+    search.placeholder = "Buscar carpeta...";
+    search.setAttribute("aria-label", "Buscar carpeta");
+    search.autocomplete = "off";
+    const list = document.createElement("div");
+    list.className = "imap2-buzon-folder-list";
+    imap2BuzonCatalog().forEach(function(item) {
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = item.value;
+      checkbox.checked = selected.indexOf(item.value) !== -1;
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(" " + item.label));
+      list.appendChild(label);
+    });
+    const actions = document.createElement("div");
+    actions.className = "d-flex justify-content-center mt-1";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn-green";
+    saveBtn.textContent = "Guardar";
+    actions.appendChild(saveBtn);
+    modal.appendChild(title);
+    modal.appendChild(search);
+    modal.appendChild(list);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function closeModal() {
+      overlay.remove();
+    }
+    overlay.addEventListener("click", function(ev) {
+      if (ev.target === overlay) closeModal();
+    });
+    search.addEventListener("input", function() {
+      const query = search.value.trim().toLowerCase();
+      list.querySelectorAll("label").forEach(function(label) {
+        const name = label.textContent.trim().toLowerCase();
+        label.hidden = !!(query && name.indexOf(query) === -1);
+      });
+    });
+    infoBtn.addEventListener("click", function(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const infoOverlay = document.createElement("div");
+      infoOverlay.className = "modal-overlay imap2-buzon-info-overlay";
+      const infoCard = document.createElement("div");
+      infoCard.className = "admin-card";
+      const infoTitle = document.createElement("h3");
+      infoTitle.className = "text-center mb-1";
+      infoTitle.textContent = "Carpetas del buzón";
+      const infoText = document.createElement("p");
+      infoText.className = "text-center mb-1";
+      infoText.textContent = "Marca las carpetas que esta página puede consultar. Si guardas sin marcar ninguna, no se consulta el buzón. Si el IMAP está apagado o no responde, se usa solo el buzón.";
+      const infoActions = document.createElement("div");
+      infoActions.className = "d-flex justify-content-center";
+      const okBtn = document.createElement("button");
+      okBtn.type = "button";
+      okBtn.className = "btn-green";
+      okBtn.textContent = "Entendido";
+      infoActions.appendChild(okBtn);
+      infoCard.appendChild(infoTitle);
+      infoCard.appendChild(infoText);
+      infoCard.appendChild(infoActions);
+      infoOverlay.appendChild(infoCard);
+      document.body.appendChild(infoOverlay);
+      function closeInfo() {
+        infoOverlay.remove();
+      }
+      okBtn.addEventListener("click", closeInfo);
+      infoOverlay.addEventListener("click", function(infoEvent) {
+        if (infoEvent.target === infoOverlay) closeInfo();
+      });
+    });
+    saveBtn.addEventListener("click", function() {
+      const folders = [...list.querySelectorAll("input:checked")].map(function(input) { return input.value; });
+      saveBtn.disabled = true;
+      fetch("/admin/imap2/" + serverId + "/buzon_folders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ folders: folders })
+      })
+      .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+      .then(function(result) {
+        if (!result.ok || !result.data || result.data.status !== "ok") {
+          alert((result.data && result.data.message) || "No se pudieron guardar las carpetas.");
+          saveBtn.disabled = false;
+          return;
+        }
+        button.setAttribute("data-buzon-folders", JSON.stringify(result.data.folders || []));
+        closeModal();
+      })
+      .catch(function() {
+        alert("No se pudieron guardar las carpetas.");
+        saveBtn.disabled = false;
+      });
+    });
+  }
 
   // Función para mostrar modal de dominio personalizado
   function showUrlModal(serverId, currentDomain) {

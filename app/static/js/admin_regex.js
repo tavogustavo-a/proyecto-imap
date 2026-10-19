@@ -58,10 +58,12 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!r.protected) {
           html += `
             <button
-              class="btn-orange mr-05 edit-regex-btn"
+              class="btn-orange mr-05 edit-regex-btn row-icon-btn"
               data-edit-url="/admin/edit_regex/${r.id}"
+              title="Editar"
+              aria-label="Editar"
             >
-              Editar
+              <i class="fas fa-pen" aria-hidden="true"></i>
             </button>
             <button
               class="btn-panel btn-red btn-sm delete-regex mr-05"
@@ -72,27 +74,7 @@ document.addEventListener("DOMContentLoaded", function() {
             </button>
           `;
         }
-        if (r.enabled) {
-          html += `
-            <button
-              class="btn-red toggle-regex"
-              data-id="${r.id}"
-              data-enabled="true"
-            >
-              Off
-            </button>
-          `;
-        } else {
-          html += `
-            <button
-              class="btn-green toggle-regex"
-              data-id="${r.id}"
-              data-enabled="false"
-            >
-              On
-            </button>
-          `;
-        }
+        html += stateSwitchHtml(!!r.enabled, 'toggle-regex', `data-id="${r.id}" data-enabled="${r.enabled ? 'true' : 'false'}"`);
         html += `
             </div>
           </div>
@@ -103,10 +85,10 @@ document.addEventListener("DOMContentLoaded", function() {
   
     // EVENT LISTENER GLOBAL (Delegación) - SOLO PARA TOGGLE AHORA
     document.addEventListener("click", (e) => {
-      const target = e.target;
+      const target = e.target.closest(".toggle-regex");
   
       // --- Botones Toggle (Solo Regex, ya que los otros se manejan en su contenedor) --- 
-      if (target.classList.contains("toggle-regex")) {
+      if (target) {
           e.preventDefault();
           const regexId = target.getAttribute("data-id");
           const currentlyEnabled = (target.getAttribute("data-enabled") === "true");
@@ -179,10 +161,11 @@ document.addEventListener("DOMContentLoaded", function() {
         }
   
         // Acción Toggle
-        else if (target.classList.contains("toggle-regex")) {
+        else if (e.target.closest(".toggle-regex")) {
           e.preventDefault();
-          const regexId = target.getAttribute("data-id");
-          const currentEnabled = target.getAttribute("data-enabled") === 'true';
+          const toggleBtn = e.target.closest(".toggle-regex");
+          const regexId = toggleBtn.getAttribute("data-id");
+          const currentEnabled = toggleBtn.getAttribute("data-enabled") === 'true';
           fetch("/admin/toggle_regex_ajax", {
             method: "POST",
             headers: {

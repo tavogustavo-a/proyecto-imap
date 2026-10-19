@@ -1,6 +1,6 @@
 # app/admin/admin_email_buzon.py
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from app.extensions import db
 from app.models import ReceivedEmail
 from app.models.email_forwarding import EmailForwarding
@@ -108,6 +108,26 @@ def search_email_buzon():
 
 # ==================== RUTAS PARA REENVÍO DE CORREOS ====================
 
+def _buzon_ajax_request():
+    if request.is_json:
+        return True
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return True
+    best = request.accept_mimetypes.best
+    return best == 'application/json'
+
+
+def _buzon_form_or_redirect(ok, message, payload=None, status=200):
+    if _buzon_ajax_request():
+        body = {'success': ok, 'message': message}
+        if payload:
+            body.update(payload)
+        code = status if ok else (status if status >= 400 else 400)
+        return jsonify(body), code
+    flash(message, 'success' if ok else 'error')
+    return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+
+
 @admin_email_buzon_bp.route('/email-buzon/create-forwarding', methods=['POST'])
 @admin_required
 def create_forwarding():
@@ -115,35 +135,49 @@ def create_forwarding():
     try:
         from sqlalchemy import func
 
-        mailbox = (request.form.get('source_email') or request.form.get('destination_email') or "").strip()
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+            mailbox = (data.get('source_email') or data.get('destination_email') or '').strip()
+            title = (data.get('title') or '').strip()
+            folders_raw = data.get('folders')
+        else:
+            mailbox = (request.form.get('source_email') or request.form.get('destination_email') or "").strip()
+            title = (request.form.get('title') or '').strip()
+            folders_raw = request.form.get('folders')
 
         if not mailbox or "@" not in mailbox:
-            flash('Indica un correo completo en tu dominio (ej. ventas@tudominio.com).', 'error')
-            return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+            return _buzon_form_or_redirect(
+                False,
+                'Indica un correo completo en tu dominio (ej. ventas@tudominio.com).',
+            )
 
         dup = EmailForwarding.query.filter(
             func.lower(func.trim(EmailForwarding.source_email)) == mailbox.lower()
         ).first()
         if dup:
-            flash(f'Ya existe la dirección {mailbox}.', 'error')
-            return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+            return _buzon_form_or_redirect(False, f'Ya existe la dirección {mailbox}.')
 
         forwarding = EmailForwarding(
             source_email=mailbox,
             destination_email=mailbox,
+            title=title[:200] or None,
             enabled=True,
         )
+        forwarding.apply_folders(folders_raw)
 
         db.session.add(forwarding)
         db.session.commit()
 
-        flash(f'Dirección de recepción creada: {mailbox}', 'success')
+        return _buzon_form_or_redirect(
+            True,
+            f'Dirección de recepción creada: {mailbox}',
+            {'forwarding': forwarding.to_dict()},
+        )
         
     except Exception as e:
         db.session.rollback()
-        flash(f'Error creando correo de recepción: {str(e)}', 'error')
-    
-    return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+        current_app.logger.error('Error creando correo de recepción: %s', e, exc_info=True)
+        return _buzon_form_or_redirect(False, 'No se pudo crear la dirección.')
 
 @admin_email_buzon_bp.route('/email-buzon/edit-forwarding/<int:forwarding_id>', methods=['POST'])
 @admin_required
@@ -167,6 +201,9 @@ def edit_forwarding(forwarding_id):
 
         forwarding.source_email = mailbox
         forwarding.destination_email = mailbox
+        forwarding.title = (request.form.get('title') or '').strip()[:200] or None
+        if 'folders' in request.form and (request.form.get('folders') or '').strip():
+            forwarding.apply_folders(request.form.get('folders'))
 
         db.session.commit()
 
@@ -1344,47 +1381,45 @@ def create_cleanup():
         from datetime import datetime
         from app.models.email_buzon import EmailTag
 
-        cleanup_time_str = request.form.get('cleanup_time')
-        folder_raw = request.form.get('folder_type')
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+            cleanup_time_str = data.get('cleanup_time')
+            folders_raw = data.get('folders', data.get('folder_type'))
+        else:
+            cleanup_time_str = request.form.get('cleanup_time')
+            folders_raw = request.form.get('folders', request.form.get('folder_type'))
 
-        if not cleanup_time_str or not folder_raw:
-            flash('Hora y tipo de carpeta son requeridos', 'error')
-            return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+        if not cleanup_time_str or not folders_raw:
+            return _buzon_form_or_redirect(False, 'Hora y al menos una carpeta son requeridos')
 
-        folder_type, tag_id = _parse_cleanup_folder_form_value(folder_raw)
-        if folder_type is None:
-            flash('Carpeta o etiqueta no válida.', 'error')
-            return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+        from app.models.email_forwarding import normalize_folder_keys
+        folders = normalize_folder_keys(folders_raw, empty_as_none=False)
+        if not folders:
+            return _buzon_form_or_redirect(False, 'Elige al menos una carpeta.')
 
-        # Convertir string de tiempo a objeto time
         cleanup_time = datetime.strptime(cleanup_time_str, '%H:%M').time()
 
-        print(f"🕐 DEBUG: Hora recibida: {cleanup_time_str} -> {cleanup_time} (Timezone Colombia)")
+        for key in folders:
+            if key.startswith('tag:'):
+                tag_id = int(key.split(':', 1)[1])
+                if not EmailTag.query.get(tag_id):
+                    return _buzon_form_or_redirect(False, 'La etiqueta indicada no existe.')
 
-        if folder_type == "tag":
-            if not tag_id:
-                flash('Debes elegir una etiqueta concreta.', 'error')
-                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-            if not EmailTag.query.get(tag_id):
-                flash('La etiqueta indicada no existe.', 'error')
-                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+        cleanup = EmailCleanup(time=cleanup_time, folder_type='inbox', enabled=True)
+        cleanup.apply_folders(folders)
+        db.session.add(cleanup)
+        db.session.commit()
 
-        # Crear la limpieza
-        cleanup = EmailCleanup.create_cleanup(
-            cleanup_time=cleanup_time,
-            folder_type=folder_type,
-            tag_id=tag_id if folder_type == "tag" else None
+        return _buzon_form_or_redirect(
+            True,
+            f'Limpieza automática creada: {cleanup.time.strftime("%H:%M")} - {cleanup.get_folder_name()}',
+            {'cleanup': cleanup.to_dict()},
         )
         
-        flash(f'Limpieza automática creada: {cleanup.time.strftime("%H:%M")} - {cleanup.get_folder_name()}', 'success')
-        return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        
     except Exception as e:
-        print(f"❌ ERROR creando limpieza automática: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        flash(f'Error al crear limpieza automática: {str(e)}', 'error')
-        return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+        db.session.rollback()
+        current_app.logger.error('Error creando limpieza automática: %s', e, exc_info=True)
+        return _buzon_form_or_redirect(False, 'No se pudo crear la limpieza automática.')
 
 @admin_email_buzon_bp.route('/email-buzon/cleanup/edit/<int:cleanup_id>', methods=['POST'])
 @admin_required
@@ -1397,34 +1432,29 @@ def edit_cleanup(cleanup_id):
         from app.models.email_buzon import EmailTag
 
         cleanup_time_str = request.form.get('cleanup_time')
-        folder_raw = request.form.get('folder_type')
+        folders_raw = request.form.get('folders', request.form.get('folder_type'))
 
-        if not cleanup_time_str or not folder_raw:
-            flash('Hora y tipo de carpeta son requeridos', 'error')
+        if not cleanup_time_str or not folders_raw:
+            flash('Hora y al menos una carpeta son requeridos', 'error')
             return redirect(url_for('admin_email_buzon.manage_email_buzon'))
 
-        folder_type, tag_id = _parse_cleanup_folder_form_value(folder_raw)
-        if folder_type is None:
-            flash('Carpeta o etiqueta no válida.', 'error')
+        from app.models.email_forwarding import normalize_folder_keys
+        folders = normalize_folder_keys(folders_raw, empty_as_none=False)
+        if not folders:
+            flash('Elige al menos una carpeta.', 'error')
             return redirect(url_for('admin_email_buzon.manage_email_buzon'))
 
-        # Convertir string de tiempo a objeto time
         cleanup_time = datetime.strptime(cleanup_time_str, '%H:%M').time()
 
-        print(f"🕐 DEBUG: Hora editada: {cleanup_time_str} -> {cleanup_time} (Timezone Colombia)")
+        for key in folders:
+            if key.startswith('tag:'):
+                tag_id = int(key.split(':', 1)[1])
+                if not EmailTag.query.get(tag_id):
+                    flash('La etiqueta indicada no existe.', 'error')
+                    return redirect(url_for('admin_email_buzon.manage_email_buzon'))
 
-        if folder_type == "tag":
-            if not tag_id:
-                flash('Debes elegir una etiqueta concreta.', 'error')
-                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-            if not EmailTag.query.get(tag_id):
-                flash('La etiqueta indicada no existe.', 'error')
-                return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-
-        # Actualizar campos
         cleanup.time = cleanup_time
-        cleanup.folder_type = folder_type
-        cleanup.tag_id = tag_id if folder_type == "tag" else None
+        cleanup.apply_folders(folders)
 
         db.session.commit()
         

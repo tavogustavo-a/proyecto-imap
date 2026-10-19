@@ -19,6 +19,7 @@ from app.models import (
 )
 from app.imap.advanced_imap import search_in_all_servers
 from app.admin.regex import passes_any_regex, extract_regex
+from app.services.sender_list import sender_parts
 from app.extensions import db
 from app.helpers import safe_regex_search
 from app.store.api import format_colombia_time
@@ -645,7 +646,39 @@ def _filters_and_regexes_for_service_id(service_id):
     return service_filters, service_regexes
 
 
-def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
+def _received_email_in_folders(email, folder_keys, spam_tag_id):
+    """
+    folder_keys None: comportamiento anterior (cualquier correo que no esté en papelera).
+    Lista explícita: entra si está en alguna carpeta elegida.
+    Recibidos = no eliminado y sin etiquetas. Una etiqueta = esa carpeta.
+    """
+    if not folder_keys:
+        return not bool(email.deleted)
+    want_inbox = "inbox" in folder_keys
+    want_trash = "trash" in folder_keys
+    want_spam = "spam" in folder_keys
+    tag_ids = set()
+    for key in folder_keys:
+        if key.startswith("tag:"):
+            try:
+                tag_ids.add(int(key.split(":", 1)[1]))
+            except ValueError:
+                pass
+    email_tag_ids = {tag.id for tag in (email.tags or [])}
+    if want_trash and email.deleted:
+        return True
+    if email.deleted:
+        return False
+    if want_spam and spam_tag_id and spam_tag_id in email_tag_ids:
+        return True
+    if tag_ids and email_tag_ids.intersection(tag_ids):
+        return True
+    if want_inbox and not email_tag_ids:
+        return True
+    return False
+
+
+def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None, explicit_folder_keys=None, use_explicit_folders=False):
     """
     Correos guardados en BD (buzón SMTP / Gestionar buzón), To coincidente, no en papelera.
     Mismo shape que los dicts de IMAP para _process_mails.
@@ -656,11 +689,12 @@ def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
     to_norm = (to_address or "").strip().lower()
     if not to_norm or "@" not in to_norm:
         return []
+    if use_explicit_folders and not explicit_folder_keys:
+        return []
     try:
         # Coincidir por RCPT (to_email) o por destinatario mostrable (original_to_email),
         # p. ej. usuario busca user+tag@gmail.com pero el sobre SMTP es mensaje@dominio-reenvío.
-        q = ReceivedEmail.query.filter(
-            ReceivedEmail.deleted.is_(False),
+        q = ReceivedEmail.query.options(joinedload(ReceivedEmail.tags)).filter(
             or_(
                 func.lower(func.trim(ReceivedEmail.to_email)) == to_norm,
                 func.lower(func.trim(ReceivedEmail.original_to_email)) == to_norm,
@@ -678,6 +712,36 @@ def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None):
         if max_rows is not None:
             q = q.limit(int(max_rows))
         rows = q.all()
+        seen_ids = set()
+        unique_rows = []
+        for email in rows:
+            if email.id in seen_ids:
+                continue
+            seen_ids.add(email.id)
+            unique_rows.append(email)
+        rows = unique_rows
+        from app.models.email_buzon import EmailTag
+        from app.models.email_forwarding import EmailForwarding
+
+        spam_tag = EmailTag.query.filter(func.lower(EmailTag.name) == "spam").first()
+        spam_tag_id = spam_tag.id if spam_tag else None
+        filtered = []
+        if use_explicit_folders:
+            for email in rows:
+                if _received_email_in_folders(email, explicit_folder_keys, spam_tag_id):
+                    filtered.append(email)
+        else:
+            folder_by_mailbox = {}
+            for forwarding in EmailForwarding.query.filter(EmailForwarding.enabled.is_(True)).all():
+                mailbox = (forwarding.source_email or "").strip().lower()
+                if mailbox:
+                    folder_by_mailbox[mailbox] = forwarding.stored_folder_keys()
+            for email in rows:
+                mailbox = (email.to_email or "").strip().lower()
+                folder_keys = folder_by_mailbox.get(mailbox)
+                if _received_email_in_folders(email, folder_keys, spam_tag_id):
+                    filtered.append(email)
+        rows = filtered
     except Exception:
         _buzon_search_log.exception("[buzón búsqueda] error consultando received_emails para to=%s", to_norm)
         return []
@@ -961,11 +1025,22 @@ def search_and_apply_filters2(to_address, service_id=None, user=None):
             final_filters = [f for f in service_filters if f.id in final_filter_ids_to_use]
             final_regexes = [r for r in service_regexes if r.id in final_regex_ids_to_use]
 
-    # 3b) Buzón local (BD) antes de IMAP2
-    buzon_mails = _buzon_emails_as_mail_dicts(to_address)
-    found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
-    if found_mail:
-        return found_mail
+    # 3b) Buzón solo si algún IMAP2 tiene carpetas guardadas.
+    # Si el IMAP está apagado, igual se consulta el buzón configurado.
+    folder_union = []
+    seen_folders = set()
+    for imap2_srv in IMAPServer2.query.all():
+        for key in imap2_srv.buzon_folder_keys():
+            if key not in seen_folders:
+                seen_folders.add(key)
+                folder_union.append(key)
+    if folder_union:
+        buzon_mails = _buzon_emails_as_mail_dicts(
+            to_address, explicit_folder_keys=folder_union, use_explicit_folders=True
+        )
+        found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
+        if found_mail:
+            return found_mail
 
     # 4) Buscamos en servidores IMAP2 habilitados
     servers = IMAPServer2.query.filter_by(enabled=True).all()
@@ -1056,11 +1131,16 @@ def search_imap2_server_dynamic(to_address, imap_server_id, user=None):
             final_filters = [f for f in server_filters if f.id in final_filter_ids_to_use]
             final_regexes = [r for r in server_regexes if r.id in final_regex_ids_to_use]
 
-    # 3b) Buzón local (BD) antes de IMAP / IMAP2 vinculados
-    buzon_mails = _buzon_emails_as_mail_dicts(to_address)
-    found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
-    if found_mail:
-        return found_mail
+    # 3b) Buzón de este IMAP2. Sin carpetas guardadas no se consulta.
+    # Si el IMAP está apagado, la consulta sigue usando solo esas carpetas.
+    buzon_keys = imap_server.buzon_folder_keys()
+    if buzon_keys:
+        buzon_mails = _buzon_emails_as_mail_dicts(
+            to_address, explicit_folder_keys=buzon_keys, use_explicit_folders=True
+        )
+        found_mail = _process_mails(buzon_mails, final_filters, final_regexes, user, to_address)
+        if found_mail:
+            return found_mail
 
     # 4) Buscar en este servidor IMAP2 específico Y en los servidores IMAP vinculados
     # IMPORTANTE: Cada servidor funciona independientemente según su estado enabled
@@ -1283,6 +1363,19 @@ def _normalize_for_filter_match(value) -> str:
     return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
 
 
+def _filter_sender_matches(rule_sender, sender_text_normalized) -> bool:
+    """El From coincide con cualquiera de los correos separados por coma."""
+    parts = sender_parts(rule_sender)
+    if not parts:
+        return True
+    return any(_normalize_for_filter_match(part) in sender_text_normalized for part in parts)
+
+
+def _sender_has_part(rule_sender, expected: str) -> bool:
+    expected_n = _normalize_for_filter_match(expected)
+    return any(_normalize_for_filter_match(part) == expected_n for part in sender_parts(rule_sender))
+
+
 def _plain_text_from_html(html: str) -> str:
     import html as html_module
 
@@ -1328,10 +1421,9 @@ def get_first_filter_that_matches(mail_dict, filters):
         return score
 
     for f in sorted(filters, key=_specificity, reverse=True):
-        filter_sender = _normalize_for_filter_match(f.sender or "")
         filter_keyword = _normalize_for_filter_match(f.keyword or "")
 
-        if filter_sender and filter_sender not in sender_text:
+        if not _filter_sender_matches(f.sender, sender_text):
             continue
         if filter_keyword and filter_keyword not in body_text:
             continue
@@ -1343,11 +1435,10 @@ def _is_netflix_login_6_digits_filter(matched_filter) -> bool:
     """Caso puntual: ingreso sesión Netflix 6 dígitos (info@account.netflix.com)."""
     if matched_filter is None:
         return False
-    sender = _normalize_for_filter_match(getattr(matched_filter, "sender", ""))
     keyword = _normalize_for_filter_match(getattr(matched_filter, "keyword", ""))
     description = _normalize_for_filter_match(getattr(matched_filter, "description", ""))
     return (
-        sender == "info@account.netflix.com"
+        _sender_has_part(getattr(matched_filter, "sender", ""), "info@account.netflix.com")
         and "alguien intenta acceder a tu cuenta" in keyword
         and "ingreso sesion netflix 6 digitos" in description
     )

@@ -247,7 +247,7 @@
                     '<label class="lic-report-photo-modal-file">' +
                     'Reemplazar' + fileInputHtml() + '</label>'
                 );
-                actions.push('<button type="button" class="danger" data-act="delete">Eliminar foto</button>');
+                actions.push('<button type="button" class="danger" data-act="delete" title="Eliminar foto" aria-label="Eliminar foto"><i class="fas fa-trash" aria-hidden="true"></i></button>');
             } else {
                 actions.push(
                     '<label class="lic-report-photo-modal-file">' +

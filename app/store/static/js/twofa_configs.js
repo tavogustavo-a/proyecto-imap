@@ -307,8 +307,8 @@
                         <div class="font-weight-bold">${escapeHtml(emailsDisplay)}</div>
                     </div>
                     <div class="d-flex gap-05 ml-2">
-                        <button type="button" class="btn-orange btn-sm edit-twofa-config" data-config-id="${config.id}" title="Editar">
-                            <i class="fas fa-edit"></i>
+                        <button type="button" class="btn-orange edit-twofa-config row-icon-btn" data-config-id="${config.id}" title="Editar" aria-label="Editar">
+                            <i class="fas fa-pen" aria-hidden="true"></i>
                         </button>
                         <button type="button" class="btn-red btn-sm delete-twofa-config btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar">
                             <i class="fas fa-trash"></i>

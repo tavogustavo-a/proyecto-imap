@@ -86,11 +86,6 @@
   background: #f5f5f5;
 }
 
-/* En esta pantalla el fondo fijo y las celdas pegadas traban el scroll de Chrome. */
-body:has(.perm-page) {
-  background-attachment: scroll;
-}
-
 .perm-page .admin-card {
   overflow-x: visible;
 }

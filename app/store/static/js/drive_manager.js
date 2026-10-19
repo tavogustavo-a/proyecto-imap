@@ -323,10 +323,11 @@ async function loadDriveTransfersTable() {
                     td5.appendChild(testBtn);
                     
                     const editBtn = document.createElement('button');
-                    editBtn.className = 'btn-panel btn-orange btn-table-action drive-transfer-edit';
+                    editBtn.className = 'btn-orange drive-transfer-edit row-icon-btn';
                     editBtn.dataset.transferId = transfer.id;
                     editBtn.title = 'Editar';
-                    editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+                    editBtn.setAttribute('aria-label', 'Editar');
+                    editBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
                     td5.appendChild(editBtn);
                     
                     const cleanupBtn = document.createElement('button');

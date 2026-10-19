@@ -2076,6 +2076,9 @@ function splitTextAcrossColumns(preservedSelection) {
                             <button id='btnGeneradorTarjetas' class='herramienta-btn' style='padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-size:12px;' title='Generador de Tarjetas'>
                                 <i class='fas fa-credit-card' style='font-size:14px;'></i>
                             </button>
+                            <button id='btnCorreosUnicos' class='herramienta-btn' style='padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-size:12px;' title='Correos únicos' aria-label='Correos únicos'>
+                                <i class='fas fa-envelope' style='font-size:14px;'></i>
+                            </button>
                         </div>
                         
                         <!-- Panel del generador de códigos -->
@@ -2287,6 +2290,32 @@ function splitTextAcrossColumns(preservedSelection) {
                                           aria-label='Tarjetas generadas'></textarea>
                             </div>
                         </div>
+
+                        <div id='correosUnicosPanel' style='display:none;margin-top:10px;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #ddd;max-height:65vh;overflow-y:auto;'>
+                            <div style='display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;'>
+                                <h5 style='margin:0;color:#333;font-size:15px;'>Correos únicos</h5>
+                                <span id='correosUnicosConteo' style='font-size:12px;font-weight:bold;color:#333;'>0 líneas</span>
+                            </div>
+                            <label for='correosUnicosInput' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Pega el lote:</label>
+                            <textarea id='correosUnicosInput' name='correosUnicosInput'
+                                      style='width:100%;min-height:140px;max-height:220px;padding:8px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:12px;box-sizing:border-box;resize:vertical;overflow-y:auto;'
+                                      placeholder='correo contraseña nombre número'
+                                      aria-label='Lote de correos con contraseña y datos extra'></textarea>
+                            <div style='display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 6px;'>
+                                <div style='font-weight:bold;color:#333;font-size:12px;'>Correo y contraseña:</div>
+                                <div style='display:flex;gap:6px;'>
+                                    <button id='btnCopiarCorreosUnicos' type='button' title='Copiar' aria-label='Copiar correo y contraseña' style='width:2.2rem;height:2.2rem;padding:0;background:#28a745;color:#fff;border:none;border-radius:6px;cursor:pointer;'>
+                                        <i class='fas fa-copy' aria-hidden='true'></i>
+                                    </button>
+                                    <button id='btnLimpiarCorreosUnicos' type='button' title='Limpiar' aria-label='Limpiar lote' style='width:2.2rem;height:2.2rem;padding:0;background:#dc3545;color:#fff;border:none;border-radius:6px;cursor:pointer;'>
+                                        <i class='fas fa-eraser' aria-hidden='true'></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea id='correosUnicosResultado' name='correosUnicosResultado' readonly
+                                      style='width:100%;min-height:120px;max-height:200px;padding:8px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:12px;box-sizing:border-box;resize:vertical;overflow-y:auto;background:#fff;'
+                                      aria-label='Correo y contraseña'></textarea>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2370,14 +2399,18 @@ function splitTextAcrossColumns(preservedSelection) {
             // Ocultar otros paneles
             const duplicadosPanel = modal.querySelector('#duplicadosPanel');
             const tarjetasPanel = modal.querySelector('#tarjetasPanel');
+            const correosUnicosPanel = modal.querySelector('#correosUnicosPanel');
             if (duplicadosPanel) duplicadosPanel.style.display = 'none';
             if (tarjetasPanel) tarjetasPanel.style.display = 'none';
+            if (correosUnicosPanel) correosUnicosPanel.style.display = 'none';
             
             // Deseleccionar otros botones
             const btnDuplicados = modal.querySelector('#btnDuplicados');
             const btnGeneradorTarjetas = modal.querySelector('#btnGeneradorTarjetas');
+            const btnCorreosUnicos = modal.querySelector('#btnCorreosUnicos');
             if (btnDuplicados) { btnDuplicados.style.background = '#f8f9fa'; btnDuplicados.style.color = '#333'; }
             if (btnGeneradorTarjetas) { btnGeneradorTarjetas.style.background = '#f8f9fa'; btnGeneradorTarjetas.style.color = '#333'; }
+            if (btnCorreosUnicos) { btnCorreosUnicos.style.background = '#f8f9fa'; btnCorreosUnicos.style.color = '#333'; }
             
             // Toggle selección
             if (this.style.background === 'rgb(0, 123, 255)' || this.style.background === '#007bff') {
@@ -2402,12 +2435,16 @@ function splitTextAcrossColumns(preservedSelection) {
             // Ocultar otros paneles
             if (generadorPanel) generadorPanel.style.display = 'none';
             const tarjetasPanel = modal.querySelector('#tarjetasPanel');
+            const correosUnicosPanel = modal.querySelector('#correosUnicosPanel');
             if (tarjetasPanel) tarjetasPanel.style.display = 'none';
+            if (correosUnicosPanel) correosUnicosPanel.style.display = 'none';
             
             // Deseleccionar otros botones
             if (btnGeneradorCodigos) { btnGeneradorCodigos.style.background = '#f8f9fa'; btnGeneradorCodigos.style.color = '#333'; }
             const btnGeneradorTarjetas = modal.querySelector('#btnGeneradorTarjetas');
+            const btnCorreosUnicos = modal.querySelector('#btnCorreosUnicos');
             if (btnGeneradorTarjetas) { btnGeneradorTarjetas.style.background = '#f8f9fa'; btnGeneradorTarjetas.style.color = '#333'; }
+            if (btnCorreosUnicos) { btnCorreosUnicos.style.background = '#f8f9fa'; btnCorreosUnicos.style.color = '#333'; }
             
             // Toggle selección
             if (this.style.background === 'rgb(0, 123, 255)' || this.style.background === '#007bff') {
@@ -2431,8 +2468,12 @@ function splitTextAcrossColumns(preservedSelection) {
         btnGeneradorTarjetas.addEventListener('click', function() {
             if (generadorPanel) generadorPanel.style.display = 'none';
             if (duplicadosPanel) duplicadosPanel.style.display = 'none';
+            const correosUnicosPanel = modal.querySelector('#correosUnicosPanel');
+            const btnCorreosUnicos = modal.querySelector('#btnCorreosUnicos');
+            if (correosUnicosPanel) correosUnicosPanel.style.display = 'none';
             if (btnGeneradorCodigos) { btnGeneradorCodigos.style.background = '#f8f9fa'; btnGeneradorCodigos.style.color = '#333'; }
             if (btnDuplicados) { btnDuplicados.style.background = '#f8f9fa'; btnDuplicados.style.color = '#333'; }
+            if (btnCorreosUnicos) { btnCorreosUnicos.style.background = '#f8f9fa'; btnCorreosUnicos.style.color = '#333'; }
             if (this.style.background === 'rgb(0, 123, 255)' || this.style.background === '#007bff') {
                 this.style.background = '#f8f9fa';
                 this.style.color = '#333';
@@ -2442,6 +2483,80 @@ function splitTextAcrossColumns(preservedSelection) {
                 this.style.color = '#fff';
                 if (tarjetasPanel) tarjetasPanel.style.display = 'block';
             }
+        });
+    }
+
+    const btnCorreosUnicos = modal.querySelector('#btnCorreosUnicos');
+    const correosUnicosPanel = modal.querySelector('#correosUnicosPanel');
+    const correosUnicosInput = modal.querySelector('#correosUnicosInput');
+    const correosUnicosResultado = modal.querySelector('#correosUnicosResultado');
+    const correosUnicosConteo = modal.querySelector('#correosUnicosConteo');
+
+    function lineasCorreoContrasena(texto) {
+        return String(texto || '').split(/\r?\n/).map(function(linea) {
+            return linea.trim();
+        }).filter(Boolean).map(function(linea) {
+            const partes = linea.split(/\s+/);
+            if (partes.length >= 2) return partes[0] + ' ' + partes[1];
+            return partes[0];
+        });
+    }
+
+    function refrescarCorreosUnicos() {
+        if (!correosUnicosInput || !correosUnicosResultado) return;
+        const lineas = lineasCorreoContrasena(correosUnicosInput.value);
+        correosUnicosResultado.value = lineas.join('\n');
+        if (correosUnicosConteo) {
+            correosUnicosConteo.textContent = lineas.length + (lineas.length === 1 ? ' línea' : ' líneas');
+        }
+    }
+
+    if (btnCorreosUnicos) {
+        btnCorreosUnicos.addEventListener('click', function() {
+            if (generadorPanel) generadorPanel.style.display = 'none';
+            if (duplicadosPanel) duplicadosPanel.style.display = 'none';
+            if (tarjetasPanel) tarjetasPanel.style.display = 'none';
+            if (btnGeneradorCodigos) { btnGeneradorCodigos.style.background = '#f8f9fa'; btnGeneradorCodigos.style.color = '#333'; }
+            if (btnDuplicados) { btnDuplicados.style.background = '#f8f9fa'; btnDuplicados.style.color = '#333'; }
+            if (btnGeneradorTarjetas) { btnGeneradorTarjetas.style.background = '#f8f9fa'; btnGeneradorTarjetas.style.color = '#333'; }
+            if (this.style.background === 'rgb(0, 123, 255)' || this.style.background === '#007bff') {
+                this.style.background = '#f8f9fa';
+                this.style.color = '#333';
+                if (correosUnicosPanel) correosUnicosPanel.style.display = 'none';
+            } else {
+                this.style.background = '#007bff';
+                this.style.color = '#fff';
+                if (correosUnicosPanel) correosUnicosPanel.style.display = 'block';
+            }
+        });
+    }
+
+    if (correosUnicosInput) {
+        correosUnicosInput.addEventListener('input', refrescarCorreosUnicos);
+    }
+
+    const btnCopiarCorreosUnicos = modal.querySelector('#btnCopiarCorreosUnicos');
+    if (btnCopiarCorreosUnicos) {
+        btnCopiarCorreosUnicos.addEventListener('click', function() {
+            const texto = correosUnicosResultado ? correosUnicosResultado.value : '';
+            if (!texto.trim()) {
+                showClipboardIndicator('No hay correos para copiar');
+                return;
+            }
+            navigator.clipboard.writeText(texto).then(function() {
+                showClipboardIndicator('Correo y contraseña copiados');
+            }).catch(function() {
+                showClipboardIndicator('No se pudo copiar');
+            });
+        });
+    }
+
+    const btnLimpiarCorreosUnicos = modal.querySelector('#btnLimpiarCorreosUnicos');
+    if (btnLimpiarCorreosUnicos) {
+        btnLimpiarCorreosUnicos.addEventListener('click', function() {
+            if (correosUnicosInput) correosUnicosInput.value = '';
+            refrescarCorreosUnicos();
+            if (correosUnicosInput) correosUnicosInput.focus();
         });
     }
     

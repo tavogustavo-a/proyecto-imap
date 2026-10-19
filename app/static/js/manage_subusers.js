@@ -248,23 +248,23 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Botón Editar
       const editBtn = document.createElement('button');
-      editBtn.classList.add('btn-orange', 'edit-subuser-btn');
+      editBtn.classList.add('btn-orange', 'edit-subuser-btn', 'row-icon-btn');
       editBtn.setAttribute('data-id', su.id);
-      editBtn.textContent = 'Editar';
+      editBtn.title = 'Editar';
+      editBtn.setAttribute('aria-label', 'Editar');
+      const editIcon = document.createElement('i');
+      editIcon.className = 'fas fa-pen';
+      editIcon.setAttribute('aria-hidden', 'true');
+      editBtn.appendChild(editIcon);
       actionsDiv.appendChild(editBtn);
       
       // Botón Toggle (On/Off)
       const toggleBtn = document.createElement('button');
-      if(su.enabled){
-        toggleBtn.classList.add('btn-red', 'toggle-subuser');
-        toggleBtn.setAttribute('data-enabled', 'true');
-        toggleBtn.textContent = 'Off';
-      } else {
-        toggleBtn.classList.add('btn-green', 'toggle-subuser');
-        toggleBtn.setAttribute('data-enabled', 'false');
-        toggleBtn.textContent = 'On';
-      }
+      toggleBtn.type = 'button';
+      toggleBtn.classList.add('toggle-subuser');
+      toggleBtn.setAttribute('data-enabled', su.enabled ? 'true' : 'false');
       toggleBtn.setAttribute('data-id', su.id);
+      paintStateSwitch(toggleBtn, !!su.enabled);
       actionsDiv.appendChild(toggleBtn);
       
       // Botón Eliminar (icono, como en usuarios)
@@ -1268,11 +1268,13 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
-      editBtn.className = 'btn-orange btn-sm edit-subuser-twofa-config';
+      editBtn.className = 'btn-orange edit-subuser-twofa-config row-icon-btn';
       editBtn.setAttribute('data-config-id', config.id);
       editBtn.title = 'Editar';
+      editBtn.setAttribute('aria-label', 'Editar');
       const editIcon = document.createElement('i');
-      editIcon.className = 'fas fa-edit';
+      editIcon.className = 'fas fa-pen';
+      editIcon.setAttribute('aria-hidden', 'true');
       editBtn.appendChild(editIcon);
       editBtn.addEventListener('click', function() {
         editSubuserTwofaConfig(config.id);

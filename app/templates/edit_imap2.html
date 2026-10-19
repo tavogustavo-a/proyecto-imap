@@ -1,157 +1,142 @@
 <!-- app/templates/edit_imap2.html -->
 {% extends "base.html" %}
+{% from 'includes/state_switch.html' import state_switch %}
 {% block content %}
-{# Aplicada clase de contenedor #}
+<div id="mobileMenu" class="mobile-menu-store hidden">
+  <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+    <span class="menu-user-name">{{ session.get('username', 'Admin') }}</span>
+  </div>
+  {% include 'includes/admin_menu_primary_links.html' %}
+  <button id="btnClearTriggerLogMenu" type="button" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-trash"></i> Limpiar Logs</button>
+  <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
+  <button id="btnLogoutAllAndClearCookies" type="button" class="btn-panel btn-red mobile-menu-btn mb-04" data-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}"><i class="fas fa-cookie-bite"></i> Cerrar sesión y limpiar cookies</button>
+</div>
+<div id="mobileMenu2" class="mobile-menu-store hidden">
+  <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
+    <span class="menu-user-name">Menú</span>
+  </div>
+  {% include 'includes/admin_menu_secondary_links.html' %}
+  {% include 'includes/admin_menu_licencias_extra_links.html' %}
+</div>
+<div id="menuOverlay" class="menu-overlay"></div>
+
 <div class="form-container-medium">
   <div class="card">
-    <h2 class="text-center">Editar Servidor IMAP Segunda Página</h2>
-
-    <!-- Formulario para actualizar un servidor IMAP2 existente -->
-    <form method="POST"
-          action="{{ url_for('admin_bp.manage_imap2') }}"
-          class="imap2-edit-form">
-      <!-- Campo oculto con CSRF -->
+    <div class="manage-my-page-menu-row">
+      <div class="d-flex gap-05">
+        <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet" type="button" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+        <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet" type="button" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
+      </div>
+      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-blue menu-btn-worksheet text-decoration-none" title="Volver al panel" aria-label="Volver al panel">Volver</a>
+    </div>
+    <h2 class="text-center mb-1">Gestionar mi página {{ srv.route_path }}</h2>
+    <h3 class="text-center mb-05">Párrafo</h3>
+    <form id="saveParagraphForm" action="{{ url_for('admin_bp.update_imap2_paragraph', server_id=srv.id) }}" method="POST">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      
-      <!-- Campo oculto para indicar que se está editando el servidor con ID 'srv.id' -->
-      <input type="hidden" name="server_id" value="{{ srv.id }}">
-
-      <!-- Descripción opcional -->
-      <div class="mb-05">
-        <label for="description" class="sr-only">Descripción</label>
+      <label for="paragraph" class="sr-only">Contenido del párrafo:</label>
+      <textarea
+        id="paragraph"
+        name="paragraph"
+        rows="3"
+        class="d-block w-100 resize-vertical mb-05"
+        autocomplete="off"
+      >{{ srv.paragraph if srv.paragraph else '' }}</textarea>
+      <div class="d-flex justify-content-center align-items-center gap-1 flex-wrap imap2-paragraph-actions">
+        <button type="submit" class="btn-green">Guardar</button>
+        <label for="imap2-background-upload" class="btn-blue mb-0 imap2-background-upload-label">
+          <i class="fas fa-upload"></i> Subir fondo
+        </label>
         <input
-          type="text"
-          id="description"
-          name="description"
-          placeholder="Descripción del servidor (opcional)"
-          value="{{ srv.description if srv.description else '' }}"
-          class="d-block"
-          autocomplete="off"
+          type="file"
+          id="imap2-background-upload"
+          accept="image/*"
+          class="d-none"
         >
-      </div>
-
-      <!-- Fila 1: Host y Puerto -->
-      <div class="d-flex gap-05 mb-05 align-items-center">
-        <label for="host" class="sr-only">Host</label>
-        <input
-          type="text"
-          id="host"
-          name="host"
-          placeholder="Host"
-          value="{{ srv.host }}"
-          required
-          class="flex-grow-1"
-          autocomplete="off"
+        <img
+          id="imap2-background-preview"
+          src=""
+          alt=""
+          class="d-none"
         >
-        <label for="port" class="sr-only">Puerto</label>
-        <input
-          type="number"
-          id="port"
-          name="port"
-          placeholder="993"
-          value="{{ srv.port }}"
-          class="imap2-port-input"
-          autocomplete="off"
-        >
-      </div>
-
-      <!-- Fila 2: Usuario y Contraseña -->
-      <div class="d-flex gap-05 mb-05 align-items-center">
-        <label for="username" class="sr-only">Usuario</label>
-        <input
-          type="text"
-          id="username"
-          name="username"
-          placeholder="Usuario"
-          value="{{ srv.username }}"
-          required
-          class="flex-grow-1"
-          autocomplete="username"
-        >
-        <label for="password" class="sr-only">Password</label>
-        <input
-          type="password"
-          id="password"
-          name="password"
-          placeholder="Password (dejar vacío si no cambias)"
-          class="flex-grow-1"
-          autocomplete="current-password"
-        >
-      </div>
-
-      <!-- Fila 3: Carpetas y Ruta -->
-      <div class="d-flex gap-05 mb-05 align-items-end imap2-create-row">
-        <div class="flex-grow-1 min-width-200">
-          <label for="folders" class="sr-only">Carpetas</label>
-          <input
-            type="text"
-            id="folders"
-            name="folders"
-            placeholder="INBOX"
-            value="{{ srv.folders if srv.folders else 'INBOX' }}"
-            class="d-block imap2-input-small"
-            autocomplete="off"
+        {% if srv.background_image %}
+          <button
+            type="button"
+            id="imap2-background-delete"
+            class="btn-red mb-0 imap2-background-delete-btn"
+            data-imap2-id="{{ srv.id }}"
+            title="Eliminar fondo"
           >
-        </div>
-        <div class="flex-grow-1 min-width-200">
-          <label for="route_path" class="sr-only">Ruta</label>
-          <input
-            type="text"
-            id="route_path"
-            name="route_path"
-            placeholder="/pagina2"
-            value="{{ srv.route_path if srv.route_path else '' }}"
-            class="d-block imap2-input-small"
-            required
-            autocomplete="off"
+            <i class="fas fa-trash" aria-hidden="true"></i>
+          </button>
+        {% else %}
+          <button
+            type="button"
+            id="imap2-background-delete"
+            class="btn-red mb-0 imap2-background-delete-btn d-none"
+            data-imap2-id="{{ srv.id }}"
+            title="Eliminar fondo"
           >
-        </div>
-      </div>
-
-      <div class="text-center mt-1">
-        <button type="submit" class="btn-green mr-05">Guardar</button>
-        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn btn-blue text-decoration-none">Volver</a>
+            <i class="fas fa-trash" aria-hidden="true"></i>
+          </button>
+        {% endif %}
       </div>
     </form>
   </div>
 
-  <!-- Card separado para Servidores IMAP Vinculados -->
+  <!-- Servidores: el primero es el IMAP2 principal (editable, no se elimina) -->
   <div class="card mt-2">
-    <!-- Lista de servidores IMAP vinculados -->
+    <div class="imap-item mb-1" id="primaryImapItem" data-imap-id="{{ srv.id }}" data-primary="1" data-host="{{ srv.host|lower }}" data-username="{{ srv.username|lower }}">
+      <strong id="primaryImapHostLabel">Host: {{ srv.host }}</strong> | <strong id="primaryImapUserLabel">Usuario: {{ srv.username }}</strong>
+      <div class="mt-05">
+        <form action="{{ url_for('admin_bp.test_imap2_ajax') }}"
+              method="POST"
+              class="d-inline test-primary-imap2-form"
+              data-server-id="{{ srv.id }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-blue row-test-btn" title="Probar" aria-label="Probar">
+            <i class="fas fa-plug" aria-hidden="true"></i>
+          </button>
+        </form>
+        {% call state_switch(srv.enabled, 'toggle-primary-imap2-btn ml-03') %}data-id="{{ srv.id }}" data-enabled="{{ 'true' if srv.enabled else 'false' }}"{% endcall %}
+        <button
+          type="button"
+          class="btn-orange ml-03 edit-primary-imap2-btn row-icon-btn"
+          data-server-id="{{ srv.id }}"
+          data-host="{{ srv.host }}"
+          data-port="{{ srv.port }}"
+          data-username="{{ srv.username }}"
+          data-folders="{{ srv.folders if srv.folders else 'INBOX' }}"
+          data-description="{{ srv.description if srv.description else '' }}"
+          data-route-path="{{ srv.route_path if srv.route_path else '' }}"
+          title="Editar"
+          aria-label="Editar"
+        >
+          <i class="fas fa-pen" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
     <div id="linkedImapList">
       {% for imap in srv.linked_imap_servers %}
         <div class="imap-item mb-1" data-imap-id="{{ imap.id }}" data-host="{{ imap.host|lower }}" data-username="{{ imap.username|lower }}">
-          <strong>Host: {{ imap.host }}</strong> | <strong>Usuario: {{ imap.username }}</strong> | <strong>Puerto: {{ imap.port }}</strong>
+          <strong>Host: {{ imap.host }}</strong> | <strong>Usuario: {{ imap.username }}</strong>
           <div class="mt-05">
             <form action="{{ url_for('admin_bp.test_imap', server_id=imap.id) }}"
                   method="POST"
                   class="d-inline">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+              <button type="submit" class="btn-blue row-test-btn" title="Probar" aria-label="Probar">
+                <i class="fas fa-plug" aria-hidden="true"></i>
+              </button>
             </form>
-            {% if imap.enabled %}
-              <button
-                class="btn-red toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small"
-                data-id="{{ imap.id }}"
-                data-enabled="true"
-              >
-                Off
-              </button>
-            {% else %}
-              <button
-                class="btn-green toggle-linked-imap-btn ml-03 btn-imap-action btn-imap-small"
-                data-id="{{ imap.id }}"
-                data-enabled="false"
-              >
-                On
-              </button>
-            {% endif %}
+            {% call state_switch(imap.enabled, 'toggle-linked-imap-btn ml-03') %}data-id="{{ imap.id }}" data-enabled="{{ 'true' if imap.enabled else 'false' }}"{% endcall %}
             <button
               type="button"
-              class="btn-orange ml-03 edit-linked-imap-btn btn-imap-action btn-imap-small"
+              class="btn-orange ml-03 edit-linked-imap-btn row-icon-btn"
               data-url="{{ url_for('admin_bp.edit_imap', server_id=imap.id) }}"
+              title="Editar"
+              aria-label="Editar"
             >
-              Editar
+              <i class="fas fa-pen" aria-hidden="true"></i>
             </button>
             <button
               type="button"
@@ -229,68 +214,10 @@
     </div>
   </div>
 
-  <!-- Card separado para Párrafo Personalizado -->
+  <!-- Card separado para usuarios con acceso a esta página -->
   <div class="card mt-2">
-    <h3 class="text-center mb-05">Párrafo Personalizado</h3>
-    <form id="saveParagraphForm" action="{{ url_for('admin_bp.update_imap2_paragraph', server_id=srv.id) }}" method="POST">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <label for="paragraph" class="sr-only">Contenido del párrafo:</label>
-      <textarea
-        id="paragraph"
-        name="paragraph"
-        rows="3"
-        class="d-block w-100 resize-vertical mb-05"
-        autocomplete="off"
-      >{{ srv.paragraph if srv.paragraph else '' }}</textarea>
-      <div class="text-center">
-        <button type="submit" class="btn-green">Guardar Párrafo</button>
-      </div>
-    </form>
-    
-    <!-- Sección para subir fondo personalizado -->
-    <div class="mt-2 pt-2 imap2-background-section">
-      <div class="d-flex align-items-center gap-1 flex-wrap justify-content-center">
-        <label for="imap2-background-upload" class="btn-blue mb-0 imap2-background-upload-label">
-          <i class="fas fa-upload"></i> Subir fondo
-        </label>
-        <input
-          type="file"
-          id="imap2-background-upload"
-          accept="image/*"
-          class="d-none"
-        >
-        <img
-          id="imap2-background-preview"
-          src=""
-          alt=""
-          class="d-none"
-        >
-        {% if srv.background_image %}
-          <button
-            type="button"
-            id="imap2-background-delete"
-            class="btn-red mb-0 imap2-background-delete-btn"
-            data-imap2-id="{{ srv.id }}"
-            title="Eliminar fondo"
-          >
-            <i class="fas fa-trash"></i> Eliminar fondo
-          </button>
-        {% else %}
-          <button
-            type="button"
-            id="imap2-background-delete"
-            class="btn-red mb-0 imap2-background-delete-btn d-none"
-            data-imap2-id="{{ srv.id }}"
-            title="Eliminar fondo"
-          >
-            <i class="fas fa-trash"></i> Eliminar fondo
-          </button>
-        {% endif %}
-      </div>
-    </div>
-    
     <!-- Sección para vincular usuarios a esta página dinámica -->
-    <div class="mt-2 pt-2 imap2-background-section">
+    <div>
       <h4 class="text-center mb-1">Usuarios con acceso a gestionar esta página</h4>
       
       <!-- Búsqueda de Usuarios -->
@@ -392,7 +319,12 @@
 
   <!-- Card separado para Gestión de 2FA por Correo (específico para este servidor IMAP2) -->
   <div class="admin-card twofa-section-card mt-2">
-    <h4 class="mb-1 text-center">🔐 Gestión de 2FA por Correo</h4>
+    <h4 class="mb-1 text-center">
+      🔐 Gestión de 2FA por Correo
+      <button type="button" id="imap2TwofaInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información sobre 2FA por correo" aria-label="Información sobre 2FA por correo" aria-controls="imap2TwofaInfoModal" aria-haspopup="dialog">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
+    </h4>
     
     <!-- Formulario para agregar/editar configuración 2FA -->
     <form id="imap2-twofa-config-form" class="mb-2">
@@ -480,6 +412,25 @@
   </div>
 </div>
 
+<div id="imap2TwofaInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="imap2TwofaInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="imap2TwofaInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> Gestión de 2FA por Correo
+    </h4>
+    <button type="button" class="btn-close" id="closeImap2TwofaInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small" style="line-height:1.45; padding: 0 0.35rem;">
+    <p class="mb-05">Aquí guardas el código secreto de las cuentas que piden un código para entrar.</p>
+    <p class="mb-05">Escribes los correos y el secreto, o lo sacas de la foto del QR, y pulsas <strong>Agregar</strong>. Varios correos pueden usar el mismo secreto.</p>
+    <p class="mb-0">Cuando alguien busca uno de esos correos en esta página, aparece el código de 6 números que cambia solo. Si el correo no está en la lista, no se muestra ningún código.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okImap2TwofaInfoBtn">Entendido</button>
+  </div>
+</div>
+
 <!-- Modal para editar configuración 2FA de IMAP2 -->
 <div id="imap2-twofa-edit-modal" class="modal d-none" tabindex="-1">
   <div class="sms-modal-content">
@@ -544,18 +495,61 @@
     </form>
   </div>
 </div>
+
+<div id="editPrimaryImap2Modal" class="modal d-none" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="editPrimaryImap2Title">
+  <div class="sms-modal-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="m-0 text-center flex-grow-1" id="editPrimaryImap2Title">Editar servidor</h4>
+      <button type="button" class="btn-panel btn-red" id="closeEditPrimaryImap2Modal" title="Cerrar" aria-label="Cerrar">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <form id="editPrimaryImap2Form" data-server-id="{{ srv.id }}">
+      <div class="mb-05">
+        <label for="edit_primary_description" class="sr-only">Descripción</label>
+        <input id="edit_primary_description" type="text" placeholder="Descripción del servidor (opcional)" class="d-block" autocomplete="off">
+      </div>
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="edit_primary_host" class="sr-only">Host</label>
+        <input id="edit_primary_host" type="text" placeholder="Host" required class="flex-grow-1" autocomplete="off">
+        <label for="edit_primary_port" class="sr-only">Puerto</label>
+        <input id="edit_primary_port" type="number" placeholder="993" class="imap2-port-input" autocomplete="off">
+      </div>
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="edit_primary_username" class="sr-only">Usuario</label>
+        <input id="edit_primary_username" type="text" placeholder="Usuario" required class="flex-grow-1" autocomplete="username">
+        <label for="edit_primary_password" class="sr-only">Password</label>
+        <input id="edit_primary_password" type="password" placeholder="Password (vacío si no cambias)" class="flex-grow-1" autocomplete="current-password">
+      </div>
+      <div class="d-flex gap-05 mb-05 align-items-center">
+        <label for="edit_primary_folders" class="sr-only">Carpetas</label>
+        <input id="edit_primary_folders" type="text" placeholder="INBOX" class="flex-grow-1" autocomplete="off">
+        <label for="edit_primary_route" class="sr-only">Ruta</label>
+        <input id="edit_primary_route" type="text" placeholder="/pagina2" required class="flex-grow-1" autocomplete="off">
+      </div>
+      <div class="d-flex gap-05 justify-content-center">
+        <button type="submit" class="btn-green">Guardar</button>
+        <button type="button" class="btn-blue" id="cancelEditPrimaryImap2Modal">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 
 {% block head %}
 {{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/edit_imap2.css') }}">
 <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2.js') }}?v=20260906-bg-413" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20260710-totp-mask" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2_linked.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20261017-twofa-outside" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2_linked.js') }}?v=20261017-primary-row" defer></script>
 {% endblock %}
 

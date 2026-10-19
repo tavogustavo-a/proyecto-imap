@@ -1,0 +1,3 @@
+{% macro state_switch(enabled, extra_class='', button_type='button') -%}
+<button type="{{ button_type }}" class="user-switch {{ extra_class }}{% if enabled %} is-on{% endif %}" aria-pressed="{{ 'true' if enabled else 'false' }}" title="{{ 'Activo. Clic para desactivar' if enabled else 'Inactivo. Clic para activar' }}" aria-label="{{ 'Activo. Clic para desactivar' if enabled else 'Inactivo. Clic para activar' }}" {{ caller() }}><span class="user-switch-track" aria-hidden="true"><span class="user-switch-knob"></span></span></button>
+{%- endmacro %}

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Consulta de SMS{% endblock %}
+{% block title %}Búsqueda y Eliminación de Correos SMS{% endblock %}
 
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}?v=20261014-sms-btns">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}?v=20261015-sms-nopad">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -42,14 +42,15 @@
         <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
       </div>
     </div>
-    <h2 class="m-0 mb-1 text-center w-100">Consulta de SMS</h2>
-
-    <hr class="hr-margin-15">
-    <h3 class="mb-05 text-center">Búsqueda y Eliminación de Correos</h3>
+    <h2 class="m-0 mb-1 text-center w-100">Búsqueda y Eliminación de Correos SMS</h2>
     <form id="searchNumbersForm" name="searchNumbersForm">
       <label for="searchNumbersInput" class="sr-only">Buscar y eliminar correos</label>
-      <textarea id="searchNumbersInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
-      <button type="submit" class="btn-blue">Limpiar</button>
+      <div class="search-textarea-wrapper">
+        <textarea id="searchNumbersInput" rows="2" class="resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
+        <button type="button" id="clearNumbersSearchBtn" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
     </form>
     <div id="numbersSearchResults" class="search-results-container">
         <!-- Resultados aquí -->
@@ -66,10 +67,10 @@
 
   <div class="admin-card">
     <div id="allowedNumbersContainer" class="mb-0">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-05">
-        <div><strong>Lista Correos permitidos:</strong></div>
+      <div class="sms-allowed-toolbar d-flex justify-content-between align-items-center flex-wrap gap-1 mb-05">
+        <label for="perPageSelectNumbers"><strong>Lista Correos permitidos:</strong></label>
         <div class="d-flex align-items-center gap-05">
-          <label for="perPageSelectNumbers"><strong>Mostrar:</strong></label>
+          <span><strong>Mostrar:</strong></span>
           <select id="perPageSelectNumbers" class="select-padding-3px" autocomplete="off">
              <option value="10">10</option><option value="20" selected>20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="300">300</option><option value="-1">Todos</option>
           </select>
@@ -80,8 +81,8 @@
       </div>
       <div id="allowedNumbersPagination" class="d-flex justify-content-between align-items-center">
         <span id="paginationInfoNumbers"></span>
-        <button id="deleteAllNumbersBtn" class="btn-red" title="Eliminar TODOS los correos permitidos">
-          <i class="fas fa-trash"></i> Eliminar Todos
+        <button id="deleteAllNumbersBtn" class="btn-red" title="Eliminar todos los correos permitidos" aria-label="Eliminar todos los correos permitidos">
+          <i class="fas fa-trash" aria-hidden="true"></i> Todo
         </button>
         <div class="ml-auto">
           <button id="prevPageBtnNumbers" class="btn-blue" disabled>&lt; Anterior</button>
@@ -107,7 +108,8 @@
   <div class="admin-card">
     <!-- Sección de Configuración Android -->
     <div id="android-sms-section" class="mb-2">
-      <h4 class="mb-1 text-center">📱 Números Android</h4>
+      <h4 id="androidSmsToggle" class="mb-1 text-center android-sms-toggle" role="button" tabindex="0" aria-expanded="true" aria-controls="android-sms-body">📱 Números Android</h4>
+      <div id="android-sms-body">
       <p class="text-center text-secondary mb-1 twofa-description-text">
         Configura múltiples números Android para recibir SMS directamente desde tus celulares usando SMS Forwarder
       </p>
@@ -197,6 +199,7 @@
         <p class="mb-0 mt-05 twofa-tip-text">
           <strong>💡 Tip:</strong> Los placeholders <code>{in-number}</code>, <code>{out-number}</code> y <code>{msg}</code> son reemplazados automáticamente por SMS Forwarder con los datos reales del SMS recibido.
         </p>
+      </div>
       </div>
     </div>
     
@@ -664,7 +667,7 @@
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_list.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}?v=20261015-sms-todo" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}?v=20260710-totp-mask" defer></script>
 {% endblock %}
 

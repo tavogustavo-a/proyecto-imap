@@ -308,11 +308,13 @@ document.addEventListener('DOMContentLoaded', function () {
         
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
-        editBtn.className = 'btn-panel btn-blue btn-small edit-link-btn';
+        editBtn.className = 'btn-orange edit-link-btn row-icon-btn';
         editBtn.setAttribute('data-link-id', link.id);
         editBtn.setAttribute('data-link-url', link.url);
         editBtn.setAttribute('data-link-title', link.title || '');
-        editBtn.textContent = 'Editar';
+        editBtn.title = 'Editar';
+        editBtn.setAttribute('aria-label', 'Editar');
+        editBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
         linkActions.appendChild(editBtn);
         
         const removeBtn = document.createElement('button');

@@ -1475,7 +1475,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20260829-user-no-side-line-9'
+LICENCIAS_STATIC_VERSION = '20261018-row-tight'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -2559,6 +2559,9 @@ def editar_cupon(coupon_id):
     coupon = Coupon.query.get_or_404(coupon_id)
     products = Product.query.order_by(Product.id.desc()).all()
     coupon_product_ids = [p.id for p in coupon.products]
+    linked_ids = set(coupon_product_ids)
+    # Los que aún no están en el cupón van primero (desmarcados), el más nuevo arriba.
+    products.sort(key=lambda p: (p.id in linked_ids, -(p.id or 0)))
     # Convertir la fecha de creación a zona horaria de Colombia
     created_at_col = None
     if coupon.created_at:
@@ -2599,6 +2602,23 @@ def editar_cupon(coupon_id):
             flash('Error al actualizar cupón: ' + str(e), 'danger')
     return render_template('editar_cupon.html', coupon=coupon, products=products, coupon_product_ids=coupon_product_ids, created_at_col=created_at_col)
 
+@store_bp.route('/admin/cupones/<int:coupon_id>/productos-lista', methods=['GET'])
+@admin_required
+def coupon_products_list(coupon_id):
+    """Productos para editar el cupón: los nuevos, aún no asociados, salen desmarcados y primero."""
+    from .models import Coupon, Product
+    coupon = Coupon.query.get_or_404(coupon_id)
+    linked = {p.id for p in coupon.products}
+    products = Product.query.order_by(Product.id.desc()).all()
+    products.sort(key=lambda p: (p.id in linked, -(p.id or 0)))
+    return jsonify({
+        'products': [
+            {'id': p.id, 'name': p.name, 'checked': p.id in linked}
+            for p in products
+        ]
+    })
+
+
 @store_bp.route('/admin/coupons/update', methods=['POST'])
 @admin_required
 def update_coupon():
@@ -2631,9 +2651,9 @@ def update_coupon():
         coupon.description = data.get('description')
     coupon.show_public = bool(data.get('show_public', False))
     # Actualizar productos asociados si es necesario
-    product_ids = data.get('products', [])
-    if product_ids:
-        coupon.products = Product.query.filter(Product.id.in_(product_ids)).all()
+    if 'products' in data:
+        product_ids = data.get('products') or []
+        coupon.products = Product.query.filter(Product.id.in_(product_ids)).all() if product_ids else []
     try:
         db.session.commit()
         return jsonify({'success': True})

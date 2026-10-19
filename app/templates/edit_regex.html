@@ -16,7 +16,8 @@
       type="text"
       id="editRegexSender"
       name="sender"
-      value="{{ regex.sender }}"
+      value="{{ regex.sender or '' }}"
+      placeholder="Varios correos separados por coma: correo1, correo2"
       class="d-block mb-1"
       autocomplete="off"
     >

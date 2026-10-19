@@ -93,8 +93,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 showAjaxFlash('Error de seguridad (Falta CSRF token).', 'error');
                 return;
             }
-            const button = this.querySelector('.action-btn');
-            button.disabled = true; // Deshabilitar mientras se procesa
+            const button = this.querySelector('button[type="submit"]');
+            if (!button || button.dataset.pending === '1') return;
+            button.dataset.pending = '1';
+            const wasOn = button.classList.contains('is-on');
+            if (typeof paintStateSwitch === 'function') paintStateSwitch(button, !wasOn);
             fetch(this.dataset.action, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
@@ -110,20 +113,21 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(data => {
                 if (data.success) {
-                    button.textContent = data.new_state;
-                    button.classList.remove('action-green', 'action-red');
-                    button.classList.add(data.new_class);
-                    button.setAttribute('data-enabled', data.new_state === 'ON' ? 'true' : 'false');
+                    const enabled = data.new_state === 'OFF';
+                    paintStateSwitch(button, enabled);
+                    button.setAttribute('data-enabled', enabled ? 'true' : 'false');
                     showAjaxFlash(data.message || 'Estado actualizado.', 'success');
                 } else {
+                    paintStateSwitch(button, wasOn);
                     showAjaxFlash(data.error || 'Error al actualizar.', 'error');
                 }
             })
             .catch(error => {
+                paintStateSwitch(button, wasOn);
                 showAjaxFlash(error.message || 'Error de red o del servidor al actualizar.', 'error');
             })
             .finally(() => {
-                button.disabled = false; // Rehabilitar al finalizar
+                delete button.dataset.pending;
             });
         });
     });
@@ -162,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (tbody && tbody.children.length === 0) {
                         // Verificación segura para closest
                         const table = tbody && typeof tbody.closest === 'function' ? tbody.closest('table') : null;
-                        const colspan = table ? table.querySelector('thead th').length || 6 : 6;
+                        const colspan = table ? table.querySelectorAll('thead th').length || 5 : 5;
                         tbody.innerHTML = `<tr><td colspan="${colspan}">No hay productos todavía.</td></tr>`;
                     }
                 } else {
@@ -200,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!noResultRow) {
                     noResultRow = document.createElement('tr');
                     noResultRow.className = 'no-result-row';
-                    noResultRow.innerHTML = '<td colspan="6">No hay productos que coincidan.</td>';
+                    noResultRow.innerHTML = '<td colspan="5">No hay productos que coincidan.</td>';
                     productsTableBody.appendChild(noResultRow);
                 }
             } else if (noResultRow) {
@@ -241,8 +245,8 @@ document.addEventListener('DOMContentLoaded', () => {
               <td>${c.duration_days} días</td>
               <td>${c.max_uses_per_user}</td>
               <td>
-                <button class="action-btn ${c.enabled ? 'action-green' : 'action-red'} btn-coupon-toggle" data-id="${c.id}">${c.enabled ? 'ON' : 'OFF'}</button>
-                <button class="action-btn action-blue btn-coupon-edit" data-id="${c.id}">Editar</button>
+                ${stateSwitchHtml(!!c.enabled, 'btn-coupon-toggle', `data-id="${c.id}"`)}
+                <button class="action-btn action-blue btn-orange btn-coupon-edit row-icon-btn" data-id="${c.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
                 <button class="btn-panel btn-red btn-sm btn-coupon-delete" data-id="${c.id}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
@@ -304,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!csrfTokenForCoupons) {
                 return;
             }
-            const button = this.querySelector('.action-btn');
+            const button = this.querySelector('button[type="submit"]');
             button.disabled = true; // Deshabilitar mientras se procesa
             fetch(this.dataset.action, {
                 method: 'POST',
@@ -321,9 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(data => {
                 if (data.success) {
-                    button.textContent = data.new_state;
-                    button.classList.remove('action-green', 'action-red');
-                    button.classList.add(data.new_class);
+                    paintStateSwitch(button, data.new_state === 'OFF');
                 }
             })
             .catch(error => {

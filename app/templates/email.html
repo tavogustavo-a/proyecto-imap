@@ -58,8 +58,12 @@
     {# Clase searchEmailsForm aplicada desde CSS #}
     <form id="searchEmailsForm" name="searchEmailsForm">
       <label for="searchEmailsInput" class="sr-only">Buscar y eliminar correos</label>
-      <textarea id="searchEmailsInput" rows="2" class="flex-grow-1 resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
-      <button type="submit" class="btn-blue">Limpiar</button>
+      <div class="search-textarea-wrapper">
+        <textarea id="searchEmailsInput" rows="2" class="resize-vertical" placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea)." autocomplete="off"></textarea>
+        <button type="button" id="clearEmailsSearchBtn" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
     </form>
     <div id="emailsSearchResults" class="search-results-container">
         <!-- Resultados aquí -->
@@ -93,8 +97,8 @@
         <p>Cargando correos...</p>
       </div>
       <div id="allowedEmailsPagination" class="d-flex justify-content-between align-items-center">
-        <button id="deleteAllEmailsBtn" class="btn-red" title="Eliminar TODOS los correos permitidos para este usuario">
-          Eliminar Todo
+        <button id="deleteAllEmailsBtn" class="btn-red" title="Eliminar todos los correos permitidos" aria-label="Eliminar todos los correos permitidos">
+          <i class="fas fa-trash" aria-hidden="true"></i> Todo
         </button>
         <div class="allowed-emails-page-nav d-flex align-items-center">
           <button id="prevPageBtn" class="btn-blue" disabled>Anterior</button>
@@ -123,18 +127,6 @@
   </div>
 
   <div class="admin-card">
-    <h3 class="admin-api-section-title justify-content-center">
-      <span>Configurar regex y filtros (Usuario)</span>
-      <button type="button" id="regexFiltersAccessInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información sobre configurar regex y filtros" aria-label="Información sobre configurar regex y filtros" aria-controls="regexFiltersAccessInfoModal" aria-haspopup="dialog">
-        <i class="fas fa-info-circle" aria-hidden="true"></i>
-      </button>
-    </h3>
-    <div class="mb-1 d-flex justify-content-center align-items-center flex-wrap gap-05 regex-filters-actions-row">
-      <button type="button" class="btn-blue" id="openRegexModalBtn">Regex</button>
-      <button type="button" class="btn-blue" id="openFiltersModalBtn">
-        Filtros
-      </button>
-    </div>
     <div class="user-config-options-stack mb-1">
       <div class="d-flex align-items-center flex-wrap gap-05 subusers-perm-row">
         <div class="d-flex align-items-center gap-03 subusers-perm-label-group">
@@ -155,6 +147,7 @@
         <button id="saveCanCreateSubusersBtn" class="btn-green">
           Guardar
         </button>
+        <span id="subusersPermMsg" class="text-italic text-small" hidden></span>
       </div>
       <div class="d-flex align-items-center flex-wrap gap-05 unique-emails-toggle-row">
         <div class="d-flex align-items-center gap-03 subusers-perm-label-group">
@@ -177,8 +170,21 @@
       </div>
     </div>
 
-    {% if user.can_create_subusers %}
-      {# Aplicada clase HR #}
+    <hr class="hr-margin-1">
+    <h3 class="admin-api-section-title justify-content-center">
+      <span>Configurar regex y filtros (Usuario)</span>
+      <button type="button" id="regexFiltersAccessInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información sobre configurar regex y filtros" aria-label="Información sobre configurar regex y filtros" aria-controls="regexFiltersAccessInfoModal" aria-haspopup="dialog">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
+    </h3>
+    <div class="mb-1 d-flex justify-content-center align-items-center flex-wrap gap-05 regex-filters-actions-row">
+      <button type="button" class="btn-blue" id="openRegexModalBtn">Regex</button>
+      <button type="button" class="btn-blue" id="openFiltersModalBtn">
+        Filtros
+      </button>
+    </div>
+
+    <div id="subusersToolsSection"{% if not user.can_create_subusers %} hidden{% endif %}>
       <hr class="hr-margin-1">
       <h4 class="admin-api-section-title justify-content-center">
         <span>Configurar regex y filtro sub-usuarios</span>
@@ -187,11 +193,11 @@
         </button>
       </h4>
       <div class="d-flex justify-content-center flex-wrap gap-05 mb-1">
-        <button id="btnShowSubusers" class="btn-blue text-subuser-buttons">Ver Sub-usuarios</button>
-        <button id="btnSubusersRegexGlobal" class="btn-blue text-subuser-buttons">Regex Sub-usuario</button>
-        <button id="btnSubusersFilterGlobal" class="btn-blue text-subuser-buttons">Filtros Sub-usuario</button>
+        <button id="btnShowSubusers" class="btn-blue text-subuser-buttons">Ver sub-usuarios</button>
+        <button id="btnSubusersRegexGlobal" class="btn-blue text-subuser-buttons">Regex</button>
+        <button id="btnSubusersFilterGlobal" class="btn-blue text-subuser-buttons">Filtros</button>
       </div>
-    {% endif %}
+    </div>
   </div>
 
 </div> {# Cierre del div#user-management-container #}
@@ -320,5 +326,5 @@
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20260906-no-linked-apis"></script>
+<script src="{{ url_for('static', filename='js/admin_user_emails.js') }}?v=20261016-subuser-trash"></script>
 {% endblock scripts %}

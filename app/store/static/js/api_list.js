@@ -108,9 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }).then(res => res.json()).then(data => {
                     if(data.success) {
-                        toggleBtn.textContent = data.new_state;
-                        toggleBtn.classList.remove('action-red', 'action-green');
-                        toggleBtn.classList.add(data.new_class);
+                        paintStateSwitch(toggleBtn, data.new_state === 'OFF');
                     }
                 }).catch(error => {
                     

@@ -4,6 +4,41 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
+    (function wireAndroidSmsCollapse() {
+        const toggle = document.getElementById('androidSmsToggle');
+        const body = document.getElementById('android-sms-body');
+        if (!toggle || !body) return;
+        const key = 'sms_android_section_collapsed';
+
+        function applyState(collapsed) {
+            body.hidden = collapsed;
+            toggle.classList.toggle('android-sms-toggle--collapsed', collapsed);
+            toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+
+        let saved = null;
+        try {
+            saved = localStorage.getItem(key);
+        } catch (e) {}
+        applyState(saved === '1');
+
+        function toggleState() {
+            const collapsed = toggle.getAttribute('aria-expanded') !== 'false';
+            applyState(collapsed);
+            try {
+                localStorage.setItem(key, collapsed ? '1' : '0');
+            } catch (e) {}
+        }
+
+        toggle.addEventListener('click', toggleState);
+        toggle.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                toggleState();
+            }
+        });
+    })();
+
     // --- Funciones Auxiliares ---
     function getCsrfToken(){
         const meta = document.querySelector('meta[name="csrf_token"]');
@@ -133,7 +168,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (deleteAllNumbersBtn) {
-            deleteAllNumbersBtn.innerHTML = `<i class="fas fa-trash"></i> Eliminar Todos (${total})`;
+            const label = total > 0
+                ? `Eliminar todos (${total})`
+                : 'Eliminar todos los correos permitidos';
+            deleteAllNumbersBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i> Todo';
+            deleteAllNumbersBtn.title = label;
+            deleteAllNumbersBtn.setAttribute('aria-label', label);
+            deleteAllNumbersBtn.disabled = total <= 0;
         }
     }
 
@@ -192,10 +233,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Búsqueda automática mientras se escribe (con debounce)
+        // Búsqueda automática mientras se escribe (con debounce) y X para limpiar
         let searchTimeout;
+        const clearNumbersSearchBtn = document.getElementById('clearNumbersSearchBtn');
         searchNumbersInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
+            if (clearNumbersSearchBtn) {
+                clearNumbersSearchBtn.classList.toggle('show', !!searchNumbersInput.value.trim());
+            }
             const searchText = searchNumbersInput.value.trim();
             if (!searchText) {
                 renderSearchResults([]);
@@ -206,30 +251,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 searchNumbers(searchText);
             }, 300);
         });
-        
-        // Cambiar el botón Limpiar para limpiar todo
-        const limpiarBtnSMS = searchNumbersForm.querySelector('button[type="submit"]');
-        if (limpiarBtnSMS) {
-            limpiarBtnSMS.type = 'button';
-            limpiarBtnSMS.addEventListener('click', function(e) {
+
+        if (clearNumbersSearchBtn) {
+            clearNumbersSearchBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 searchNumbersInput.value = '';
-                // Limpiar resultados y ocultar botón
-                if (numbersSearchResults) {
-                    numbersSearchResults.innerHTML = '';
-                    numbersSearchResults.classList.add('d-none');
-                    numbersSearchResults.classList.remove('d-block');
-                }
-                if (deleteDisplayedBtn) {
-                    deleteDisplayedBtn.classList.add('d-none');
-                    deleteDisplayedBtn.classList.remove('d-inline-block');
-                }
-                if (searchStatus) {
-                    searchStatus.textContent = '';
-                }
-                displayedNumbers = [];
-                // Disparar evento input para limpiar cualquier búsqueda pendiente
                 searchNumbersInput.dispatchEvent(new Event('input'));
+                searchNumbersInput.focus();
             });
         }
     }
@@ -301,7 +329,8 @@ document.addEventListener('DOMContentLoaded', function() {
         numbersSearchResults.innerHTML = '';
         if (!numbers || numbers.length === 0) {
             numbersSearchResults.classList.add('d-none');
-        numbersSearchResults.classList.remove('d-block');
+            numbersSearchResults.classList.remove('d-block');
+            displayedNumbers = [];
             if (deleteDisplayedBtn) {
                 deleteDisplayedBtn.classList.add('d-none');
                 deleteDisplayedBtn.classList.remove('d-inline-block');
@@ -421,7 +450,10 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.success) {
                     // Limpiar búsqueda y recargar lista
-                    if (searchNumbersInput) searchNumbersInput.value = "";
+                    if (searchNumbersInput) {
+                        searchNumbersInput.value = "";
+                        searchNumbersInput.dispatchEvent(new Event('input'));
+                    }
                     if (numbersSearchResults) {
                         numbersSearchResults.innerHTML = "";
                         numbersSearchResults.classList.add('d-none');

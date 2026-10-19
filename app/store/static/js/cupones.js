@@ -23,7 +23,10 @@ function getFilteredCouponRows() {
 
 function filterCouponRows() {
   const couponRows = getCouponRows();
-  if (!couponRows.length) return;
+  if (!couponRows.length) {
+    updateCouponPager(0);
+    return;
+  }
   const searchTerm = searchCouponInput.value.toLowerCase();
   couponRows.forEach(row => {
     const couponName = row.getAttribute('data-coupon-name');
@@ -37,9 +40,19 @@ function filterCouponRows() {
   renderCouponPage();
 }
 
+function updateCouponPager(totalRows) {
+  const pager = document.getElementById('couponPagination');
+  if (!pager) return;
+  if (totalRows > 10) pager.removeAttribute('hidden');
+  else pager.setAttribute('hidden', '');
+}
+
 function renderCouponPage() {
   const couponRows = getCouponRows();
-  if (!couponRows.length) return;
+  if (!couponRows.length) {
+    updateCouponPager(0);
+    return;
+  }
   const filteredRows = getFilteredCouponRows();
   const totalRows = filteredRows.length;
   const totalPages = showCouponCount.value === 'all' ? 1 : Math.ceil(totalRows / couponPerPage);
@@ -60,6 +73,7 @@ function renderCouponPage() {
   });
   if (prevCouponBtn) prevCouponBtn.disabled = couponCurrentPage <= 1;
   if (nextCouponBtn) nextCouponBtn.disabled = couponCurrentPage >= totalPages;
+  updateCouponPager(totalRows);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -281,6 +295,46 @@ document.addEventListener('DOMContentLoaded', function() {
       editProductsCheckboxList.querySelectorAll('.product-checkbox').forEach(cb => cb.checked = false);
     });
   }
+
+  const couponIdInput = document.querySelector('#editCouponForm input[name="coupon_id"]');
+  if (editProductsCheckboxList && couponIdInput) {
+    const refreshEditCouponProducts = function() {
+      fetch('/tienda/admin/cupones/' + couponIdInput.value + '/productos-lista', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data || !data.products) return;
+          const checkedNow = new Set(Array.from(editProductsCheckboxList.querySelectorAll('.product-checkbox:checked')).map(function(cb) { return String(cb.value); }));
+          while (editProductsCheckboxList.firstChild) {
+            editProductsCheckboxList.removeChild(editProductsCheckboxList.firstChild);
+          }
+          data.products.forEach(function(p) {
+            const label = document.createElement('label');
+            label.className = 'd-flex align-items-center gap-03';
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.className = 'product-checkbox';
+            input.name = 'products';
+            input.value = String(p.id);
+            input.autocomplete = 'off';
+            // Uno nuevo no estaba marcado: queda desmarcado. Lo que el usuario ya tocó se conserva.
+            input.checked = checkedNow.has(String(p.id));
+            const span = document.createElement('span');
+            span.textContent = p.name;
+            label.appendChild(input);
+            label.appendChild(span);
+            editProductsCheckboxList.appendChild(label);
+          });
+          editProductsCheckboxList.scrollTop = 0;
+        })
+        .catch(function() {});
+    };
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') refreshEditCouponProducts();
+    });
+    window.addEventListener('pageshow', function(event) {
+      if (event.persisted) refreshEditCouponProducts();
+    });
+  }
 });
 
 // Función renderCouponsTable para que el botón Editar sea un enlace
@@ -301,6 +355,7 @@ function renderCouponsTable(coupons) {
         td.textContent = 'No hay cupones aún.';
         tr.appendChild(td);
         tbody.appendChild(tr);
+        updateCouponPager(0);
         return;
     }
     
@@ -352,16 +407,17 @@ function renderCouponsTable(coupons) {
         
         const toggleBtn = document.createElement('button');
         toggleBtn.type = 'submit';
-        toggleBtn.className = `action-btn ${c.enabled ? 'action-red' : 'action-green'}`;
-        toggleBtn.textContent = c.enabled ? 'OFF' : 'ON';
+        paintStateSwitch(toggleBtn, !!c.enabled);
         toggleForm.appendChild(toggleBtn);
         actionStack.appendChild(toggleForm);
         
         // Enlace Editar
         const editLink = document.createElement('a');
         editLink.href = `/tienda/admin/cupones/${c.id}/editar`;
-        editLink.className = 'action-btn action-blue';
-        editLink.textContent = 'Editar';
+        editLink.className = 'action-btn action-blue btn-orange row-icon-btn';
+        editLink.title = 'Editar';
+        editLink.setAttribute('aria-label', 'Editar');
+        editLink.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
         actionStack.appendChild(editLink);
         
         // Botón Eliminar
@@ -387,7 +443,7 @@ function renderCouponsTable(coupons) {
             if (!csrfToken) {
                 return;
             }
-            const button = this.querySelector('.action-btn');
+            const button = this.querySelector('button[type="submit"]');
             button.disabled = true; // Deshabilitar mientras se procesa
             fetch(this.dataset.action, {
                 method: 'POST',
@@ -404,9 +460,7 @@ function renderCouponsTable(coupons) {
             })
             .then(data => {
                 if (data.success) {
-                    button.textContent = data.new_state;
-                    button.classList.remove('action-green', 'action-red');
-                    button.classList.add(data.new_class);
+                    paintStateSwitch(button, data.new_state === 'OFF');
                 }
             })
             .catch(error => {
@@ -506,7 +560,18 @@ if (editCouponForm) {
     .then(r=>r.json())
     .then(resp=>{
       if (resp.success) {
-        window.location.href = '/tienda/admin/cupones';
+        const nameInput = document.getElementById('coupon_name');
+        if (nameInput && nameInput.value) nameInput.value = nameInput.value.trim().toUpperCase();
+        let note = document.getElementById('editCouponSavedNote');
+        if (!note) {
+          note = document.createElement('p');
+          note.id = 'editCouponSavedNote';
+          note.className = 'editar-cupon-saved';
+          const actions = editCouponForm.querySelector('.editar-cupon-actions');
+          if (actions) editCouponForm.insertBefore(note, actions);
+          else editCouponForm.appendChild(note);
+        }
+        note.textContent = 'Cupón actualizado.';
       } else {
         alert(resp.error || 'Error al actualizar cupón');
       }

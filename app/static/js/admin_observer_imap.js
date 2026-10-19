@@ -107,26 +107,36 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const testBtn = document.createElement("button");
       testBtn.type = "submit";
-      testBtn.className = "btn-blue btn-imap-action btn-imap-small";
-      testBtn.textContent = "Probar";
+      testBtn.className = "btn-blue row-test-btn";
+      testBtn.title = "Probar";
+      testBtn.setAttribute("aria-label", "Probar");
+      const testIcon = document.createElement("i");
+      testIcon.className = "fas fa-plug";
+      testIcon.setAttribute("aria-hidden", "true");
+      testBtn.appendChild(testIcon);
       testForm.appendChild(testBtn);
       actionsDiv.appendChild(testForm);
 
       // Botón Toggle
       const toggleBtn = document.createElement("button");
       toggleBtn.type = "button";
-      toggleBtn.className = s.enabled ? "btn-red toggle-observer-imap ml-03 btn-imap-action btn-imap-small" : "btn-green toggle-observer-imap ml-03 btn-imap-action btn-imap-small";
+      toggleBtn.className = "toggle-observer-imap ml-03";
       toggleBtn.setAttribute("data-id", s.id);
       toggleBtn.setAttribute("data-enabled", s.enabled ? "true" : "false");
-      toggleBtn.textContent = s.enabled ? "Off" : "On";
+      paintStateSwitch(toggleBtn, !!s.enabled);
       actionsDiv.appendChild(toggleBtn);
 
       // Botón Editar
       const editBtn = document.createElement("button");
       editBtn.type = "button";
-      editBtn.className = "btn-orange ml-03 edit-observer-imap btn-imap-action btn-imap-small";
+      editBtn.className = "btn-orange ml-03 edit-observer-imap row-icon-btn";
       editBtn.setAttribute("data-url", `/admin/observer_edit_imap/${s.id}`);
-      editBtn.textContent = "Editar";
+      editBtn.title = "Editar";
+      editBtn.setAttribute("aria-label", "Editar");
+      const editIcon = document.createElement("i");
+      editIcon.className = "fas fa-pen";
+      editIcon.setAttribute("aria-hidden", "true");
+      editBtn.appendChild(editIcon);
       actionsDiv.appendChild(editBtn);
 
       // Botón Eliminar
@@ -164,9 +174,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Feedback visual
       if (submitBtn) {
-        submitBtn.disabled = true;
-        const originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Probando...';
+        paintTestButtonBusy(submitBtn, true);
         
         fetch('/admin/observer_test_imap_ajax', {
           method: 'POST',
@@ -181,18 +189,17 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(res => res.json())
         .then(data => {
           if (data.status === 'ok') {
-            alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
+            alertImapTestResult(true, data.message || 'Conexión correcta.');
           } else {
-            alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
+            alertImapTestResult(false, data.message);
           }
         })
-        .catch(err => {
-          alert('Error de red: ' + err.message);
+        .catch(() => {
+          alertImapTestOffline();
         })
         .finally(() => {
           if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = originalText;
+            paintTestButtonBusy(submitBtn, false);
           }
         });
       }
@@ -201,7 +208,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   document.addEventListener("click", function(e) {
-    const t = e.target;
+    const t = e.target.closest(".toggle-observer-imap") || e.target;
     if (t.classList.contains("toggle-observer-imap")) {
       e.preventDefault();
       e.stopPropagation();
@@ -215,8 +222,7 @@ document.addEventListener("DOMContentLoaded", function() {
       // Actualización optimista: cambiar el estado del botón inmediatamente
       const newEnabled = !enabled;
       t.dataset.enabled = newEnabled.toString();
-      t.className = newEnabled ? "btn-red toggle-observer-imap" : "btn-green toggle-observer-imap";
-      t.textContent = newEnabled ? "Off" : "On";
+      paintStateSwitch(t, newEnabled);
       
       // Feedback visual mínimo
       t.disabled = true;
@@ -241,16 +247,14 @@ document.addEventListener("DOMContentLoaded", function() {
         } else {
           // Revertir cambio optimista en caso de error
           t.dataset.enabled = enabled.toString();
-          t.className = enabled ? "btn-red toggle-observer-imap" : "btn-green toggle-observer-imap";
-          t.textContent = enabled ? "Off" : "On";
+          paintStateSwitch(t, enabled);
           alert("Error: " + (d.message || "Error desconocido"));
         }
       })
       .catch(err => {
         // Revertir cambio optimista en caso de error
         t.dataset.enabled = enabled.toString();
-        t.className = enabled ? "btn-red toggle-observer-imap" : "btn-green toggle-observer-imap";
-        t.textContent = enabled ? "Off" : "On";
+        paintStateSwitch(t, enabled);
         if (err.message.includes("Unexpected token")) {
           alert("Error: El servidor devolvió una respuesta inesperada. Recarga la página e intenta nuevamente.");
         } else {

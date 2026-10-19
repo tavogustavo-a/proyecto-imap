@@ -13,7 +13,7 @@
 
     <div class="form-group">
       <label for="editFilterSender">Remitente (Sender):</label>
-      <input type="text" id="editFilterSender" name="sender" value="{{ filter.sender }}" class="mb-1" autocomplete="off">
+      <input type="text" id="editFilterSender" name="sender" value="{{ filter.sender or '' }}" placeholder="Varios correos separados por coma: correo1, correo2" class="mb-1" autocomplete="off">
     </div>
 
     <div class="form-group">

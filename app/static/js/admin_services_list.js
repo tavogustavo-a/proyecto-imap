@@ -958,7 +958,7 @@ document.addEventListener("DOMContentLoaded", function() {
             // Si es SMS, no mostrar botones "re" y "fi"
             if (s.visibility_mode === 'sms') {
                 html += `
-                    <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>
+                    <button class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
                     <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
                     <button class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar">
                       <i class="fas fa-trash"></i>
@@ -966,7 +966,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 `;
             } else {
                 html += `
-                    <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>
+                    <button class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
                     <button class="link-regex-service btn-blue" data-id="${s.id}">re</button>
                     <button class="link-filter-service btn-blue" data-id="${s.id}">fi</button>
                     <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
@@ -977,7 +977,7 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         } else {
              html += `
-                <button class="edit-service btn-orange" data-id="${s.id}">Editar</button>
+                <button class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
                 <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
             `;
         }

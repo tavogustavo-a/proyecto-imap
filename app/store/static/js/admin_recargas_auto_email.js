@@ -321,9 +321,9 @@
           patternLine +
           '</div>' +
           '<div class="admin-recarga-email-regex-item__actions">' +
-          '<button type="button" class="btn-panel btn-orange btn-sm admin-recarga-email-regex-edit" data-regex-id="' +
+          '<button type="button" class="btn-orange row-icon-btn admin-recarga-email-regex-edit" data-regex-id="' +
           rid +
-          '" title="Editar"><i class="fas fa-edit" aria-hidden="true"></i></button>' +
+          '" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>' +
           '<button type="button" class="btn-panel btn-red btn-sm admin-recarga-email-regex-delete" data-regex-id="' +
           rid +
           '" title="Eliminar"><i class="fas fa-trash" aria-hidden="true"></i></button>' +
@@ -469,9 +469,9 @@
           '<button type="button" class="btn-panel btn-blue btn-sm btn-table-action admin-recarga-imap-test" data-imap-id="' +
           s.id +
           '" title="Probar conexión" aria-label="Probar conexión"><i class="fas fa-plug" aria-hidden="true"></i></button>' +
-          '<button type="button" class="btn-panel btn-orange btn-sm btn-table-action admin-recarga-imap-edit" data-imap-id="' +
+          '<button type="button" class="btn-orange row-icon-btn admin-recarga-imap-edit" data-imap-id="' +
           s.id +
-          '" title="Editar" aria-label="Editar"><i class="fas fa-edit" aria-hidden="true"></i></button>' +
+          '" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>' +
           '<button type="button" class="btn-panel btn-sm btn-table-action ' +
           toggleClass +
           ' admin-recarga-imap-toggle" data-imap-id="' +

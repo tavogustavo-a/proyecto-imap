@@ -204,8 +204,7 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(response => response.json())
       .then(data => {
         if(data.success) {
-          this.textContent = data.new_state;
-          this.className = `action-btn ${data.new_class}`;
+          paintStateSwitch(this, data.new_state === 'OFF');
         } else {
           alert(data.error || 'Error al actualizar el estado.');
         }

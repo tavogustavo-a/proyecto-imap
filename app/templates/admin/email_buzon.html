@@ -1,8 +1,9 @@
 {% extends "admin_dashboard.html" %}
+{% from 'includes/state_switch.html' import state_switch %}
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260526-head">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261018-tag-scroll">
 {% endblock %}
 
 {% block content %}
@@ -62,7 +63,8 @@
         <span class="email-folder-count">{{ spam_count if spam_count is defined else 0 }}</span>
       </div>
       
-      <!-- Etiquetas aparecen directamente debajo de Papelera -->
+      <!-- Etiquetas aparecen directamente debajo de Spam -->
+      <div class="email-tag-scroll">
       {% for tag in tags %}
       <div class="email-folder tag-folder {{ 'active' if current_view == 'tag' and current_tag and current_tag.id == tag.id else '' }}" data-filter="tag" data-tag-id="{{ tag.id }}" data-action="navigate" data-url="{{ url_for('admin_email_buzon.filter_by_tag', tag_id=tag.id) }}">
         <i class="fas fa-tag"></i>
@@ -73,6 +75,7 @@
         </button>
       </div>
       {% endfor %}
+      </div>
       
       <!-- Botón para crear nueva etiqueta -->
       <div class="create-tag-section">
@@ -96,13 +99,12 @@
               <i class="fas fa-times"></i>
             </button>
           </div>
-        </div>
-        <div class="toolbar-row-2">
-          <button class="btn btn-blue" id="refreshBtn" title="Actualizar" aria-label="Actualizar lista de correos"><i class="fas fa-sync-alt"></i></button>
-          <button class="btn btn-green" id="selectAllBtn" title="Seleccionar Todos" aria-label="Seleccionar todos los correos" data-action="select-all"><i class="fas fa-check-square"></i></button>
-          <button class="btn btn-red" id="deleteSelectedBtn" title="Eliminar Seleccionados" aria-label="Eliminar correos seleccionados" data-action="delete-selected"><i class="fas fa-trash"></i></button>
-          <a href="{{ url_for('admin_email_buzon.manage_filters') }}" class="btn btn-purple" id="filtersBtn" title="Filtros" aria-label="Gestionar filtros automáticos"><i class="fas fa-filter"></i></a>
-          <div class="toolbar-spacer"></div>
+          <div class="toolbar-icons">
+            <button class="btn btn-blue" id="refreshBtn" title="Actualizar" aria-label="Actualizar lista de correos"><i class="fas fa-sync-alt"></i></button>
+            <button class="btn btn-green" id="selectAllBtn" title="Seleccionar Todos" aria-label="Seleccionar todos los correos" data-action="select-all"><i class="fas fa-check-square"></i></button>
+            <button class="btn btn-red" id="deleteSelectedBtn" title="Eliminar Seleccionados" aria-label="Eliminar correos seleccionados" data-action="delete-selected"><i class="fas fa-trash"></i></button>
+            <a href="{{ url_for('admin_email_buzon.manage_filters') }}" class="btn btn-purple" id="filtersBtn" title="Filtros" aria-label="Gestionar filtros automáticos"><i class="fas fa-filter"></i></a>
+          </div>
           <button class="btn btn-gray" id="cleanupTrashBtn" aria-label="Eliminar permanentemente todos los emails de papelera"><i class="fas fa-broom"></i> Vaciar Papelera</button>
         </div>
       </div>
@@ -118,39 +120,42 @@
 <!-- Configuración de correo vía dominio -->
 <div class="email-forwarding-config">
   <div class="accordion-header" data-action="toggle-accordion" data-target="email-forwarding-content">
-    <h4><i class="fas fa-at"></i> Correo Electrónico vía Dominio</h4>
+    <h4><span class="smtp-domain-heading">Agregar Correo Electrónico vía <span class="smtp-domain-title-end">Dominio<button type="button" id="smtpDomainInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información" aria-label="Información sobre correo por dominio" aria-controls="smtpDomainInfoModal" aria-haspopup="dialog"><i class="fas fa-info-circle" aria-hidden="true"></i></button></span></span></h4>
     <i class="fas fa-chevron-down accordion-icon"></i>
   </div>
   
   <div id="email-forwarding-content" class="accordion-content hidden">
 
-  <p class="forwarding-help text-muted forwarding-help--intro">
-    Solo las direcciones que des de alta aquí pueden recibir correo por SMTP. Cada una recibe todo lo que llegue a esa dirección; bloqueos y filtros pueden rechazar mensajes después.
-  </p>
   {% if email_forwardings|selectattr('source_email', 'equalto', none)|list|length > 0 %}
   <p class="forwarding-catchall-warning">
     Tienes recepciones sin dirección SMTP explícita (antiguo catch-all). Edita cada una y guarda el correo completo (ej. <code>1@tudominio.com</code>) o no recibirás mensajes.
   </p>
   {% endif %}
-  
+
+  <div id="smtpAddressTools" class="smtp-address-tools" hidden>
+    <label for="smtpAddressSearch" class="sr-only">Buscar dirección</label>
+    <input type="search" id="smtpAddressSearch" class="smtp-address-search" placeholder="Buscar dirección o título..." autocomplete="off">
+  </div>
+  <div id="smtpAddressList">
   {% for forwarding in email_forwardings %}
   <div class="forwarding-item">
     <div class="forwarding-info">
       <strong>{{ forwarding.source_email or forwarding.destination_email }}</strong>
+      {% if forwarding.title %}
+      <small class="forwarding-title">{{ forwarding.title }}</small>
+      {% endif %}
     </div>
     <div class="forwarding-actions">
-      <button class="btn btn-green edit-forwarding-btn" 
+      <button class="btn btn-orange edit-forwarding-btn row-icon-btn" 
               data-forwarding-id="{{ forwarding.id }}" 
               data-source="{{ forwarding.source_email }}" 
               data-destination="{{ forwarding.destination_email }}" 
-              data-enabled="{{ forwarding.enabled|lower }}">Editar</button>
-      <button type="button" class="btn {{ 'btn-red' if forwarding.enabled else 'btn-green' }} forwarding-toggle-btn" 
-              data-forwarding-id="{{ forwarding.id }}" 
               data-enabled="{{ forwarding.enabled|lower }}"
-              title="{{ 'Desactivar reenvío' if forwarding.enabled else 'Activar reenvío' }}">
-        <i class="fas {{ 'fa-toggle-off' if forwarding.enabled else 'fa-toggle-on' }}"></i>
-        <span>{{ 'OFF' if forwarding.enabled else 'ON' }}</span>
-      </button>
+              data-title="{{ forwarding.title or '' }}"
+              data-folders="{{ forwarding.stored_folder_keys()|tojson if forwarding.stored_folder_keys() else '' }}"
+              title="Editar"
+              aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
+      {% call state_switch(forwarding.enabled, 'forwarding-toggle-btn') %}data-forwarding-id="{{ forwarding.id }}" data-enabled="{{ 'true' if forwarding.enabled else 'false' }}"{% endcall %}
       <form method="POST" action="{{ url_for('admin_email_buzon.delete_forwarding', forwarding_id=forwarding.id) }}" class="inline-form delete-forwarding-form">
         <input type="hidden" id="csrf_delete_forwarding_{{ forwarding.id }}" name="_csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-red delete-forwarding-btn" title="Eliminar reenvío" aria-label="Eliminar reenvío de correo">
@@ -162,15 +167,32 @@
   {% else %}
   <p class="no-forwardings">No hay reenvíos configurados.</p>
   {% endfor %}
+  </div>
+  <nav id="smtpAddressPagination" class="email-pagination" hidden aria-label="Paginación de direcciones">
+    <div class="email-pagination-info" id="smtpAddressPageInfo"></div>
+    <div class="email-pagination-nav">
+      <button type="button" id="smtpAddressPrev" class="btn btn-blue email-pagination-btn">Anterior</button>
+      <button type="button" id="smtpAddressNext" class="btn btn-blue email-pagination-btn">Siguiente</button>
+    </div>
+  </nav>
   
-  <form action="{{ url_for('admin_email_buzon.create_forwarding') }}" method="POST" class="create-server-form">
+  <form action="{{ url_for('admin_email_buzon.create_forwarding') }}" method="POST" class="create-server-form smtp-address-add">
     <input type="hidden" id="csrf_create_forwarding" name="_csrf_token" value="{{ csrf_token() }}">
-    <h5>Agregar dirección de recepción SMTP</h5>
     <div class="create-server-fields">
+      <div class="create-server-field smtp-title-field">
+        <input type="text" id="smtpTitle" name="title" maxlength="200" placeholder="Título (opcional)" autocomplete="off" aria-label="Título (opcional)">
+      </div>
       <div class="create-server-field">
         <input type="email" id="sourceEmailInput" name="source_email" placeholder="ventas@tudominio.com" required autocomplete="email" aria-label="Correo en tu dominio que recibirá mensajes">
       </div>
       <button type="submit" class="btn btn-blue" aria-label="Agregar dirección de recepción">Agregar dirección</button>
+      <div class="smtp-folder-row">
+        <input type="hidden" id="smtpFoldersValue" name="folders" value='["inbox"]'>
+        <button type="button" class="smtp-folder-select smtp-folders-open" data-folders-target="smtpFoldersValue" data-chips-target="smtpFolderChips" title="Carpetas" aria-label="Carpetas">
+          <span id="smtpFolderChips" class="smtp-folder-preview">Recibidos</span>
+          <i class="fas fa-chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
     </div>
   </form>
   </div>
@@ -179,7 +201,7 @@
 <!-- Configuración de eliminación automática -->
 <div class="email-forwarding-config">
   <div class="accordion-header" data-action="toggle-accordion" data-target="email-cleanup-content">
-    <h4><i class="fas fa-clock"></i> Eliminación Automática de Correos</h4>
+    <h4><i class="fas fa-clock"></i> Crear Eliminación Automática de Correos</h4>
     <i class="fas fa-chevron-down accordion-icon"></i>
   </div>
   
@@ -191,18 +213,13 @@
       <strong>{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}</strong>
     </div>
     <div class="forwarding-actions">
-      <button class="btn btn-green edit-cleanup-btn" 
+      <button class="btn btn-orange edit-cleanup-btn row-icon-btn" 
               data-cleanup-id="{{ cleanup.id }}" 
               data-cleanup-time="{{ cleanup.time.strftime('%H:%M') }}" 
-              data-cleanup-folder="{{ cleanup.folder_type }}"
-              data-cleanup-tag-id="{{ cleanup.tag_id or '' }}">Editar</button>
-      <button type="button" class="btn {{ 'btn-red' if cleanup.enabled else 'btn-green' }} cleanup-toggle-btn" 
-              data-cleanup-id="{{ cleanup.id }}" 
-              data-enabled="{{ cleanup.enabled|lower }}"
-              title="{{ 'Desactivar limpieza' if cleanup.enabled else 'Activar limpieza' }}">
-        <i class="fas {{ 'fa-toggle-off' if cleanup.enabled else 'fa-toggle-on' }}"></i>
-        <span>{{ 'OFF' if cleanup.enabled else 'ON' }}</span>
-      </button>
+              data-folders='{{ cleanup.folder_keys()|tojson }}'
+              title="Editar"
+              aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
+      {% call state_switch(cleanup.enabled, 'cleanup-toggle-btn') %}data-cleanup-id="{{ cleanup.id }}" data-enabled="{{ 'true' if cleanup.enabled else 'false' }}"{% endcall %}
       <form method="POST" action="{{ url_for('admin_email_buzon.delete_cleanup', cleanup_id=cleanup.id) }}" class="inline-form delete-cleanup-form">
         <input type="hidden" id="csrf_delete_cleanup_{{ cleanup.id }}" name="_csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-red delete-cleanup-btn" title="Eliminar limpieza automática" aria-label="Eliminar limpieza automática">
@@ -215,23 +232,22 @@
   <p class="no-forwardings">No hay limpiezas automáticas configuradas.</p>
   {% endfor %}
   
-  <form action="{{ url_for('admin_email_buzon.create_cleanup') }}" method="POST" class="create-server-form">
+  <form action="{{ url_for('admin_email_buzon.create_cleanup') }}" method="POST" class="create-server-form cleanup-create-form">
     <input type="hidden" id="csrf_create_cleanup" name="_csrf_token" value="{{ csrf_token() }}">
-    <h5>Crear Limpieza Automática:</h5>
     <div class="create-server-fields">
       <div class="create-server-field">
         <label for="cleanupTime">Hora diaria (Colombia):</label>
         <input type="time" id="cleanupTime" name="cleanup_time" required autocomplete="off" aria-label="Hora diaria para limpieza automática">
       </div>
       <div class="create-server-field">
-        <label for="cleanupFolder">Carpeta a limpiar:</label>
-        <select id="cleanupFolder" name="folder_type" required>
-          <option value="inbox">📥 Recibidos</option>
-          <option value="trash">🗑️ Papelera</option>
-          {% for tag in tags %}
-          <option value="tag:{{ tag.id }}">🏷️ {{ tag.name }}</option>
-          {% endfor %}
-        </select>
+        <label for="cleanupFoldersBtn">Carpetas a limpiar:</label>
+        <div class="smtp-folder-row">
+          <input type="hidden" id="cleanupFoldersValue" name="folders" value='["inbox"]'>
+          <button type="button" id="cleanupFoldersBtn" class="smtp-folder-select smtp-folders-open" data-folders-target="cleanupFoldersValue" data-chips-target="cleanupFolderChips" title="Carpetas" aria-label="Carpetas a limpiar">
+            <span id="cleanupFolderChips" class="smtp-folder-preview">Recibidos</span>
+            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
       <button type="submit" class="btn btn-blue" aria-label="Crear nueva limpieza automática">Crear Limpieza</button>
     </div>
@@ -564,8 +580,8 @@
       
       
           <div class="edit-modal-actions">
-            <button type="button" id="deleteTagBtn" class="btn btn-red" data-action="confirm-delete-tag" aria-label="Eliminar etiqueta">
-              <i class="fas fa-trash"></i> Eliminar
+            <button type="button" id="deleteTagBtn" class="btn btn-red btn-sm" data-action="confirm-delete-tag" title="Eliminar etiqueta" aria-label="Eliminar etiqueta">
+              <i class="fas fa-trash" aria-hidden="true"></i>
             </button>
             <button type="button" id="cancelEditTagModal" class="btn btn-red" aria-label="Cancelar edición de etiqueta">Cancelar</button>
             <button type="submit" class="btn btn-green" aria-label="Guardar cambios de etiqueta">Guardar</button>
@@ -640,7 +656,7 @@
 <div id="editForwardingModal" class="edit-modal hidden">
   <div class="edit-modal-content">
     <div class="edit-modal-header">
-      <h3><i class="fas fa-edit"></i> Editar Correo de Recepción</h3>
+      <h3><i class="fas fa-edit"></i> Editar Correo que recibe smtp</h3>
       <button type="button" class="btn-close" data-action="close-forwarding-modal" aria-label="Cerrar modal de editar correo">
         <i class="fas fa-times"></i>
       </button>
@@ -648,9 +664,20 @@
     <form id="editForwardingForm" method="POST">
       <input type="hidden" id="csrf_edit_forwarding" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="edit-form-group">
-        <label for="editSourceEmail">Dirección que recibe por SMTP:</label>
-        <input type="email" id="editSourceEmail" name="source_email" required autocomplete="email">
-        <small>Debe coincidir con el correo al que envían (RCPT TO), en tu dominio.</small>
+        <input type="text" id="editForwardingTitle" name="title" maxlength="200" placeholder="Título (opcional)" autocomplete="off" aria-label="Título (opcional)">
+      </div>
+      <div class="edit-form-group">
+        <label for="editSourceEmail" class="sr-only">Correo</label>
+        <input type="email" id="editSourceEmail" name="source_email" required autocomplete="email" aria-label="Correo" class="smtp-email-outline">
+      </div>
+      <div class="edit-form-group">
+        <div class="smtp-folder-row">
+          <input type="hidden" id="editFoldersValue" name="folders" value="">
+          <button type="button" class="smtp-folder-select smtp-folders-open" data-folders-target="editFoldersValue" data-chips-target="editFolderChips" title="Carpetas" aria-label="Carpetas">
+            <span id="editFolderChips" class="smtp-folder-preview">Recibidos</span>
+            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
       <div class="edit-modal-actions">
         <button type="button" class="btn btn-red" data-action="close-forwarding-modal" aria-label="Cancelar edición de correo">Cancelar</button>
@@ -677,15 +704,14 @@
         <small>Hora en que se ejecutará la limpieza automática (Timezone Colombia)</small>
       </div>
       <div class="edit-form-group">
-        <label for="editCleanupFolder">Carpeta a limpiar:</label>
-        <select id="editCleanupFolder" name="folder_type" required>
-          <option value="inbox">📥 Recibidos</option>
-          <option value="trash">🗑️ Papelera</option>
-          {% for tag in tags %}
-          <option value="tag:{{ tag.id }}">🏷️ {{ tag.name }}</option>
-          {% endfor %}
-        </select>
-        <small>Selecciona qué carpeta se limpiará automáticamente</small>
+        <label for="editCleanupFoldersBtn">Carpetas a limpiar:</label>
+        <div class="smtp-folder-row">
+          <input type="hidden" id="editCleanupFolders" name="folders" value='["inbox"]'>
+          <button type="button" id="editCleanupFoldersBtn" class="smtp-folder-select smtp-folders-open" data-folders-target="editCleanupFolders" data-chips-target="editCleanupFolderChips" title="Carpetas" aria-label="Carpetas a limpiar">
+            <span id="editCleanupFolderChips" class="smtp-folder-preview">Recibidos</span>
+            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
       <div class="edit-modal-actions">
         <button type="button" class="btn btn-red" data-action="close-cleanup-modal" aria-label="Cancelar edición de limpieza">Cancelar</button>
@@ -755,11 +781,53 @@
   </div>
 </div>
 
+<div id="smtpDomainInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="smtpDomainInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="smtpDomainInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> Agregar Correo Electrónico vía Dominio
+    </h4>
+    <button type="button" class="btn-close" id="closeSmtpDomainInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small smtp-domain-info-body">
+    <p class="mb-0">Solo las direcciones que des de alta aquí pueden recibir correo por SMTP. Cada una recibe todo lo que llegue a esa dirección; bloqueos y filtros pueden rechazar mensajes después.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okSmtpDomainInfoBtn">Entendido</button>
+  </div>
+</div>
+
+<div id="smtpFoldersModal" class="edit-modal hidden" role="dialog" aria-modal="true" aria-labelledby="smtpFoldersTitle">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3 id="smtpFoldersTitle">Carpetas</h3>
+      <button type="button" class="btn-close" id="closeSmtpFoldersModal" aria-label="Cerrar carpetas">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <label for="smtpFolderSearch" class="sr-only">Buscar carpeta</label>
+    <input type="search" id="smtpFolderSearch" class="smtp-folder-search" placeholder="Buscar carpeta..." autocomplete="off">
+    <div id="smtpFolderChoices" class="smtp-folder-choices"></div>
+    <div class="edit-modal-actions">
+      <button type="button" class="btn btn-green" id="okSmtpFoldersModal">Guardar</button>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="smtpFolderCatalog">[
+  {"value":"inbox","label":"Recibidos"},
+  {"value":"trash","label":"Papelera"},
+  {"value":"spam","label":"Spam"}
+  {% for tag in tags %}
+  ,{"value":"tag:{{ tag.id }}","label":{{ tag.name|tojson }}}
+  {% endfor %}
+]</script>
+
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20260421-csp-forms" defer></script>
+  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261018-address-pages" defer></script>
   <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

@@ -21,9 +21,8 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(function(data) {
                 if (data.success) {
                     const active = data.enabled;
-                    btn.setAttribute('data-enabled', active ? 'false' : 'true');
-                    btn.className = active ? 'btn-green' : 'btn-red';
-                    btn.innerHTML = '<i class="fas fa-power-off"></i> ' + (active ? 'OFF' : 'ON');
+                    btn.setAttribute('data-enabled', active ? 'true' : 'false');
+                    paintStateSwitch(btn, !!active);
                 }
             })
             .catch(function() { })
@@ -186,16 +185,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     <br><small class="text-muted">${escapeHtml(ownerLabelFromProject(p))}${p.ip ? " · " + escapeHtml(p.ip) : ""}</small>
                 </div>
                 <div class="d-flex gap-05 mr-05 align-items-center flex-wrap">
-                    <button type="button" class="btn-blue btn-imap-action btn-imap-small test-global-project-btn" data-id="${p.id}">
-                        Probar
+                    <button type="button" class="btn-blue row-test-btn test-global-project-btn" data-id="${p.id}" title="Probar" aria-label="Probar">
+                        <i class="fas fa-plug" aria-hidden="true"></i>
                     </button>
-                    <button type="button" class="btn-panel btn-orange btn-sm edit-global-project-btn" 
+                    <button type="button" class="btn-orange edit-global-project-btn row-icon-btn" 
                             data-id="${p.id}" data-owner-id="${p.owner_user_id || ""}" 
                             data-owner-username="${escapeHtml(ownerLabelFromProject(p))}"
                             data-name="${escapeHtml(p.name || "")}"
                             data-ip="${escapeHtml(p.ip || "")}"
-                            data-token="${escapeHtml(p.token)}">
-                        <i class="fas fa-edit"></i>
+                            data-token="${escapeHtml(p.token)}"
+                            title="Editar" aria-label="Editar">
+                        <i class="fas fa-pen" aria-hidden="true"></i>
                     </button>
                     <button type="button" class="btn-panel btn-red btn-sm delete-global-project-btn" data-id="${p.id}">
                         <i class="fas fa-trash"></i>
@@ -222,9 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.addEventListener("click", () => {
                 const projectId = btn.dataset.id;
                 if (!projectId) return;
-                const originalText = btn.textContent;
-                btn.disabled = true;
-                btn.textContent = "Probando...";
+                paintTestButtonBusy(btn, true, "Probando conexión...");
                 fetch(`/admin/global_linked_projects/${projectId}/test`, {
                     method: "POST",
                     headers: {
@@ -236,17 +234,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(res => res.json())
                 .then(data => {
                     if (data.status === "ok") {
-                        alert("✅ " + (data.message || "Conexión correcta."));
+                        alertImapTestResult(true, data.message || "Conexión correcta.");
                     } else {
-                        alert("❌ " + (data.message || "No se pudo probar la conexión."));
+                        alertImapTestResult(false, data.message || "No se pudo probar la conexión.");
                     }
                 })
-                .catch(err => {
-                    alert("❌ No se pudo completar la prueba. Revisa tu conexión e inténtalo de nuevo.");
+                .catch(() => {
+                    alertImapTestOffline();
                 })
                 .finally(() => {
-                    btn.disabled = false;
-                    btn.textContent = originalText;
+                    paintTestButtonBusy(btn, false);
                 });
             });
         });
@@ -444,11 +441,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const div = document.createElement("div");
                 div.className = "linked-api-item d-flex justify-content-between align-items-center mb-05 p-05 text-left";
                 const testBtnHtml = enableTest
-                    ? '<button type="button" class="btn-blue btn-imap-action btn-imap-small ' +
+                    ? '<button type="button" class="btn-blue row-test-btn ' +
                       testBtnClass +
                       '" data-id="' +
                       String(p.id) +
-                      '">Probar</button>'
+                      '" title="Probar" aria-label="Probar"><i class="fas fa-plug" aria-hidden="true"></i></button>'
                     : "";
                 div.innerHTML =
                     '<div class="flex-grow-1 ml-05">' +
@@ -461,11 +458,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     "</div>" +
                     '<div class="d-flex gap-05 mr-05 align-items-center flex-wrap">' +
                     testBtnHtml +
-                    '<button type="button" class="btn-panel btn-orange btn-sm ' +
+                    '<button type="button" class="btn-orange row-icon-btn ' +
                     editBtnClass +
                     '" data-id="' +
                     String(p.id) +
-                    '"><i class="fas fa-edit"></i></button>' +
+                    '"><i class="fas fa-pen" aria-hidden="true"></i></button>' +
                     '<button type="button" class="btn-panel btn-red btn-sm ' +
                     deleteBtnClass +
                     '" data-id="' +
@@ -498,9 +495,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             return x.id === id;
                         });
                         if (!item) return;
-                        const originalText = btn.textContent;
-                        btn.disabled = true;
-                        btn.textContent = "Probando...";
+                        paintTestButtonBusy(btn, true, "Probando conexión...");
                         fetch(testUrl, {
                             method: "POST",
                             headers: {
@@ -518,19 +513,16 @@ document.addEventListener('DOMContentLoaded', function() {
                             })
                             .then(function (data) {
                                 if (data.status === "ok") {
-                                    alert("✅ " + (data.message || "Conexión correcta (licencias)."));
+                                    alertImapTestResult(true, data.message || "Conexión correcta.");
                                 } else {
-                                    alert("❌ " + (data.message || "No se pudo probar la API de licencias."));
+                                    alertImapTestResult(false, data.message || "No se pudo probar la conexión.");
                                 }
                             })
                             .catch(function () {
-                                alert(
-                                    "❌ No se pudo completar la prueba de licencias. Revisa tu conexión e inténtalo de nuevo."
-                                );
+                                alertImapTestOffline();
                             })
                             .finally(function () {
-                                btn.disabled = false;
-                                btn.textContent = originalText;
+                                paintTestButtonBusy(btn, false);
                             });
                     });
                 });

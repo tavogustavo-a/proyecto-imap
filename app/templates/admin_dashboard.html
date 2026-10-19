@@ -1,5 +1,6 @@
 <!-- app/templates/admin_dashboard.html -->
 {% extends "base.html" %}
+{% from 'includes/state_switch.html' import state_switch %}
 
 {% block title %}Administración{% endblock %}
 
@@ -188,7 +189,7 @@
   </div>
 
   <div class="admin-card mt-1">
-    <h3>Servidores IMAP</h3>
+    <h3 class="text-center">Servidores IMAP</h3>
     <form id="imapSearchForm" class="d-flex gap-05 mb-1">
       <label for="imapSearchInput" class="sr-only">Buscar servidores IMAP:</label>
       <input
@@ -210,32 +211,20 @@
                   method="POST"
                   class="d-inline">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+              <button type="submit" class="btn-blue row-test-btn" title="Probar" aria-label="Probar">
+                <i class="fas fa-plug" aria-hidden="true"></i>
+              </button>
             </form>
-            {% if s.enabled %}
-              <button
-                class="btn-red toggle-imap-btn ml-03 btn-imap-action btn-imap-small"
-                data-id="{{ s.id }}"
-                data-enabled="true"
-              >
-                Off
-              </button>
-            {% else %}
-              <button
-                class="btn-green toggle-imap-btn ml-03 btn-imap-action btn-imap-small"
-                data-id="{{ s.id }}"
-                data-enabled="false"
-              >
-                On
-              </button>
-            {% endif %}
+            {% call state_switch(s.enabled, 'toggle-imap-btn ml-03') %}data-id="{{ s.id }}" data-enabled="{{ 'true' if s.enabled else 'false' }}"{% endcall %}
             <button
               id="btnEditImap-{{ s.id }}"
               type="button"
-              class="btn-orange ml-03 edit-imap-btn btn-imap-action btn-imap-small"
+              class="btn-orange ml-03 edit-imap-btn row-icon-btn"
               data-url="{{ url_for('admin_bp.edit_imap', server_id=s.id) }}"
+              title="Editar"
+              aria-label="Editar"
             >
-              Editar
+              <i class="fas fa-pen" aria-hidden="true"></i>
             </button>
             <button
               class="btn-red delete-imap-btn ml-03 btn-imap-action btn-imap-small"
@@ -252,7 +241,7 @@
     <div class="mt-1">
     <form id="createImapForm" action="{{ url_for('admin_bp.manage_imap') }}" method="POST">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <h4>Crear Nuevo Servidor IMAP</h4>
+      <h4 class="text-center">Crear Nuevo Servidor IMAP</h4>
       <!-- Descripción opcional -->
       <div class="mb-05">
         <label for="imap_description" class="sr-only">Descripción</label>
@@ -337,16 +326,14 @@
       <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn-blue text-decoration-none">
         <i class="fas fa-envelope"></i> Gestionar Buzón
       </a>
-      <button type="button" id="toggleEmailBuzonBtn" class="{{ 'btn-green' if site_settings.get('email_buzon_enabled', '1') == '1' else 'btn-red' }}" data-enabled="{{ 'false' if site_settings.get('email_buzon_enabled', '1') == '1' else 'true' }}" title="Encender o apagar recepción del buzón de mensajes">
-        <i class="fas fa-power-off"></i> {{ 'OFF' if site_settings.get('email_buzon_enabled', '1') == '1' else 'ON' }}
-      </button>
+      {% call state_switch(site_settings.get('email_buzon_enabled', '1') == '1', '') %}id="toggleEmailBuzonBtn" data-enabled="{{ 'true' if site_settings.get('email_buzon_enabled', '1') == '1' else 'false' }}"{% endcall %}
     </div>
   </div>
 
 </div> <!-- Cierre del admin-card de Servidores IMAP -->
 
 <div class="admin-card mt-1">
-  <h3>Servidores IMAP Segunda Página</h3>
+  <h3 class="text-center">Servidores IMAP Segunda Página</h3>
   <form id="imap2SearchForm" class="d-flex gap-05 mb-1">
     <label for="imap2SearchInput" class="sr-only">Buscar servidores IMAP2:</label>
     <input
@@ -368,41 +355,41 @@
                 method="POST"
                 class="d-inline">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+            <button type="submit" class="btn-blue row-test-btn" title="Probar" aria-label="Probar">
+              <i class="fas fa-plug" aria-hidden="true"></i>
+            </button>
           </form>
-          {% if s.enabled %}
-            <button
-              class="btn-red toggle-imap2-btn ml-03 btn-imap-action btn-imap-small"
-              data-id="{{ s.id }}"
-              data-enabled="true"
-            >
-              Off
-            </button>
-          {% else %}
-            <button
-              class="btn-green toggle-imap2-btn ml-03 btn-imap-action btn-imap-small"
-              data-id="{{ s.id }}"
-              data-enabled="false"
-            >
-              On
-            </button>
-          {% endif %}
+          {% call state_switch(s.enabled, 'toggle-imap2-btn ml-03') %}data-id="{{ s.id }}" data-enabled="{{ 'true' if s.enabled else 'false' }}"{% endcall %}
           <button
             id="btnEditImap2-{{ s.id }}"
             type="button"
-            class="btn-orange ml-03 edit-imap2-btn btn-imap-action btn-imap-small"
+            class="btn-orange ml-03 edit-imap2-btn row-icon-btn"
             data-url="{{ url_for('admin_bp.edit_imap2', server_id=s.id) }}"
+            title="Editar"
+            aria-label="Editar"
           >
-            Editar
+            <i class="fas fa-pen" aria-hidden="true"></i>
           </button>
           <button
             type="button"
-            class="btn-blue ml-03 url-imap2-btn btn-imap-action btn-imap-small"
+            class="btn-blue ml-03 url-imap2-btn row-test-btn"
             data-id="{{ s.id }}"
             data-domain="{{ s.custom_domain if s.custom_domain else '' }}"
             title="{% if s.custom_domain %}Dominio: {{ s.custom_domain }}{% else %}Configurar dominio personalizado{% endif %}"
+            aria-label="URL"
           >
-            URL
+            <i class="fas fa-link" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="btn-blue ml-03 buzon-imap2-btn row-test-btn"
+            data-id="{{ s.id }}"
+            data-buzon-folders='{{ s.buzon_folder_keys()|tojson }}'
+            title="Buzón"
+            aria-label="Buzón"
+          >
+            <i class="fas fa-inbox" aria-hidden="true"></i>
+            <span>Buzón</span>
           </button>
           <button
             class="btn-red delete-imap2-btn ml-03 btn-imap-action btn-imap-small"
@@ -524,10 +511,12 @@
 
 </div> <!-- Cierre del admin-card de Servidores IMAP Segunda Página -->
 
-<div class="admin-card mt-1">
-  <h3>Importar / Exportar Configuración</h3>
+<script type="application/json" id="imap2BuzonFolderCatalog">{{ buzon_folder_catalog|tojson }}</script>
 
-  <div class="d-flex flex-wrap gap-1 align-items-end">
+<div class="admin-card mt-1 import-export-card">
+  <h3 class="import-export-title">Importar / Exportar Configuración</h3>
+
+  <div class="d-flex flex-wrap gap-1 align-items-end import-export-row">
     {# Input para el código de seguridad para exportar #}
     <div>
         <label for="exportSecurityCode" class="d-block mb-03">Código secreto para exportar:</label> 
@@ -593,10 +582,10 @@
 
 </div> {# Fin contenedor principal .container #}
 
-<script src="{{ url_for('static', filename='js/admin_imap.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/admin_imap2.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}?v=20261016-imap-errores" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap2.js') }}?v=20261018-buzon-search" defer></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v=20261016-probar-icon" defer></script>
 {% endblock %}

@@ -80,7 +80,7 @@ def admin_required(f):
                 # Regenerar token para sesión válida que perdió su token (ej: reinicio del servidor)
                 try:
                     user_obj_temp = User.query.get(user_id)
-                    if user_obj_temp and user_obj_temp.username == admin_user and user_obj_temp.parent_id is None:
+                    if user_obj_temp and user_obj_temp.username == admin_user and user_obj_temp.parent_id is None and user_obj_temp.enabled:
                         session_token = generate_session_token(user_id, is_admin=True)
                         session["session_token"] = session_token
                         # Continuar con la validación normal
@@ -108,7 +108,7 @@ def admin_required(f):
             if user_id and session.get("username") == admin_user and session.get("logged_in"):
                 try:
                     user_obj_temp = User.query.get(user_id)
-                    if user_obj_temp and user_obj_temp.username == admin_user and user_obj_temp.parent_id is None:
+                    if user_obj_temp and user_obj_temp.username == admin_user and user_obj_temp.parent_id is None and user_obj_temp.enabled:
                         # Regenerar token para sesión válida que perdió su token
                         session_token = generate_session_token(user_id, is_admin=True)
                         session["session_token"] = session_token
@@ -142,6 +142,11 @@ def admin_required(f):
             if not is_ajax:
                 session.clear()
             return return_error("Usuario no encontrado. Por favor, inicia sesión nuevamente.", clear_session=not is_ajax)
+
+        if not user_obj.enabled:
+            if not is_ajax:
+                session.clear()
+            return return_error("Este usuario está deshabilitado.", 403, clear_session=not is_ajax)
         
         # Verificar que el usuario de la BD sea realmente el admin
         if user_obj.username != admin_user or user_obj.parent_id is not None:

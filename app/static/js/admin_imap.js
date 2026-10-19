@@ -100,26 +100,36 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const testBtn = document.createElement("button");
       testBtn.type = "submit";
-      testBtn.className = "btn-blue btn-imap-action btn-imap-small";
-      testBtn.textContent = "Probar";
+      testBtn.className = "btn-blue row-test-btn";
+      testBtn.title = "Probar";
+      testBtn.setAttribute("aria-label", "Probar");
+      const testIcon = document.createElement("i");
+      testIcon.className = "fas fa-plug";
+      testIcon.setAttribute("aria-hidden", "true");
+      testBtn.appendChild(testIcon);
       testForm.appendChild(testBtn);
       actionsDiv.appendChild(testForm);
 
       // Botón Toggle
       const toggleBtn = document.createElement("button");
       toggleBtn.type = "button";
-      toggleBtn.className = s.enabled ? "btn-red toggle-imap-btn ml-03 btn-imap-action btn-imap-small" : "btn-green toggle-imap-btn ml-03 btn-imap-action btn-imap-small";
+      toggleBtn.className = "toggle-imap-btn ml-03";
       toggleBtn.setAttribute("data-id", s.id);
       toggleBtn.setAttribute("data-enabled", s.enabled ? "true" : "false");
-      toggleBtn.textContent = s.enabled ? "Off" : "On";
+      paintStateSwitch(toggleBtn, !!s.enabled);
       actionsDiv.appendChild(toggleBtn);
 
       // Botón Editar
       const editBtn = document.createElement("button");
       editBtn.type = "button";
-      editBtn.className = "btn-orange ml-03 edit-imap-btn btn-imap-action btn-imap-small";
+      editBtn.className = "btn-orange ml-03 edit-imap-btn row-icon-btn";
       editBtn.setAttribute("data-url", `/admin/edit_imap/${s.id}`);
-      editBtn.textContent = "Editar";
+      editBtn.title = "Editar";
+      editBtn.setAttribute("aria-label", "Editar");
+      const editIcon = document.createElement("i");
+      editIcon.className = "fas fa-pen";
+      editIcon.setAttribute("aria-hidden", "true");
+      editBtn.appendChild(editIcon);
       actionsDiv.appendChild(editBtn);
 
       // Botón Eliminar
@@ -164,9 +174,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // Feedback visual
       if (submitBtn) {
-        submitBtn.disabled = true;
-        const originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Probando...';
+        paintTestButtonBusy(submitBtn, true);
         
         fetch('/admin/test_imap_ajax', {
           method: 'POST',
@@ -181,18 +189,17 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(res => res.json())
         .then(data => {
           if (data.status === 'ok') {
-            alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
+            alertImapTestResult(true, data.message || 'Conexión correcta.');
           } else {
-            alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
+            alertImapTestResult(false, data.message);
           }
         })
-        .catch(err => {
-          alert('Error de red: ' + err.message);
+        .catch(() => {
+          alertImapTestOffline();
         })
         .finally(() => {
           if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = originalText;
+            paintTestButtonBusy(submitBtn, false);
           }
         });
       }
@@ -201,7 +208,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   document.addEventListener("click", function(e) {
-    const target = e.target;
+    const target = e.target.closest(".toggle-imap-btn") || e.target.closest(".edit-imap-btn") || e.target;
 
     // Toggle IMAP
     if (target.classList.contains("toggle-imap-btn")) {
@@ -214,8 +221,7 @@ document.addEventListener("DOMContentLoaded", function() {
       // Actualización optimista: cambiar el estado del botón inmediatamente
       const newEnabled = !currentlyEnabled;
       target.setAttribute("data-enabled", newEnabled.toString());
-      target.className = newEnabled ? "btn-red toggle-imap-btn" : "btn-green toggle-imap-btn";
-      target.textContent = newEnabled ? "Off" : "On";
+      paintStateSwitch(target, newEnabled);
       
       // Feedback visual mínimo
       target.disabled = true;
@@ -238,16 +244,14 @@ document.addEventListener("DOMContentLoaded", function() {
         } else {
           // Revertir cambio optimista en caso de error
           target.setAttribute("data-enabled", currentlyEnabled.toString());
-          target.className = currentlyEnabled ? "btn-red toggle-imap-btn" : "btn-green toggle-imap-btn";
-          target.textContent = currentlyEnabled ? "Off" : "On";
+          paintStateSwitch(target, currentlyEnabled);
           alert("Error: " + data.message);
         }
       })
       .catch(err => {
         // Revertir cambio optimista en caso de error de red
         target.setAttribute("data-enabled", currentlyEnabled.toString());
-        target.className = currentlyEnabled ? "btn-red toggle-imap-btn" : "btn-green toggle-imap-btn";
-        target.textContent = currentlyEnabled ? "Off" : "On";
+        paintStateSwitch(target, currentlyEnabled);
         alert("Error de red: " + err.message);
       })
       .finally(() => {

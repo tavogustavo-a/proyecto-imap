@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from 'includes/state_switch.html' import state_switch %}
 
 {% block title %}Herramientas{% endblock %}
 
 {% block head %}
   {{ super() }}
   <meta name="csrf_token" content="{{ csrf_token() }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261018-tablas">
 {% endblock %}
 {% block content %}
 
@@ -60,7 +61,7 @@
         </select>
       </div>
     </div>
-    <div class="table-wrapper-store">
+    <div class="table-wrapper-store herramientas-table-wrap">
       <table class="table mb-1" id="tools-table">
         <thead>
           <tr>
@@ -76,8 +77,8 @@
             <td class="text-primary"><strong>{{ tool.percent }}</strong></td>
             <td>
               <div class="action-stack">
-                <button class="action-btn {{ 'action-red' if tool.enabled else 'action-green' }} btn-toggle-tool" data-id="{{ tool.id }}">{{ 'OFF' if tool.enabled else 'ON' }}</button>
-                <a href="{{ url_for('store_bp.edit_tool', tool_id=tool.id) }}" class="action-btn action-blue">Editar</a>
+                {% call state_switch(tool.enabled, 'btn-toggle-tool') %}data-id="{{ tool.id }}"{% endcall %}
+                <a href="{{ url_for('store_bp.edit_tool', tool_id=tool.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                 <button class="btn-panel btn-red btn-sm btn-delete-tool" data-id="{{ tool.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
@@ -140,7 +141,7 @@
         </select>
       </div>
     </div>
-    <div class="table-wrapper-store">
+    <div class="table-wrapper-store herramientas-table-wrap">
       <table class="table mb-1" id="html-table">
         <thead>
           <tr>
@@ -160,8 +161,8 @@
             </td>
             <td>
               <div class="action-stack">
-                <button class="action-btn {{ 'action-red' if html.enabled else 'action-green' }} btn-toggle-html" data-id="{{ html.id }}">{{ 'OFF' if html.enabled else 'ON' }}</button>
-                <a href="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="action-btn action-blue">Editar</a>
+                {% call state_switch(html.enabled, 'btn-toggle-html') %}data-id="{{ html.id }}"{% endcall %}
+                <a href="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                 <button class="btn-panel btn-red btn-sm btn-delete-html" data-id="{{ html.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
@@ -218,7 +219,7 @@
         </select>
       </div>
     </div>
-    <div class="table-wrapper-store">
+    <div class="table-wrapper-store herramientas-table-wrap">
       <table class="table mb-1" id="youtube-table">
         <thead>
           <tr>
@@ -235,8 +236,8 @@
               <td>{% if listing.content and listing.content != 'None' %}{{ listing.content | truncate(60) }}{% endif %}</td>
               <td>
                 <div class="action-stack">
-                  <button class="action-btn {{ 'action-red' if listing.enabled else 'action-green' }} btn-toggle-youtube" data-id="{{ listing.id }}">{{ 'OFF' if listing.enabled else 'ON' }}</button>
-                  <a href="{{ url_for('store_bp.edit_youtube_listing', listing_id=listing.id) }}" class="action-btn action-blue">Editar</a>
+                  {% call state_switch(listing.enabled, 'btn-toggle-youtube') %}data-id="{{ listing.id }}"{% endcall %}
+                  <a href="{{ url_for('store_bp.edit_youtube_listing', listing_id=listing.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                   <button class="btn-panel btn-red btn-sm btn-delete-youtube" data-id="{{ listing.id }}" title="Eliminar">
                     <i class="fas fa-trash"></i>
                   </button>
@@ -294,7 +295,7 @@
         </select>
       </div>
     </div>
-    <div class="table-wrapper-store">
+    <div class="table-wrapper-store herramientas-table-wrap">
       <table class="table mb-1" id="api-table">
         <thead>
           <tr>
@@ -308,8 +309,8 @@
             <td><strong>{{ api.title }}</strong></td>
             <td>
               <div class="action-stack">
-                <button class="action-btn {{ 'action-red' if api.enabled else 'action-green' }} btn-toggle-api" data-id="{{ api.id }}">{{ 'OFF' if api.enabled else 'ON' }}</button>
-                <a href="{{ url_for('store_bp.edit_api', api_id=api.id) }}" class="action-btn action-blue">Editar</a>
+                {% call state_switch(api.enabled, 'btn-toggle-api') %}data-id="{{ api.id }}"{% endcall %}
+                <a href="{{ url_for('store_bp.edit_api', api_id=api.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                 <button class="btn-panel btn-red btn-sm btn-delete-api" data-id="{{ api.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
@@ -407,8 +408,8 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/herramientas.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/youtube_listings.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/api_list.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/herramientas.js') }}?v=20261016-switch" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/youtube_listings.js') }}?v=20261016-switch" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/api_list.js') }}?v=20261016-switch" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_herramientas.js') }}" defer></script>
 {% endblock %} 

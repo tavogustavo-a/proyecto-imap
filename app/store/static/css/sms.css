@@ -5,7 +5,7 @@
   width: 100%;
   max-width: min(900px, 100%);
   margin: 0 auto;
-  padding: 0 0.75rem;
+  padding: 0 !important;
   box-sizing: border-box;
 }
 
@@ -506,9 +506,46 @@
 }
 
 #searchNumbersForm {
-  display: flex;
+  display: block;
   margin-bottom: 0.5rem;
-  align-items: center;
+}
+
+#android-sms-body[hidden] {
+  display: none !important;
+}
+
+.android-sms-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.android-sms-toggle::after {
+  content: ' ▾';
+  font-size: 0.8em;
+  color: #64748b;
+}
+
+.android-sms-toggle--collapsed::after {
+  content: ' ▸';
+}
+
+.android-sms-toggle:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+}
+
+#searchNumbersForm .search-textarea-clear-btn {
+  min-width: 0 !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  color: #666 !important;
 }
 
 .sms-select-width,
@@ -684,6 +721,38 @@
   cursor: not-allowed;
 }
 
+/* Lista + Mostrar: igual que correos permitidos (título a la izquierda, Mostrar a la derecha).
+   store.css centra .d-flex.flex-wrap.gap-1. */
+#allowedNumbersContainer > .sms-allowed-toolbar {
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+  flex-wrap: nowrap !important;
+}
+
+#allowedNumbersContainer > .sms-allowed-toolbar > div:last-child {
+  margin-left: auto !important;
+  flex: 0 0 auto;
+}
+
+#allowedNumbersPagination > #deleteAllNumbersBtn {
+  flex: 0 0 auto;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 2rem !important;
+  margin-left: 0 !important;
+  padding: 0 0.55rem !important;
+  font-size: 1rem !important;
+  font-weight: 600;
+  border-radius: 6px !important;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 /* Estilos para paginación de números permitidos (igual que emails) */
 @media (max-width: 768px) {
   #allowedNumbersPagination {
@@ -693,8 +762,12 @@
   }
   
   #allowedNumbersPagination > #deleteAllNumbersBtn {
-    margin-left: auto;
+    margin-left: 0 !important;
     margin-right: 0;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 2rem;
+    padding: 0 0.45rem !important;
   }
   
   #allowedNumbersPagination > .ml-auto {

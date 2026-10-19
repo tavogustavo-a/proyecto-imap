@@ -2,6 +2,8 @@
 
 import ssl
 import os
+import errno
+import socket
 from datetime import datetime, timedelta
 from socket import gaierror, timeout
 from imaplib import IMAP4
@@ -12,6 +14,45 @@ from app.extensions import db
 from app.models import IMAPServer
 from app.services.imap_crypto import encrypt_password, decrypt_password
 from app.imap.parser import parse_raw_email
+
+_MSG_SIN_INTERNET = "No tienes internet. Prueba nuevamente."
+_MSG_HOST_MAL = "El servidor no existe o está mal escrito. Revisa el host."
+_MSG_LOGIN = "El usuario o la contraseña son incorrectos."
+_MSG_PUERTO = "El servidor rechazó la conexión. Revisa el puerto. Lo habitual es 993."
+_MSG_TIEMPO = "El servidor no contestó a tiempo. Revisa el host, el puerto o tu internet, y prueba nuevamente."
+_MSG_SSL = "No se pudo conectar de forma segura. Revisa que el puerto sea 993."
+_MSG_GENERICO = "No se pudo probar el servidor. Revisa el host, el puerto, el usuario y la contraseña, y prueba nuevamente."
+
+
+def _internet_disponible():
+    """True si este equipo puede resolver un nombre público."""
+    try:
+        socket.getaddrinfo("dns.google", 443)
+        return True
+    except Exception:
+        return False
+
+
+def _mensaje_login_imap(exc):
+    texto = str(exc).lower()
+    if "application-specific password" in texto or "contraseña de aplicación" in texto:
+        return "La contraseña no sirve para IMAP. Esta cuenta pide una contraseña de aplicación."
+    if "web login" in texto or "log in via your web browser" in texto or "please log in" in texto:
+        return "El correo bloqueó el acceso. Entra en la web del correo, permite IMAP y prueba nuevamente."
+    return _MSG_LOGIN
+
+
+def _mensaje_error_red(exc):
+    code = getattr(exc, "errno", None)
+    if code in (errno.ENETUNREACH, errno.ENETDOWN, errno.EHOSTUNREACH, errno.ENETRESET):
+        return _MSG_SIN_INTERNET
+    if code in (errno.ECONNREFUSED,):
+        return _MSG_PUERTO
+    if code in (errno.ETIMEDOUT, errno.EHOSTDOWN):
+        return _MSG_TIEMPO
+    if not _internet_disponible():
+        return _MSG_SIN_INTERNET
+    return _MSG_GENERICO
 
 def create_imap_server(host, port, username, password_plain, folders="INBOX", description=None, model_cls=IMAPServer):
     """Crea un registro IMAPServer (o subclase) parametrizable."""
@@ -57,43 +98,53 @@ def test_imap_connection(server_id, model_cls=IMAPServer):
     srv = model_cls.query.get_or_404(server_id)
     try:
         password = decrypt_password(srv.password_enc)
-    except Exception as e: # Error al desencriptar (p.ej. clave incorrecta)
-        # print(f"Error desencriptando contraseña para {srv.host}: {e}")
-        # Podrías loggear el traceback completo aquí si quieres: traceback.print_exc()
-        return False, f"Error interno al procesar la contraseña almacenada: {e}"
+    except Exception:
+        return False, "No se pudo leer la contraseña guardada. Vuelve a escribirla, guarda y prueba nuevamente."
+
+    if not (srv.host or "").strip():
+        return False, _MSG_HOST_MAL
+    if not (srv.username or "").strip():
+        return False, "Falta el usuario. Escríbelo y prueba nuevamente."
+    if not password:
+        return False, "Falta la contraseña. Escríbela, guarda y prueba nuevamente."
 
     context = ssl.create_default_context()
     try:
-        with IMAPClient(host=srv.host, port=srv.port, ssl=True, ssl_context=context, timeout=10) as client: # Añadir timeout
+        with IMAPClient(host=srv.host, port=srv.port, ssl=True, ssl_context=context, timeout=10) as client:
             client.login(srv.username, password)
-        # Si llegamos aquí, la conexión y login fueron exitosos
-        return True, "Conexión y login exitosos."
+        return True, "Conexión correcta. El servidor, el usuario y la contraseña funcionan."
 
-    # Capturar errores específicos
     except gaierror:
-        # traceback.print_exc() # Opcional: loggear para depuración
-        return False, "Error de DNS: No se pudo resolver el nombre del host."
-    except timeout:
-        # traceback.print_exc()
-        return False, "Error: Tiempo de espera agotado al intentar conectar."
+        if not _internet_disponible():
+            return False, _MSG_SIN_INTERNET
+        return False, _MSG_HOST_MAL
+    except (timeout, TimeoutError):
+        if not _internet_disponible():
+            return False, _MSG_SIN_INTERNET
+        return False, _MSG_TIEMPO
     except ConnectionRefusedError:
-        # traceback.print_exc()
-        return False, "Error: Conexión rechazada por el servidor."
-    except imap_exceptions.LoginError:
-        # traceback.print_exc()
-        return False, "Error de Login: Usuario o contraseña incorrectos."
-    except imap_exceptions.IMAPClientError as e: # Otros errores de la librería IMAPClient
-         # traceback.print_exc()
-         return False, f"Error de IMAPClient: {e}"
-    except SSLError as e:
-        # traceback.print_exc()
-        return False, f"Error de SSL: {e}. ¿El puerto o la configuración SSL son correctos?"
-    except IMAP4.error as e: # Errores generales de imaplib
-        # traceback.print_exc()
-        return False, f"Error de IMAP: {e}"
-    except Exception as e: # Captura genérica para otros errores
-        # No mostrar traceback completo, solo devolver el mensaje de error
-        return False, f"Error inesperado durante la conexión: {e}"
+        return False, _MSG_PUERTO
+    except imap_exceptions.LoginError as e:
+        return False, _mensaje_login_imap(e)
+    except SSLError:
+        return False, _MSG_SSL
+    except imap_exceptions.IMAPClientError:
+        if not _internet_disponible():
+            return False, _MSG_SIN_INTERNET
+        return False, _MSG_GENERICO
+    except IMAP4.error as e:
+        texto = str(e).lower()
+        if "auth" in texto or "login" in texto or "credentials" in texto or "password" in texto:
+            return False, _mensaje_login_imap(e)
+        return False, _MSG_GENERICO
+    except OSError as e:
+        return False, _mensaje_error_red(e)
+    except Exception as e:
+        if current_app:
+            current_app.logger.warning("Fallo al probar IMAP %s: %s", getattr(srv, "id", "?"), e)
+        if not _internet_disponible():
+            return False, _MSG_SIN_INTERNET
+        return False, _MSG_GENERICO
 
 def delete_imap_server(server_id, model_cls=IMAPServer):
     """

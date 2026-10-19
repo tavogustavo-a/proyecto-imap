@@ -404,7 +404,7 @@
 
 {% block scripts %}
 {# {{ super() }} #} {# Comentado porque base.html no tiene scripts en este bloque #}
-<script src="{{ url_for('static', filename='js/manage_subusers.js') }}?v=20260806-subusers-style"></script>
+<script src="{{ url_for('static', filename='js/manage_subusers.js') }}?v=20261016-switch"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 {% if session.get('logged_in') and current_user and not is_admin %}
 <div id="anuncioEntryDismissScope" hidden data-user-id="{{ current_user.id }}"></div>

@@ -119,18 +119,18 @@
 
       var editBtn = document.createElement('button');
       editBtn.type = 'button';
-      editBtn.className = 'action-btn action-blue anuncios-admin-edit';
-      editBtn.textContent = 'Editar';
+      editBtn.className = 'action-btn action-blue btn-orange anuncios-admin-edit row-icon-btn';
+      editBtn.title = 'Editar';
+      editBtn.setAttribute('aria-label', 'Editar');
+      editBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
       editBtn.setAttribute('data-id', String(item.id));
       actions.appendChild(editBtn);
 
       var toggleBtn = document.createElement('button');
       toggleBtn.type = 'button';
-      toggleBtn.className =
-        'action-btn anuncios-admin-toggle ' + (item.enabled ? 'action-red' : 'action-green');
-      toggleBtn.textContent = item.enabled ? 'OFF' : 'ON';
+      toggleBtn.className = 'anuncios-admin-toggle';
       toggleBtn.setAttribute('data-id', String(item.id));
-      toggleBtn.title = item.enabled ? 'Desactivar' : 'Activar';
+      paintStateSwitch(toggleBtn, !!item.enabled);
       actions.appendChild(toggleBtn);
 
       row.appendChild(actions);
@@ -307,9 +307,7 @@
       })
       .then(function (data) {
         if (!data || !data.success) return;
-        toggleBtn.textContent = data.new_state;
-        toggleBtn.classList.remove('action-green', 'action-red');
-        toggleBtn.classList.add(data.new_class);
+        paintStateSwitch(toggleBtn, data.new_state === 'OFF');
         var item = cached.find(function (x) {
           return String(x.id) === String(tid);
         });

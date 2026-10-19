@@ -88,7 +88,7 @@
             {# Aplicada clase para contenedor y botones específicos #}
             <div class="mt-075 alias-action-buttons">
                 <button class="add-alias-icon-btn btn-small btn-add-icon" data-alias-id="{{ al.id }}">+Icon</button>
-                <button class="edit-alias-btn btn-small ml-05 btn-edit-alias" data-alias-id="{{ al.id }}" data-alias-name="{{ al.alias_name }}" data-alias-color="{{ al.border_color }}">Editar</button>
+                <button class="edit-alias-btn btn-small ml-05 btn-edit-alias row-icon-btn btn-orange" data-alias-id="{{ al.id }}" data-alias-name="{{ al.alias_name }}" data-alias-color="{{ al.border_color }}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
                 <button class="btn-panel btn-red btn-sm delete-alias-btn ml-05" data-alias-id="{{ al.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>

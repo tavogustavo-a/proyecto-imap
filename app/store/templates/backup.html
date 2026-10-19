@@ -6,7 +6,7 @@
   {{ super() }}
   <meta name="csrf_token" content="{{ csrf_token() }}">
   <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=136">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261018-backup">
 {% endblock %}
 
 {% block content %}
@@ -14,13 +14,11 @@
      data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
      data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
   
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <div class="d-flex gap-05">
-      <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn">&#9776; Menú</button>
-      <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn">&#9776; Menú2</button>
-    </div>
-    <h1 class="backup-page-toolbar-title mb-0 text-break"><i class="fas fa-database text-primary backup-page-toolbar-icon" aria-hidden="true"></i> Copias de seguridad</h1>
+  <div class="d-flex gap-05 backup-page-menu-row">
+    <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn" type="button" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
+    <button id="menu2ToggleBtn" class="btn-panel btn-blue menu-toggle-btn" type="button" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
   </div>
+  <h1 class="backup-page-title">Copias de seguridad</h1>
 
   <div id="mobileMenu" class="mobile-menu-store hidden">
     <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
@@ -69,15 +67,15 @@
       </div>
     </div>
 
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+    <div class="backup-page-actions">
       <form method="post" action="{{ url_for('store_bp.admin_backup_manual') }}" class="mb-0">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus"></i> Crear copia manual ahora</button>
+        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus" aria-hidden="true"></i> Crear copia manual ahora</button>
       </form>
       {% if backups|length > 1 %}
       <form method="post" action="{{ url_for('store_bp.admin_backup_delete_all') }}" class="mb-0 backup-form-confirm" data-backup-confirm-message="¿Eliminar TODAS las copias excepto la más reciente ({{ backups[0].name_display }})? Esta acción no se puede deshacer.">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash-alt"></i> Eliminar todas excepto la última</button>
+        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash-alt" aria-hidden="true"></i> Eliminar todas excepto la última</button>
       </form>
       {% endif %}
     </div>
@@ -104,17 +102,19 @@
               <td>{{ b.size_h }}</td>
               <td class="text-nowrap small">{{ b.mtime_h }}</td>
               <td class="text-end text-nowrap">
-                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('store_bp.admin_backup_download', filename=b.name) }}" title="Descargar"><i class="fas fa-download"></i></a>
+                <div class="backup-row-actions">
+                <a class="btn btn-sm btn-outline-secondary backup-download-btn" href="{{ url_for('store_bp.admin_backup_download', filename=b.name) }}" title="Descargar" aria-label="Descargar copia"><i class="fas fa-download" aria-hidden="true"></i></a>
                 <form method="post" action="{{ url_for('store_bp.admin_backup_restore') }}" class="d-inline backup-form-confirm" data-backup-confirm-message="¿Reemplazar la base activa por esta copia? Se guardará antes un archivo .antes_restaurar_*.db junto al .db principal.">
                   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="filename" value="{{ b.name }}">
-                  <button type="submit" class="btn btn-sm btn-outline-secondary ms-1" title="Restaurar BD desde esta copia" aria-label="Restaurar copia"><i class="fas fa-undo-alt"></i></button>
+                  <button type="submit" class="backup-restore-btn" title="Restaurar BD desde esta copia" aria-label="Restaurar copia"><i class="fas fa-undo-alt" aria-hidden="true"></i></button>
                 </form>
                 <form method="post" action="{{ url_for('store_bp.admin_backup_delete') }}" class="d-inline backup-form-confirm" data-backup-confirm-message="¿Eliminar permanentemente este archivo de copia desde el disco? No afecta la base de datos en uso.">
                   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="filename" value="{{ b.name }}">
-                  <button type="submit" class="btn btn-sm btn-outline-warning ms-1" title="Eliminar solo este archivo de backup" aria-label="Eliminar copia"><i class="fas fa-trash-alt"></i></button>
+                  <button type="submit" class="btn-red btn-imap-small" title="Eliminar solo este archivo de backup" aria-label="Eliminar copia"><i class="fas fa-trash" aria-hidden="true"></i></button>
                 </form>
+                </div>
               </td>
             </tr>
             {% endfor %}

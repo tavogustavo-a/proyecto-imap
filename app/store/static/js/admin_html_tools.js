@@ -1039,15 +1039,32 @@
     });
   }
 
+  var infoBtn = document.getElementById('btnHtmlToolsInfo');
+  var infoModal = document.getElementById('htmlToolsInfoModal');
+  var infoBox = document.getElementById('htmlToolsInfoBox');
+  function closeHtmlToolsInfo() {
+    if (infoModal) infoModal.classList.add('hidden');
+  }
+  if (infoBtn && infoModal) {
+    infoBtn.addEventListener('click', function() {
+      infoModal.classList.remove('hidden');
+    });
+    infoModal.addEventListener('click', function(e) {
+      if (e.target === infoModal) closeHtmlToolsInfo();
+    });
+    if (infoBox) infoBox.addEventListener('click', function(e) { e.stopPropagation(); });
+    var infoClose = document.getElementById('htmlToolsInfoClose');
+    var infoOk = document.getElementById('htmlToolsInfoOk');
+    if (infoClose) infoClose.addEventListener('click', closeHtmlToolsInfo);
+    if (infoOk) infoOk.addEventListener('click', closeHtmlToolsInfo);
+  }
+
   var btnCleanHtml = document.getElementById('btnCleanHtml');
   if (btnCleanHtml) {
     btnCleanHtml.addEventListener('click', function() {
-      if (!htmlOutput) return;
-      var html = htmlOutput.value;
-      html = cleanHtmlString(html);
-      html = html.replace(/<(\w+)[^>]*>\s*<\/\1>/g, '');
-      htmlOutput.value = html;
-      showToast('HTML limpiado');
+      if (editor) editor.innerHTML = '';
+      if (htmlOutput) htmlOutput.value = '';
+      showToast('Contenido limpiado');
     });
   }
 })();

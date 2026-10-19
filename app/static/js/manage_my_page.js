@@ -8,7 +8,8 @@
   const createLinkedImapForm = document.getElementById('createLinkedImapForm');
   const imapLimitInfo = document.getElementById('imapLimitInfo');
   const currentImapCountSpan = document.getElementById('currentImapCount');
-  const MAX_LINKED_IMAP_FOR_USERS = 4;
+  const MAX_PAGE_IMAP_SERVERS = 5;
+  let pageImapCanCreate = true;
 
   function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf_token"]');
@@ -24,26 +25,51 @@
 
   // Función para actualizar el contador y estado del botón
   function updateImapLimitInfo(currentCount, canCreateMore) {
+    pageImapCanCreate = !!canCreateMore;
     if (currentImapCountSpan) {
       currentImapCountSpan.textContent = currentCount;
     }
-    
+
     const submitBtn = createLinkedImapForm ? createLinkedImapForm.querySelector('button[type="submit"]') : null;
     if (submitBtn) {
       if (canCreateMore) {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Crear';
         if (imapLimitInfo) {
-          imapLimitInfo.className = 'text-center mb-05 text-small';
+          imapLimitInfo.className = 'text-center mb-1';
         }
       } else {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Límite alcanzado';
         if (imapLimitInfo) {
-          imapLimitInfo.className = 'text-center mb-05 text-small text-danger';
+          imapLimitInfo.className = 'text-center mb-1 text-danger';
         }
       }
     }
+  }
+
+  function openPrimaryEditModal(btn) {
+    const modal = document.getElementById('editPrimaryImapModal');
+    const form = document.getElementById('editPrimaryImapForm');
+    if (!modal || !form || !btn) return;
+    const isPrimary = btn.getAttribute('data-primary') === '1';
+    form.setAttribute('data-editing-primary', isPrimary ? '1' : '0');
+    form.setAttribute('data-editing-id', btn.getAttribute('data-imap-id') || '');
+    const title = document.getElementById('editPrimaryImapTitle');
+    if (title) title.textContent = isPrimary ? 'Editar servidor' : 'Editar servidor';
+    document.getElementById('edit_primary_host').value = btn.getAttribute('data-host') || '';
+    document.getElementById('edit_primary_port').value = btn.getAttribute('data-port') || '993';
+    document.getElementById('edit_primary_username').value = btn.getAttribute('data-username') || '';
+    document.getElementById('edit_primary_password').value = '';
+    document.getElementById('edit_primary_folders').value = btn.getAttribute('data-folders') || 'INBOX';
+    modal.classList.remove('d-none');
+    const hostInput = document.getElementById('edit_primary_host');
+    if (hostInput) hostInput.focus();
+  }
+
+  function closePrimaryEditModal() {
+    const modal = document.getElementById('editPrimaryImapModal');
+    if (modal) modal.classList.add('d-none');
   }
 
   // Función para renderizar la lista de servidores IMAP vinculados
@@ -71,31 +97,37 @@
       div.setAttribute('data-username', (s.username || '').toLowerCase());
 
       const strongHost = document.createElement('strong');
-      strongHost.textContent = `Host: ${escapeHtml(s.host)}`;
-      
+      strongHost.textContent = 'Host: ' + (s.host || '');
+
       const strongUser = document.createElement('strong');
-      strongUser.textContent = `Usuario: ${escapeHtml(s.username)}`;
-      
-      const strongPort = document.createElement('strong');
-      strongPort.textContent = `Puerto: ${s.port}`;
+      strongUser.textContent = 'Usuario: ' + (s.username || '');
 
       const mainText = document.createDocumentFragment();
       mainText.appendChild(strongHost);
       mainText.appendChild(document.createTextNode(' | '));
       mainText.appendChild(strongUser);
-      mainText.appendChild(document.createTextNode(' | '));
-      mainText.appendChild(strongPort);
 
       div.appendChild(mainText);
+
+      const isPrimary = !!s.is_primary;
+      if (isPrimary) {
+        div.setAttribute('data-primary', '1');
+      }
 
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'mt-05';
 
       // Botón Probar
       const testForm = document.createElement('form');
-      testForm.action = `/usuario/my_page/test_imap/${s.id}`;
       testForm.method = 'POST';
       testForm.className = 'd-inline';
+      if (isPrimary) {
+        testForm.classList.add('test-primary-imap-form');
+        testForm.setAttribute('data-imap2-id', imap2Id);
+        testForm.action = '/usuario/my_page/test_imap_ajax';
+      } else {
+        testForm.action = `/usuario/my_page/test_imap/${s.id}`;
+      }
       
       const csrfInput = document.createElement('input');
       csrfInput.type = 'hidden';
@@ -105,33 +137,59 @@
       
       const testBtn = document.createElement('button');
       testBtn.type = 'submit';
-      testBtn.className = 'btn-blue btn-imap-action btn-imap-small';
-      testBtn.textContent = 'Probar';
+      testBtn.className = 'btn-blue row-test-btn';
+      testBtn.title = 'Probar';
+      testBtn.setAttribute('aria-label', 'Probar');
+      const testIcon = document.createElement('i');
+      testIcon.className = 'fas fa-plug';
+      testIcon.setAttribute('aria-hidden', 'true');
+      testBtn.appendChild(testIcon);
       testForm.appendChild(testBtn);
       actionsDiv.appendChild(testForm);
 
       // Botón On/Off
       const toggleBtn = document.createElement('button');
       toggleBtn.type = 'button';
-      toggleBtn.className = s.enabled ? 'btn-red toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small' : 'btn-green toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small';
+      toggleBtn.className = 'toggle-my-page-imap-btn ml-03';
       toggleBtn.setAttribute('data-id', s.id);
       toggleBtn.setAttribute('data-imap2-id', imap2Id);
       toggleBtn.setAttribute('data-enabled', s.enabled ? 'true' : 'false');
-      toggleBtn.textContent = s.enabled ? 'Off' : 'On';
+      if (isPrimary) {
+        toggleBtn.setAttribute('data-primary', '1');
+      }
+      paintStateSwitch(toggleBtn, !!s.enabled);
       actionsDiv.appendChild(toggleBtn);
 
-      // Botón Eliminar
-      const unlinkBtn = document.createElement('button');
-      unlinkBtn.type = 'button';
-      unlinkBtn.className = 'btn-red unlink-my-page-imap-btn ml-03 btn-imap-action btn-imap-small';
-      unlinkBtn.setAttribute('data-imap2-id', imap2Id);
-      unlinkBtn.setAttribute('data-imap-id', s.id);
-      unlinkBtn.title = 'Eliminar';
-      
-      const icon = document.createElement('i');
-      icon.className = 'fas fa-trash';
-      unlinkBtn.appendChild(icon);
-      actionsDiv.appendChild(unlinkBtn);
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn-orange ml-03 edit-page-imap-btn row-icon-btn' + (isPrimary ? ' edit-primary-imap-btn' : '');
+      editBtn.title = 'Editar';
+      editBtn.setAttribute('aria-label', 'Editar');
+      editBtn.setAttribute('data-primary', isPrimary ? '1' : '0');
+      editBtn.setAttribute('data-imap-id', s.id);
+      editBtn.setAttribute('data-imap2-id', imap2Id);
+      editBtn.setAttribute('data-host', s.host || '');
+      editBtn.setAttribute('data-port', s.port != null ? String(s.port) : '993');
+      editBtn.setAttribute('data-username', s.username || '');
+      editBtn.setAttribute('data-folders', s.folders || 'INBOX');
+      const pen = document.createElement('i');
+      pen.className = 'fas fa-pen';
+      pen.setAttribute('aria-hidden', 'true');
+      editBtn.appendChild(pen);
+      actionsDiv.appendChild(editBtn);
+
+      if (!isPrimary) {
+        const unlinkBtn = document.createElement('button');
+        unlinkBtn.type = 'button';
+        unlinkBtn.className = 'btn-red unlink-my-page-imap-btn ml-03 btn-imap-action btn-imap-small';
+        unlinkBtn.setAttribute('data-imap2-id', imap2Id);
+        unlinkBtn.setAttribute('data-imap-id', s.id);
+        unlinkBtn.title = 'Eliminar';
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-trash';
+        unlinkBtn.appendChild(icon);
+        actionsDiv.appendChild(unlinkBtn);
+      }
 
       div.appendChild(actionsDiv);
       linkedImapList.appendChild(div);
@@ -139,6 +197,68 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
+    const editPrimaryImapForm = document.getElementById('editPrimaryImapForm');
+    if (editPrimaryImapForm) {
+      editPrimaryImapForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const imap2Id = editPrimaryImapForm.getAttribute('data-imap2-id');
+        const editingId = editPrimaryImapForm.getAttribute('data-editing-id');
+        const isPrimary = editPrimaryImapForm.getAttribute('data-editing-primary') !== '0';
+        const saveUrl = isPrimary
+          ? '/usuario/my_page/' + imap2Id + '/update_primary_imap'
+          : '/usuario/my_page/' + imap2Id + '/update_linked_imap/' + editingId;
+        const host = document.getElementById('edit_primary_host').value.trim();
+        const port = parseInt(document.getElementById('edit_primary_port').value, 10) || 993;
+        const username = document.getElementById('edit_primary_username').value.trim();
+        const password = document.getElementById('edit_primary_password').value;
+        const folders = document.getElementById('edit_primary_folders').value.trim() || 'INBOX';
+        if (!host || !username) {
+          alert('Host y usuario son obligatorios.');
+          return;
+        }
+        const submitBtn = editPrimaryImapForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Guardando...';
+        }
+        fetch(saveUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            host: host,
+            port: port,
+            username: username,
+            password: password,
+            folders: folders
+          })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') {
+            if (data.servers) renderLinkedImapList(data.servers);
+            if (data.current_count !== undefined && data.can_create_more !== undefined) {
+              updateImapLimitInfo(data.current_count, data.can_create_more);
+            }
+            closePrimaryEditModal();
+          } else {
+            alert('Error: ' + (data.message || 'Error al guardar'));
+          }
+        })
+        .catch(function(err) {
+          alert('Error de red: ' + err.message);
+        })
+        .finally(function() {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Guardar';
+          }
+        });
+      });
+    }
+
     // Cargar conteo inicial de servidores IMAP vinculados
     if (createLinkedImapForm) {
       const imap2Id = createLinkedImapForm.querySelector('button[type="submit"]').getAttribute('data-imap2-id');
@@ -146,8 +266,13 @@
         fetch(`/usuario/my_page/${imap2Id}/linked_imap_servers`)
           .then(res => res.json())
           .then(data => {
-            if (data.status === 'ok' && data.current_count !== undefined && data.can_create_more !== undefined) {
-              updateImapLimitInfo(data.current_count, data.can_create_more);
+            if (data.status === 'ok') {
+              if (data.servers) {
+                renderLinkedImapList(data.servers);
+              }
+              if (data.current_count !== undefined && data.can_create_more !== undefined) {
+                updateImapLimitInfo(data.current_count, data.can_create_more);
+              }
             }
           })
           .catch(() => {
@@ -251,7 +376,6 @@
         .then(res => res.json())
         .then(data => {
           if (data.status === 'ok') {
-            // Actualizar lista de servidores vinculados
             renderLinkedImapList(data.servers);
             
             // Actualizar contador y estado del botón
@@ -285,60 +409,78 @@
 
     // Event listener para probar servidor IMAP (interceptar formulario)
     document.addEventListener('submit', function(e) {
-      if (e.target.closest('form') && e.target.closest('form').action && e.target.closest('form').action.includes('/usuario/my_page/test_imap/')) {
-        e.preventDefault();
-        const form = e.target.closest('form');
-        const actionUrl = form.action;
-        const serverIdMatch = actionUrl.match(/\/usuario\/my_page\/test_imap\/(\d+)/);
-        
-        if (!serverIdMatch) {
-          alert('Error: No se pudo identificar el servidor.');
-          return;
-        }
-        
-        const serverId = parseInt(serverIdMatch[1]);
-        const submitBtn = form.querySelector('button[type="submit"]');
-        
-        // Feedback visual
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          const originalText = submitBtn.textContent;
-          submitBtn.textContent = 'Probando...';
-          
-          fetch('/usuario/my_page/test_imap_ajax', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify({
-              server_id: serverId
-            })
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.status === 'ok') {
-              alert('✅ Éxito: ' + (data.message || 'Conexión exitosa'));
-            } else {
-              alert('❌ Error: ' + (data.message || 'Error al probar conexión'));
-            }
-          })
-          .catch(err => {
-            alert('Error de red: ' + err.message);
-          })
-          .finally(() => {
-            if (submitBtn) {
-              submitBtn.disabled = false;
-              submitBtn.textContent = originalText;
-            }
-          });
-        }
+      const form = e.target.closest('form');
+      if (!form) return;
+      const isPrimaryTest = form.classList.contains('test-primary-imap-form');
+      const isLinkedTest = form.action && form.action.indexOf('/usuario/my_page/test_imap/') !== -1;
+      if (!isPrimaryTest && !isLinkedTest) return;
+
+      e.preventDefault();
+      let serverId = null;
+      if (isPrimaryTest) {
+        serverId = parseInt(form.getAttribute('data-imap2-id'), 10);
+      } else {
+        const serverIdMatch = form.action.match(/\/usuario\/my_page\/test_imap\/(\d+)/);
+        serverId = serverIdMatch ? parseInt(serverIdMatch[1], 10) : NaN;
+      }
+
+      if (!serverId) {
+        alert('Error: No se pudo identificar el servidor.');
         return;
+      }
+
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        paintTestButtonBusy(submitBtn, true);
+
+        fetch('/usuario/my_page/test_imap_ajax', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            server_id: serverId,
+            is_primary: isPrimaryTest
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            alertImapTestResult(true, data.message || 'Conexión correcta.');
+          } else {
+            alertImapTestResult(false, data.message);
+          }
+        })
+        .catch(function () {
+          alertImapTestOffline();
+        })
+        .finally(() => {
+          paintTestButtonBusy(submitBtn, false);
+        });
       }
     });
 
     // Event listeners para acciones de servidores IMAP vinculados
     document.addEventListener('click', function(e) {
+      if (e.target.closest('.edit-page-imap-btn')) {
+        e.preventDefault();
+        openPrimaryEditModal(e.target.closest('.edit-page-imap-btn'));
+        return;
+      }
+
+      if (e.target.closest('#closeEditPrimaryImapModal') || e.target.closest('#cancelEditPrimaryImapModal')) {
+        e.preventDefault();
+        closePrimaryEditModal();
+        return;
+      }
+
+      const editModal = document.getElementById('editPrimaryImapModal');
+      if (editModal && e.target === editModal) {
+        closePrimaryEditModal();
+        return;
+      }
+
       // Toggle On/Off para servidores IMAP vinculados
       if (e.target.closest('.toggle-my-page-imap-btn')) {
         e.preventDefault();
@@ -350,8 +492,7 @@
         // Actualización optimista: cambiar el estado del botón inmediatamente
         const newEnabled = !currentlyEnabled;
         btn.setAttribute('data-enabled', newEnabled.toString());
-        btn.className = newEnabled ? 'btn-red toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small' : 'btn-green toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small';
-        btn.textContent = newEnabled ? 'Off' : 'On';
+        paintStateSwitch(btn, newEnabled);
 
         // Feedback visual mínimo
         btn.disabled = true;
@@ -366,7 +507,8 @@
           body: JSON.stringify({
             server_id: parseInt(imapId),
             imap2_id: imap2Id ? parseInt(imap2Id) : null,
-            currently_enabled: currentlyEnabled
+            currently_enabled: currentlyEnabled,
+            is_primary: btn.getAttribute('data-primary') === '1'
           })
         })
         .then(res => res.json())
@@ -400,16 +542,14 @@
           } else {
             // Revertir cambio optimista en caso de error
             btn.setAttribute('data-enabled', currentlyEnabled.toString());
-            btn.className = currentlyEnabled ? 'btn-red toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small' : 'btn-green toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small';
-            btn.textContent = currentlyEnabled ? 'Off' : 'On';
+            paintStateSwitch(btn, currentlyEnabled);
             alert('Error: ' + (data.message || 'Error al cambiar estado'));
           }
         })
         .catch(err => {
           // Revertir cambio optimista en caso de error de red
           btn.setAttribute('data-enabled', currentlyEnabled.toString());
-          btn.className = currentlyEnabled ? 'btn-red toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small' : 'btn-green toggle-my-page-imap-btn ml-03 btn-imap-action btn-imap-small';
-          btn.textContent = currentlyEnabled ? 'Off' : 'On';
+          paintStateSwitch(btn, currentlyEnabled);
           alert('Error de red: ' + err.message);
         })
         .finally(() => {
@@ -438,7 +578,7 @@
             imapItem.remove();
             // Actualizar contador optimista
             const currentCount = linkedImapList ? linkedImapList.querySelectorAll('.imap-item').length : 0;
-            updateImapLimitInfo(currentCount, currentCount < MAX_LINKED_IMAP_FOR_USERS);
+            updateImapLimitInfo(currentCount, currentCount < MAX_PAGE_IMAP_SERVERS);
           }, 100);
         }
 

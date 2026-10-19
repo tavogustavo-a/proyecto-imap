@@ -1,4 +1,4 @@
-﻿/* Reset/Base */
+/* Reset/Base */
 html, body {
     margin: 0;
     padding: 0;
@@ -6374,10 +6374,78 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     margin: 0 1.2rem 0 0;
   }
   
-  .section-title {
-    margin-left: 1.2rem;
-    margin-bottom: 0.2rem;
-  }
+.productos-menu-row {
+  margin-bottom: 0.2rem;
+}
+
+.section-title {
+  margin-left: 1.2rem;
+  margin-bottom: 0.2rem;
+}
+
+.productos-list-title {
+  margin: 0.15rem 0 0.75rem;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #111;
+}
+
+.store-light #products-table {
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+}
+.store-light #products-table th,
+.store-light #products-table td {
+  border: 1.5px solid #111 !important;
+}
+#products-table th.price-col,
+#products-table td.price-col {
+  text-align: center !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+}
+#products-table .product-price-line {
+  display: inline-block;
+  white-space: nowrap;
+}
+.cupones-section-title {
+  margin: 0 !important;
+  text-align: center;
+  width: 100%;
+}
+.cupones-section {
+  padding-bottom: 1.15rem !important;
+  box-sizing: border-box;
+}
+.coupons-table-wrap.table-wrapper-store {
+  padding: 0 !important;
+  background: #fff !important;
+  border-radius: 0 !important;
+  overflow: hidden;
+}
+.store-light #coupons-table {
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  border-radius: 0 !important;
+  width: 100% !important;
+  margin: 0 !important;
+  background: #fff;
+}
+.store-light #coupons-table th,
+.store-light #coupons-table td,
+.store-light #coupons-table th:first-child,
+.store-light #coupons-table th:last-child,
+.store-light #coupons-table tr:last-child td:first-child,
+.store-light #coupons-table tr:last-child td:last-child {
+  border: 1.5px solid #111 !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+}
+#couponPagination[hidden] {
+  display: none !important;
+}
   
   /* Estilos para el contenedor de búsqueda */
   .productos-buscar-mostrar {
@@ -6444,13 +6512,60 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     box-sizing: border-box;
   }
   
-  .add-product-container .table-wrapper-store {
-    padding: 4px 4px 8px 4px !important;
+  .container-max-width-900 > .store-light.add-product-container {
+    max-width: 800px !important;
+    width: 100%;
+  }
+
+  .container-max-width-900 > .store-light.add-product-container > .table-wrapper-store {
+    width: 100%;
+    max-width: none;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 0.85rem 1rem 1rem !important;
+    box-sizing: border-box;
+  }
+
+  #newProductForm .image-select-container {
+    width: 220px;
+    max-width: 100%;
+  }
+
+  #newProductForm .image-select-trigger-btn {
+    width: 100% !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
   }
   
   #newProductForm {
     max-width: 350px;
+    width: 100%;
     margin: 0 auto;
+  }
+
+  #newProductForm > input#productName,
+  #newProductForm > textarea#productDescription,
+  #newProductForm > .add-product-prices {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  #newProductForm > .add-product-prices {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  #newProductForm .add-product-prices input {
+    flex: 1 1 0;
+    width: 0 !important;
+    min-width: 0;
+    margin: 0 !important;
+    box-sizing: border-box !important;
   }
   
   /* Estilos para el contenedor de previsualización de imagen */
@@ -6514,8 +6629,9 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   /* --- FORZAR BORDES NEGROS EN FORMULARIO DE AÑADIR PRODUCTO --- */
   .add-product-container #newProductForm input[type="text"],
   .add-product-container #newProductForm input[type="number"],
-  .add-product-container #newProductForm select {
-    border: 2.5px solid #111 !important;
+  .add-product-container #newProductForm select,
+  .add-product-container #newProductForm textarea {
+    border: 1.5px solid #111 !important;
     border-radius: 6px !important;
     background: #fff !important;
     color: #111 !important;
@@ -6525,8 +6641,9 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   
   .add-coupon-container input[type="text"],
   .add-coupon-container input[type="number"],
-  .add-coupon-container select {
-    border: 2.5px solid #111 !important;
+  .add-coupon-container select,
+  .add-coupon-container textarea {
+    border: 1.5px solid #111 !important;
     border-radius: 6px !important;
     background: #fff !important;
     color: #111 !important;
@@ -10347,6 +10464,19 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .table-wrapper-store td.text-center {
     text-align: center;
   }
+
+  .herramientas-table-wrap {
+    align-self: stretch;
+    width: 100% !important;
+    max-width: 98% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box;
+  }
+
+  .herramientas-table-wrap table {
+    width: 100% !important;
+  }
   
   /* Formularios en herramientas.html */
   
@@ -10450,15 +10580,84 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
   
   .edit-product-image-container {
-    max-width: 320px;
+    width: auto;
+    max-width: none;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+  }
+
+  @media (min-width: 701px) {
+    .store-dark form#editProductForm .edit-product-input,
+    .store-dark form#editProductForm .textarea-black-border {
+      border-width: 1px !important;
+    }
+  }
+
+  .edit-product-form .textarea-black-border {
+    box-sizing: content-box !important;
+    width: 320px !important;
+    max-width: 320px !important;
+    margin-left: 0;
+    margin-right: 0;
+    padding: 0.5em 0.3rem;
+    border: 1.5px solid #111 !important;
+    border-radius: 3px !important;
   }
   
   .edit-product-form .image-select-trigger-btn {
+    box-sizing: content-box !important;
+    width: 320px !important;
+    max-width: none !important;
+    margin: 0 !important;
+    display: block !important;
     text-align: center !important;
-    margin: 0 auto;
+  }
+
+  .edit-product-prices {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: calc(320px + 0.6rem + 3px);
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .edit-product-price-label {
+    margin: 0 !important;
+    width: auto !important;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    text-align: left !important;
+  }
+
+  .edit-product-prices .edit-product-input {
+    flex: 1 1 0;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  @media (max-width: 700px) {
+    .store-dark form#editProductForm .edit-product-input,
+    .store-dark form#editProductForm .textarea-black-border,
+    .store-dark form#editProductForm .image-select-trigger-btn,
+    .store-dark form#editProductForm .edit-product-image-container,
+    .store-dark form#editProductForm .edit-product-prices {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+
+    .store-dark form#editProductForm .edit-product-prices input {
+      width: 0 !important;
+      max-width: none !important;
+      flex: 1 1 0;
+      margin: 0 !important;
+    }
   }
   
   .edit-product-preview-container {
@@ -10486,9 +10685,60 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     border: none !important;
   }
   
-  /* Agregar espacio debajo de los botones Volver y Guardar */
-  .edit-product-form .d-flex.gap-1.justify-content-center {
-    margin-bottom: 0.5rem;
+  .edit-product-card {
+    padding: 0.7rem 0.85rem 0.85rem;
+    box-sizing: border-box;
+  }
+
+  .edit-product-header {
+    text-align: center;
+    margin-bottom: 0.35rem;
+  }
+
+  .edit-product-header h2 {
+    text-align: center;
+  }
+
+  .edit-product-save-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .store-dark form#editProductForm .edit-product-save-actions .btn-panel {
+    width: auto !important;
+    margin: 0 !important;
+  }
+
+  .edit-product-save-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: calc(320px + 0.6rem + 3px);
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.35rem;
+    margin-bottom: 0.65rem;
+    gap: 0.75rem;
+  }
+
+  .edit-product-visible {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    width: auto;
+  }
+
+  .edit-product-visible input[type="checkbox"] {
+    width: auto !important;
+    margin: 0;
+  }
+
+  .edit-product-save-row .btn-panel.btn-green {
+    margin: 0 !important;
+    width: auto !important;
   }
   
   /* ================== ESTILOS PARA EDIT ROLE ================== */
@@ -11170,15 +11420,20 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .editar-cupon-products-container {
     width: 70%;
     max-width: 340px;
-    margin: 0 auto 1rem auto;
-    padding: 1rem;
+    margin: 0 auto;
+    padding: 0.35rem 0.5rem;
     border-radius: 8px;
   }
   
   .editar-cupon-products-list {
-    max-height: 300px;
+    max-height: 148px;
     overflow-y: auto;
     width: 100%;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-products-list.d-flex {
+    justify-content: flex-start !important;
+    align-items: stretch !important;
   }
   
   .editar-cupon-btn {
@@ -14584,9 +14839,10 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     display: block !important;
     width: 100%;
     text-align: left !important;
-    margin-bottom: 0.2em;
+    margin-bottom: 0;
     white-space: normal !important;
-    font-size: 1em;
+    font-size: 0.92em;
+    line-height: 1.2;
   }
   
   .editar-cupon-products-list input[type="checkbox"] {
@@ -14899,7 +15155,27 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   /* Utilidad para max-height y overflow-y en el modal de productos de cupones */
   .maxh-180-ovy-auto { max-height: 180px !important; overflow-y: auto !important; }
   
-  /* Centrar botón Guardar en el modal de productos */
+#productsModal .products-modal-title {
+  margin: 0 1.6rem 0.75rem;
+  padding: 0;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+#productsModal .products-modal-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.85rem;
+}
+#productsModal .products-modal-actions .btn-panel {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  margin: 0;
+}
   #productsModal .d-flex.flex-wrap.gap-1.justify-content-center:last-of-type {
     justify-content: center !important;
     align-items: center !important;
@@ -23125,7 +23401,7 @@ body.shared-mode .connection-logs-btn {
 
 /* Centrar área de productos */
 .store-light.maxw-800 .editar-cupon-products-container {
-    margin: 1rem auto !important;
+    margin: 0 auto !important;
     text-align: center !important;
 }
 
@@ -23152,6 +23428,389 @@ body.shared-mode .connection-logs-btn {
     .store-light.maxw-800 .editar-cupon-form {
         padding: 0 0.5rem !important;
     }
+}
+
+.editar-cupon-card {
+  padding-bottom: 0.45rem !important;
+  box-sizing: border-box;
+}
+
+.store-light.maxw-800 .editar-cupon-form {
+  max-width: 44rem !important;
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  align-items: stretch !important;
+  text-align: left !important;
+  gap: 0.55rem;
+  padding: 0 1.1rem 0.15rem !important;
+  box-sizing: border-box !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  gap: 0.75rem;
+  margin: 0 !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-row--area {
+  align-items: flex-start !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-row > .editar-cupon-label {
+  display: block !important;
+  flex: 0 0 10.5rem !important;
+  width: 10.5rem !important;
+  max-width: 10.5rem !important;
+  margin: 0 !important;
+  text-align: right !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-row--area > .editar-cupon-label {
+  padding-top: 0.45rem;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-input,
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-textarea,
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-display-field {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  border: 1.5px solid #111 !important;
+  border-radius: 3px !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-textarea {
+  min-height: 72px;
+  padding: 0.4rem 0.55rem !important;
+  resize: vertical;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-display-field {
+  background: #f5f5f5 !important;
+  text-align: center !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-badge {
+  width: auto !important;
+  margin: 0 !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-checkbox-label {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 !important;
+  width: auto !important;
+  text-align: left !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-checkbox-label input[type="checkbox"] {
+  width: auto !important;
+  margin: 0;
+}
+
+.store-light.maxw-800 .editar-cupon-products-title {
+  margin: 0.35rem 0 0.2rem !important;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.store-light.maxw-800 .editar-cupon-products-container {
+  width: min(100%, 22rem) !important;
+  max-width: 340px !important;
+  margin: 0 auto !important;
+  padding: 0.3rem 0.45rem !important;
+  border-radius: 8px !important;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.store-light.maxw-800 .editar-cupon-products-list {
+  max-height: 148px;
+  gap: 0.05rem !important;
+}
+
+.store-light.maxw-800 .editar-cupon-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0.3rem auto 0 !important;
+  box-sizing: border-box;
+}
+
+.store-light.maxw-800 .editar-cupon-actions .btn-panel {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none;
+  height: auto;
+  margin: 0 !important;
+  padding: 0.22rem 0.65rem !important;
+  border-width: 1.5px !important;
+  border-style: solid !important;
+  font-size: 0.82rem !important;
+  line-height: 1.2 !important;
+  text-align: center;
+  box-sizing: border-box !important;
+}
+
+.editar-cupon-saved {
+  width: 100%;
+  margin: 0.35rem 0 0;
+  text-align: center;
+  color: #1e7a34;
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row > .editar-cupon-label {
+    flex: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    text-align: left !important;
+    white-space: normal;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row--estado {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row--estado > .editar-cupon-label {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    white-space: nowrap;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row--num {
+    flex-direction: row !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: 0.5rem;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row--num > .editar-cupon-label {
+    flex: 0 0 9.4rem !important;
+    width: 9.4rem !important;
+    max-width: 9.4rem !important;
+    margin: 0 !important;
+    text-align: left !important;
+    line-height: 1.15;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row--num .editar-cupon-input {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  .editar-cupon-min-pair {
+    display: contents;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.45rem;
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-row {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto !important;
+    gap: 0.3rem;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-label {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    white-space: nowrap !important;
+    font-size: 0.78rem !important;
+    line-height: 1.15;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-input {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 2.4rem !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-actions {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    justify-content: center;
+  }
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-duo,
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 1.15rem;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-row,
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-row {
+  display: grid !important;
+  grid-template-columns: 10.5rem minmax(0, 1fr);
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-label,
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-label {
+  flex: none !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  text-align: right !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-duo--head .editar-cupon-row {
+  display: flex !important;
+  grid-template-columns: none;
+  flex-direction: row !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-duo--head .editar-cupon-row--estado > .editar-cupon-label {
+  flex: 0 0 10.5rem !important;
+  width: 10.5rem !important;
+  max-width: 10.5rem !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-row--public {
+  justify-content: flex-start !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-row--public .editar-cupon-checkbox-label {
+  white-space: nowrap !important;
+  width: auto !important;
+  margin: 0 !important;
+}
+
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-input,
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-input {
+  flex: none !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+@media (max-width: 700px) {
+  .store-light.maxw-800 .editar-cupon-form {
+    gap: 0.32rem;
+    padding-left: 0.4rem !important;
+    padding-right: 0.4rem !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row {
+    gap: 0.12rem;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo,
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair {
+    column-gap: 0.4rem;
+    align-items: stretch !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-row--num,
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-row {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    grid-template-columns: none;
+    gap: 0.08rem;
+    width: auto !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-row--num > .editar-cupon-label,
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-label {
+    flex: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    font-size: 0.78rem !important;
+    line-height: 1.15;
+    white-space: normal !important;
+    text-align: left !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-input,
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-input {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 2.05rem;
+    flex: none !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo--head {
+    display: flex !important;
+    flex-wrap: wrap;
+    column-gap: 0.55rem;
+    row-gap: 0.15rem;
+    align-items: center !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo--head .editar-cupon-row {
+    flex: 0 1 auto !important;
+    width: auto !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.35rem;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo--head .editar-cupon-row--estado > .editar-cupon-label {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  .store-light.maxw-800 .editar-cupon-form .editar-cupon-row--public .editar-cupon-checkbox-label {
+    white-space: normal !important;
+  }
 }
 
 /* Estilos para precio unitario en modal del carrito */
@@ -29640,17 +30299,61 @@ html.admin-licencias-license-support-mode .admin-licencias-shell #adminLicencias
   letter-spacing: 0.02em;
 }
 
-/* Backup: título compacto junto al Menú (evita tamaño típico de h1 del navegador) */
-.backup-page-toolbar-title {
-  font-size: 0.8125rem !important;
-  line-height: 1.35 !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.01em;
+/* Copias de seguridad: título bajo los menús y acciones centradas */
+.backup-page-menu-row {
+  margin-bottom: 0.35rem;
 }
 
-.backup-page-toolbar-icon {
-  font-size: 0.85em;
-  vertical-align: -0.08em;
+.backup-page-title {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #111;
+}
+
+.backup-page-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+.backup-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.backup-page-shell .backup-restore-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 2.55rem;
+  min-width: 2.55rem;
+  height: 1.45rem;
+  margin: 0;
+  padding: 0;
+  border: 2px solid #e67e22;
+  border-radius: 8px;
+  background: #fff;
+  color: #f39c12;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.backup-page-shell .backup-restore-btn i {
+  color: #f39c12;
+}
+
+.backup-page-shell .backup-restore-btn:hover {
+  background: #fff6e8;
 }
 
 .mobile-menu-store .menu-user-info-row--name-only {
@@ -42210,9 +42913,9 @@ html[data-user-va-state="verified"] .admin-licencias-page.user-licencias-shell .
   overflow: hidden;
 }
 .anuncios-admin-panel__header {
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.55);
+  padding: 0.85rem 1rem 0.35rem;
+  border: none;
+  background: transparent;
   text-align: center;
 }
 .anuncios-admin-panel__title {
@@ -42222,6 +42925,12 @@ html[data-user-va-state="verified"] .admin-licencias-page.user-licencias-shell .
   color: #111;
   text-align: center !important;
   line-height: 1.2;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
 }
 .anuncios-admin-panel__body {
   padding: 0.85rem 1rem 1rem;
@@ -42232,10 +42941,56 @@ html[data-user-va-state="verified"] .admin-licencias-page.user-licencias-shell .
   width: 100%;
   max-width: none;
 }
-.anuncios-admin-form .coupon-input,
-.anuncios-edit-modal-content .coupon-input {
+.anuncios-admin-submit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem 1rem;
+  width: 98%;
+  margin: 0.15rem 0 0.35rem;
+}
+.anuncios-admin-ingreso {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1 1 auto;
+  min-width: min(100%, max-content);
+}
+.anuncios-admin-ingreso input[type="checkbox"] {
+  width: auto !important;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.anuncios-admin-ingreso label {
+  margin: 0;
+}
+.anuncios-admin-submit-row > .btn-panel {
+  margin: 0 !important;
+  flex: 0 0 auto;
+}
+.anuncios-admin-panel.store-light .anuncios-admin-form input.coupon-input,
+.anuncios-admin-panel.store-light .anuncios-admin-form select.coupon-input,
+.anuncios-admin-panel.store-light .anuncios-admin-form textarea.coupon-input,
+.anuncios-edit-modal-content input.coupon-input,
+.anuncios-edit-modal-content select.coupon-input,
+.anuncios-edit-modal-content textarea.coupon-input {
   width: 100%;
   box-sizing: border-box;
+  border: 1.5px solid #111 !important;
+}
+
+.add-coupon-container:not(.anuncios-admin-panel) {
+  padding-bottom: 1.25rem !important;
+}
+
+#newCouponForm > .w-100 > .coupon-input,
+#newCouponForm > .w-100 > #showProductsModal {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 .anuncios-admin-list {
   width: 100%;

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'includes/state_switch.html' import state_switch %}
 
 {% block title %}Regex{% endblock %}
 
@@ -69,10 +70,12 @@
 
               {% if not r.protected %}
                 <button
-                  class="btn-orange mr-05 edit-regex-btn"
+                  class="btn-orange mr-05 edit-regex-btn row-icon-btn"
                   data-edit-url="{{ url_for('admin_bp.edit_regex', regex_id=r.id) }}"
+                  title="Editar"
+                  aria-label="Editar"
                 >
-                  Editar
+                  <i class="fas fa-pen" aria-hidden="true"></i>
                 </button>
                 <button
                   class="btn-red delete-regex mr-05 btn-imap-action btn-imap-small"
@@ -83,23 +86,7 @@
                 </button>
               {% endif %}
 
-              {% if r.enabled %}
-                <button
-                  class="btn-red toggle-regex"
-                  data-id="{{ r.id }}"
-                  data-enabled="true"
-                >
-                  Off
-                </button>
-              {% else %}
-                <button
-                  class="btn-green toggle-regex"
-                  data-id="{{ r.id }}"
-                  data-enabled="false"
-                >
-                  On
-                </button>
-              {% endif %}
+              {% call state_switch(r.enabled, 'toggle-regex') %}data-id="{{ r.id }}" data-enabled="{{ 'true' if r.enabled else 'false' }}"{% endcall %}
 
             </div>
           </div>
@@ -119,7 +106,7 @@
           type="text"
           id="newRegexSender"
           name="sender"
-          placeholder="Remitente (opcional)"
+          placeholder="Remitente (opcional). Varios: correo1, correo2"
           class="d-block mb-05"
           autocomplete="off"
         >
@@ -159,5 +146,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_regex.js') }}?v=20260910-escape-pattern" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_regex.js') }}?v=20261016-switch" defer></script>
 {% endblock %}

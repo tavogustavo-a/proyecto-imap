@@ -135,14 +135,14 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (deleteAllEmailsBtn) {
         const totalItems = pagination.total_items || 0;
-        if (totalItems > 0) {
-            deleteAllEmailsBtn.textContent = `Eliminar Todo (${totalItems})`;
-            deleteAllEmailsBtn.disabled = false;
-            deleteAllEmailsBtn.classList.add('btn-inline-block');
-        } else {
-            deleteAllEmailsBtn.textContent = 'Eliminar Todo';
-            deleteAllEmailsBtn.disabled = true;
-        }
+        const label = totalItems > 0
+          ? `Eliminar todos (${totalItems})`
+          : 'Eliminar todos los correos permitidos';
+        deleteAllEmailsBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i> Todo';
+        deleteAllEmailsBtn.title = label;
+        deleteAllEmailsBtn.setAttribute('aria-label', label);
+        deleteAllEmailsBtn.disabled = totalItems <= 0;
+        if (totalItems > 0) deleteAllEmailsBtn.classList.add('btn-inline-block');
     }
     
     if (perPageSelect) {
@@ -214,21 +214,13 @@ document.addEventListener("DOMContentLoaded", function() {
   let currentlyDisplayedEmails = [];
 
   if(searchEmailsForm && searchEmailsInput && emailsSearchResults && deleteDisplayedBtn){
-    // Cambiar el botón Limpiar para solo limpiar el campo
-    const limpiarBtn = searchEmailsForm.querySelector('button[type="submit"]');
-    if (limpiarBtn) {
-      limpiarBtn.type = 'button';
-      limpiarBtn.addEventListener('click', function(e) {
-        searchEmailsInput.value = '';
-        searchEmailsInput.dispatchEvent(new Event('input'));
-      });
-    }
-    // Búsqueda automática sigue funcionando con input
     searchEmailsForm.addEventListener("submit", function(e){
       e.preventDefault();
       const searchText = searchEmailsInput.value.trim();
        if (!searchText) {
+           currentlyDisplayedEmails = [];
            renderEmailsResults([]);
+           if (searchStatusDiv) searchStatusDiv.textContent = '';
            return;
        }
 
@@ -924,10 +916,28 @@ document.addEventListener("DOMContentLoaded", function() {
   const saveCanCreateSubusersBtn = document.getElementById("saveCanCreateSubusersBtn");
 
   if(saveCanCreateSubusersBtn && toggleCanCreateSubusers){
-    saveCanCreateSubusersBtn.addEventListener("click", ()=>{
+    let permMsgTimer = null;
+
+    function showSubusersPermMsg(text, ok) {
+      const msg = document.getElementById("subusersPermMsg");
+      if (!msg) return;
+      msg.hidden = false;
+      msg.textContent = text;
+      msg.classList.toggle("text-color-green", !!ok);
+      msg.classList.toggle("text-color-red", !ok);
+      clearTimeout(permMsgTimer);
+      if (ok) {
+        permMsgTimer = setTimeout(function () { msg.hidden = true; }, 1600);
+      }
+    }
+
+    function setSubusersToolsVisible(on) {
+      const section = document.getElementById("subusersToolsSection");
+      if (section) section.hidden = !on;
+    }
+
+    function saveCanCreateSubusersNow() {
       const newVal = toggleCanCreateSubusers.checked;
-      
-      // Obtenemos los valores actuales del usuario desde el DOM (asumiendo que existen)
       const currentUsername = mainContainer.dataset.username;
       const currentColor = mainContainer.dataset.color || "#ffffff";
       const currentPosition = mainContainer.dataset.position;
@@ -943,9 +953,12 @@ document.addEventListener("DOMContentLoaded", function() {
         currentCanSearchAny === undefined ||
         currentEmail === undefined
       ) {
-          alert("Error: Faltan datos del usuario para guardar. Añade data-* attributes al contenedor #user-management-container.");
+          showSubusersPermMsg("Error: faltan datos del usuario para guardar.", false);
           return;
       }
+
+      toggleCanCreateSubusers.disabled = true;
+      saveCanCreateSubusersBtn.disabled = true;
 
       fetch("/admin/update_user_ajax", {
         method:"POST",
@@ -959,7 +972,7 @@ document.addEventListener("DOMContentLoaded", function() {
           color: currentColor || "#ffffff",
           position: parseInt(currentPosition, 10),
           can_search_any: currentCanSearchAny,
-          password: "", // No se actualiza la contraseña aquí
+          password: "",
           can_create_subusers: newVal,
           email: currentEmail ? currentEmail : null,
           full_name: currentFullName || "",
@@ -969,14 +982,24 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(handleFetchResponse)
       .then(data=>{
         if(data.status==="ok"){
-          alert("Permiso de sub-usuarios guardado.");
-          location.reload(); // Recargar para ver cambios
+          setSubusersToolsVisible(newVal);
+          showSubusersPermMsg("Permiso de sub-usuarios guardado.", true);
         } else {
-          alert("Error: " + data.message);
+          toggleCanCreateSubusers.checked = !newVal;
+          showSubusersPermMsg("Error: " + (data.message || "No se pudo guardar."), false);
         }
       })
-      .catch(err=>alert("Error:"+ err.message));
-    });
+      .catch(err=>{
+        toggleCanCreateSubusers.checked = !newVal;
+        showSubusersPermMsg("Error: " + err.message, false);
+      })
+      .finally(function () {
+        toggleCanCreateSubusers.disabled = false;
+        saveCanCreateSubusersBtn.disabled = false;
+      });
+    }
+
+    saveCanCreateSubusersBtn.addEventListener("click", saveCanCreateSubusersNow);
   }
   // ======= FIN PERMISO SUB-USUARIOS =======
 
@@ -1050,9 +1073,6 @@ document.addEventListener("DOMContentLoaded", function() {
     ul.className = 'modal-subuser-list';
     
     arr.forEach(su=>{
-      const toggleLabel = su.enabled ? "OFF" : "ON";
-      const toggleClass = su.enabled ? "btn-red" : "btn-green";
-      
       const li = document.createElement('li');
       li.className = 'modal-subuser-list-item';
       
@@ -1067,16 +1087,23 @@ document.addEventListener("DOMContentLoaded", function() {
       actionsDiv.className = 'modal-subuser-list-item-actions';
       
       const toggleBtn = document.createElement('button');
-      toggleBtn.className = `${toggleClass} btn-small modal-toggle-subuser`;
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'modal-toggle-subuser';
       toggleBtn.setAttribute('data-id', su.id);
-      toggleBtn.setAttribute('data-enabled', su.enabled);
-      toggleBtn.textContent = toggleLabel;
+      toggleBtn.setAttribute('data-enabled', su.enabled ? 'true' : 'false');
+      paintStateSwitch(toggleBtn, !!su.enabled);
       actionsDiv.appendChild(toggleBtn);
       
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn-red btn-small modal-delete-subuser';
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn-panel btn-red btn-sm modal-delete-subuser';
       deleteBtn.setAttribute('data-id', su.id);
-      deleteBtn.textContent = 'Eliminar';
+      deleteBtn.title = 'Eliminar';
+      deleteBtn.setAttribute('aria-label', 'Eliminar');
+      const deleteIcon = document.createElement('i');
+      deleteIcon.className = 'fas fa-trash';
+      deleteIcon.setAttribute('aria-hidden', 'true');
+      deleteBtn.appendChild(deleteIcon);
       actionsDiv.appendChild(deleteBtn);
       
       contentDiv.appendChild(actionsDiv);
@@ -1089,13 +1116,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
   if(subusersModal && subusersList) {
       subusersList.addEventListener("click", function(e) {
-          const target = e.target;
-          if (target.classList.contains("modal-toggle-subuser")) {
+          const target = e.target.closest(".modal-toggle-subuser");
+          if (target) {
               e.preventDefault();
               const subId = target.dataset.id;
               const currentState = target.dataset.enabled === 'true';
               target.disabled = true;
-              target.textContent = '...';
               
               fetch("/subusers/toggle_subuser_ajax", {
                   method:"POST",
@@ -1109,23 +1135,23 @@ document.addEventListener("DOMContentLoaded", function() {
                   } else {
                       alert("Error: " + data.message);
                       target.disabled = false;
-                      target.textContent = currentState ? 'OFF' : 'ON'; 
+                      paintStateSwitch(target, currentState); 
                   }
               })
               .catch(err => {
                   console.error("Modal toggle error:", err);
                   alert("Error de red: " + err.message);
                   target.disabled = false;
-                  target.textContent = currentState ? 'OFF' : 'ON'; 
+                  paintStateSwitch(target, currentState); 
               });
           }
           
-          if (target.classList.contains("modal-delete-subuser")) {
+          const deleteBtn = e.target.closest(".modal-delete-subuser");
+          if (deleteBtn) {
               e.preventDefault();
-              const subId = target.dataset.id;
+              const subId = deleteBtn.dataset.id;
               if(!confirm("¿Eliminar este sub-usuario?")) return;
-              target.disabled = true;
-              target.textContent = '...';
+              deleteBtn.disabled = true;
               
               fetch("/subusers/delete_subuser_ajax", {
                   method:"POST",
@@ -1138,15 +1164,13 @@ document.addEventListener("DOMContentLoaded", function() {
                      renderSubusersForModal(data.subusers);
                   } else {
                      alert("Error: " + data.message);
-                     target.disabled = false;
-                     target.textContent = 'Eliminar';
+                     deleteBtn.disabled = false;
                   }
               })
               .catch(err => {
                   console.error("Modal delete error:", err);
                   alert("Error de red: " + err.message);
-                  target.disabled = false;
-                  target.textContent = 'Eliminar';
+                  deleteBtn.disabled = false;
               });
           }
       });
@@ -1405,11 +1429,23 @@ document.addEventListener("DOMContentLoaded", function() {
   const searchForm = document.getElementById('searchEmailsForm');
   const searchInput = document.getElementById('searchEmailsInput');
   if (searchForm && searchInput) {
+    const clearEmailsSearchBtn = document.getElementById('clearEmailsSearchBtn');
     let searchTimeout = null;
     searchInput.addEventListener('input', function() {
+      if (clearEmailsSearchBtn) {
+        clearEmailsSearchBtn.classList.toggle('show', !!searchInput.value.trim());
+      }
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => { searchForm.requestSubmit(); }, 250);
     });
+    if (clearEmailsSearchBtn) {
+      clearEmailsSearchBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        searchInput.value = '';
+        searchInput.dispatchEvent(new Event('input'));
+        searchInput.focus();
+      });
+    }
   }
 
   // Cierre automático de popups al hacer clic fuera

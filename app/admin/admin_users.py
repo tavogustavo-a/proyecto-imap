@@ -260,6 +260,7 @@ def search_users_ajax():
             "full_name": u.full_name or "",
             "phone": u.phone or "",
             "email": u.email or "",
+            "unique_allowed_emails": bool(getattr(u, "unique_allowed_emails", False)),
             "saldo_usd": u.saldo_usd or 0,
             "saldo_cop": u.saldo_cop or 0,
             "saldo": float(getattr(u, "saldo", 0) or 0),
@@ -651,6 +652,10 @@ def toggle_user_ajax():
 
         # Si el usuario principal está siendo DESACTIVADO
         elif not user.enabled and estado_anterior:
+            from app.auth.session_tokens import revoke_all_user_tokens
+
+            user.user_session_rev_count += 1
+            revoke_all_user_tokens(user.id)
 
             subusers = User.query.filter_by(parent_id=user.id).all()
             for subuser in subusers:
@@ -661,10 +666,9 @@ def toggle_user_ajax():
                 if estado_actual_sub:
 
                     subuser.enabled = False
-                    # Limpieza de sesión/token para sub-usuario
-                    # Nota: RememberDevice se elimina automáticamente por CASCADE al eliminar el usuario
-                    # Solo invalidamos la sesión incrementando el contador
+                    # Invalida la sesión del sub-usuario y la del principal.
                     subuser.user_session_rev_count += 1
+                    revoke_all_user_tokens(subuser.id)
                 elif subuser.was_enabled is None:
                     subuser.was_enabled = False
             # db.session.commit() # <--- ELIMINAR COMMIT INTERMEDIO
@@ -720,15 +724,13 @@ def delete_user_ajax():
             [user.id] + [s.id for s in subusers],
         )
 
+        from app.auth.session_tokens import revoke_all_user_tokens
+
         for subuser in subusers:
-            # Eliminar el registro del sub-usuario (CASCADE eliminará automáticamente):
-            # - RememberDevice (ondelete='CASCADE')
-            # - AllowedEmail (ondelete='CASCADE')
-            # - Relaciones M2M (user_regex, user_filter, user_service, etc.)
-            # - ChatSession, ChatMessage (ondelete='CASCADE')
-            # - TriggerLog (ondelete='CASCADE')
-            # - Y todas las demás relaciones con CASCADE
+            revoke_all_user_tokens(subuser.id)
             db.session.delete(subuser)
+
+        revoke_all_user_tokens(user.id)
         
         # 2) Eliminar archivos físicos del chat del usuario principal antes del CASCADE
         ChatMessage.delete_attachment_files_for_user(user.id)

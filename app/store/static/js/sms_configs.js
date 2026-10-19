@@ -102,8 +102,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button type="button" class="btn-blue btn-sm reg-sms-config" data-config-id="${config.id}" title="Regex">
                             Reg
                         </button>
-                        <button type="button" class="btn-orange btn-sm edit-sms-config" data-config-id="${config.id}" title="Editar">
-                            <i class="fas fa-edit"></i>
+                        <button type="button" class="btn-orange edit-sms-config row-icon-btn" data-config-id="${config.id}" title="Editar" aria-label="Editar">
+                            <i class="fas fa-pen" aria-hidden="true"></i>
                         </button>
                         <button type="button" class="btn-red btn-sm delete-sms-config btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar">
                             <i class="fas fa-trash"></i>
@@ -269,8 +269,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             </span>
                         </div>
                         <div class="d-flex gap-05">
-                            <button type="button" class="btn-orange btn-sm edit-sms-regex-btn" data-regex-id="${regex.id}" title="Editar">
-                                <i class="fas fa-edit"></i>
+                            <button type="button" class="btn-orange edit-sms-regex-btn row-icon-btn" data-regex-id="${regex.id}" title="Editar" aria-label="Editar">
+                                <i class="fas fa-pen" aria-hidden="true"></i>
                             </button>
                             <button type="button" class="btn-red btn-sm delete-sms-regex-btn" data-regex-id="${regex.id}" title="Eliminar">
                                 <i class="fas fa-trash"></i>

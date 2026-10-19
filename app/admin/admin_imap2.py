@@ -257,7 +257,8 @@ def search_imap2_ajax():
             "enabled": s.enabled,
             "route_path": s.route_path if s.route_path else None,
             "description": s.description if s.description else None,
-            "custom_domain": s.custom_domain if s.custom_domain else None
+            "custom_domain": s.custom_domain if s.custom_domain else None,
+            "buzon_folders": s.buzon_folder_keys(),
         })
     return jsonify({"status": "ok", "servers": data})
 
@@ -314,7 +315,8 @@ def create_imap2_ajax():
                 "enabled": s.enabled,
                 "route_path": s.route_path if s.route_path else None,
                 "description": s.description if s.description else None,
-                "custom_domain": s.custom_domain if s.custom_domain else None
+                "custom_domain": s.custom_domain if s.custom_domain else None,
+            "buzon_folders": s.buzon_folder_keys(),
             })
 
         return jsonify({
@@ -362,7 +364,8 @@ def delete_imap2_ajax():
                 "enabled": s.enabled,
                 "route_path": s.route_path if s.route_path else None,
                 "description": s.description if s.description else None,
-                "custom_domain": s.custom_domain if s.custom_domain else None
+                "custom_domain": s.custom_domain if s.custom_domain else None,
+            "buzon_folders": s.buzon_folder_keys(),
             })
         return jsonify({"status": "ok", "servers": data_out})
     except Exception as e:
@@ -426,11 +429,69 @@ def toggle_imap2_ajax():
                 "folders": s.folders,
                 "enabled": s.enabled,
                 "route_path": s.route_path if s.route_path else None,
-                "description": s.description if s.description else None
+                "description": s.description if s.description else None,
+                "buzon_folders": s.buzon_folder_keys(),
             })
         return jsonify({"status": "ok", "servers": data_out})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
+
+@admin_bp.route("/imap2/<int:server_id>/update_primary_imap", methods=["POST"])
+@admin_required
+@csrf_exempt_route
+def update_imap2_primary_ajax(server_id):
+    """Edita el servidor IMAP2 principal desde la lista. No se puede eliminar."""
+    try:
+        srv = IMAPServer2.query.get_or_404(server_id)
+        data = request.get_json() or {}
+        host = (data.get("host") or "").strip()
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+        folders = (data.get("folders") or "INBOX").strip() or "INBOX"
+        description = (data.get("description") or "").strip()
+        route_path = (data.get("route_path") or "").strip()
+        try:
+            port = int(data.get("port") or 993)
+        except (TypeError, ValueError):
+            port = 993
+
+        if not host or not username:
+            return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
+        if not route_path:
+            return jsonify({"status": "error", "message": "La ruta es obligatoria y debe empezar con '/'."}), 400
+
+        is_valid, error_msg = validate_route_path(route_path, server_id=server_id)
+        if not is_valid:
+            return jsonify({"status": "error", "message": error_msg}), 400
+
+        srv.host = host
+        srv.port = port
+        srv.username = username
+        srv.folders = folders
+        srv.description = description or None
+        srv.route_path = route_path
+        if str(password).strip():
+            srv.password_enc = encrypt_password(str(password).strip())
+        db.session.commit()
+        return jsonify({
+            "status": "ok",
+            "message": "Servidor actualizado.",
+            "server": {
+                "id": srv.id,
+                "host": srv.host,
+                "port": srv.port,
+                "username": srv.username,
+                "folders": srv.folders or "INBOX",
+                "description": srv.description or "",
+                "route_path": srv.route_path or "",
+                "enabled": bool(srv.enabled),
+            },
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error("Error al editar IMAP2 principal: %s", e, exc_info=True)
+        return jsonify({"status": "error", "message": "No se pudo guardar el servidor."}), 400
+
 
 @admin_bp.route("/update_imap2_paragraph/<int:server_id>", methods=["POST"])
 @admin_required
@@ -1275,3 +1336,15 @@ def update_imap2_custom_domain(imap2_id):
 
 # Marcar la función como exenta de CSRF
 update_imap2_custom_domain._csrf_exempt = True
+
+
+@admin_bp.route("/imap2/<int:server_id>/buzon_folders", methods=["POST"])
+@csrf_exempt_route
+@admin_required
+def update_imap2_buzon_folders(server_id):
+    """Guarda las carpetas del buzón que consulta este IMAP2. Lista vacía: no consulta el buzón."""
+    srv = IMAPServer2.query.get_or_404(server_id)
+    data = request.get_json(silent=True) or {}
+    keys = srv.set_buzon_folders(data.get("folders"))
+    db.session.commit()
+    return jsonify({"status": "ok", "folders": keys})

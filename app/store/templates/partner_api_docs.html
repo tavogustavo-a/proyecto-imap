@@ -518,6 +518,12 @@
       color: #93c5fd;
       font-family: inherit;
       font-size: .8rem;
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 42%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .partner-docs .partner-docs-api-licencias h3.admin-api-section-title {
       display: flex;
@@ -596,11 +602,33 @@
       background: rgba(239, 68, 68, .2);
       border: 1px solid rgba(239, 68, 68, .5);
     }
+    .partner-docs #ipList {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
     .partner-docs .ip-item {
-      display: inline-flex; align-items: center; gap: .4rem;
+      display: flex; align-items: flex-start; gap: .4rem;
       background: #0a0f1c; border: 1px solid var(--pd-line);
-      border-radius: 5px; padding: .15rem .5rem; margin: .15rem .25rem .15rem 0;
+      border-radius: 5px; padding: .35rem .5rem; margin: 0;
       font-family: ui-monospace, Consolas, monospace; font-size: .82rem;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .partner-docs .ip-item > span:not(.ip-owner) {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-all;
+    }
+    .partner-docs .ip-item button {
+      flex: 0 0 auto;
+      margin-top: .05rem;
     }
     .partner-docs .ip-item.is-off {
       opacity: .55;
@@ -608,6 +636,37 @@
     }
     .partner-docs .ip-item.is-off .ip-owner {
       color: #fca5a5;
+    }
+    .partner-docs .sec-body,
+    .partner-docs .admin-box,
+    .partner-docs .ip-add-row,
+    .partner-docs .api-add-row {
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .partner-docs .admin-box {
+      overflow: hidden;
+    }
+    .partner-docs .ip-add-row,
+    .partner-docs .api-add-row {
+      flex-wrap: wrap;
+    }
+    .partner-docs .ip-add-row .pd-owner-picker,
+    .partner-docs .api-add-row .pd-owner-picker,
+    .partner-docs .ip-add-row #ipInput,
+    .partner-docs .ip-add-row #codesTokenValue,
+    .partner-docs .api-add-row .api-input,
+    .partner-docs .pd-owner-picker-btn {
+      min-width: 0 !important;
+      max-width: 100%;
+    }
+    .partner-docs .ip-add-row #ipInput,
+    .partner-docs .ip-add-row #codesTokenValue,
+    .partner-docs .api-add-row .api-input {
+      flex: 1 1 12rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .partner-docs .status-msg { font-size: .82rem; margin-left: .5rem; }
     .partner-docs .toc a { color: #93c5fd; text-decoration: none; margin-right: .9rem; font-size: .85rem; }

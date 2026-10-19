@@ -98,6 +98,17 @@ def dashboard():
     
     admin_user = User.query.filter_by(username=current_app.config["ADMIN_USER"]).first()
 
+    from app.models.email_buzon import EmailTag
+    buzon_folder_catalog = [
+        {"value": "inbox", "label": "Recibidos"},
+        {"value": "trash", "label": "Papelera"},
+        {"value": "spam", "label": "Spam"},
+    ]
+    for tag in EmailTag.query.order_by(EmailTag.name.asc()).all():
+        if (tag.name or "").strip().lower() == "spam":
+            continue
+        buzon_folder_catalog.append({"value": f"tag:{tag.id}", "label": tag.name})
+
     return render_template(
         "admin_dashboard.html",
         servers=servers,
@@ -110,7 +121,8 @@ def dashboard():
         # card_opacity=card_opacity, # Ya no es necesario, la plantilla usa site_settings.get
         # current_theme=current_theme, # Ya no es necesario
         site_settings=site_settings_dict, # <-- PASAR EL DICCIONARIO A LA PLANTILLA
-        admin_user=admin_user
+        admin_user=admin_user,
+        buzon_folder_catalog=buzon_folder_catalog
     )
 
 @admin_bp.route("/toggle_email_buzon_ajax", methods=["POST"])
@@ -352,6 +364,10 @@ def logout_all_and_clear_cookies():
                 response.delete_cookie(cookie_name, path='/', domain=request.host)
     
     flash("Se han cerrado todas las sesiones y se han limpiado las cookies.", "info")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Clear-Site-Data"] = '"cookies", "storage"'
     return response
 
 @admin_bp.route("/toggle_dark_mode", methods=["POST"])

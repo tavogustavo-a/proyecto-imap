@@ -7,6 +7,7 @@ from datetime import datetime
 from app.models import User, IMAPServer2, IMAPServer, FilterModel, RegexModel
 from app.models.imap2 import IMAP2TwoFAConfig
 from app.services.imap_service import create_imap_server, test_imap_connection
+from app.services.imap_crypto import encrypt_password
 from app.extensions import db
 from config import Config
 from functools import wraps
@@ -678,6 +679,40 @@ def check_imap2_permission(user, imap2_id):
         return False, None
     return True, imap2_server
 
+# El servidor principal (el que crea el admin) cuenta como el primero.
+# El usuario puede completar la lista hasta este total.
+MAX_PAGE_IMAP_SERVERS = 5
+
+def _user_page_imap_state(imap2_server):
+    """Lista el servidor principal y los vinculados. El primero no se elimina."""
+    linked_servers = imap2_server.linked_imap_servers.all()
+    servers_data = [{
+        "id": imap2_server.id,
+        "host": imap2_server.host,
+        "port": imap2_server.port,
+        "username": imap2_server.username,
+        "folders": imap2_server.folders or "INBOX",
+        "enabled": bool(imap2_server.enabled),
+        "is_primary": True,
+    }]
+    for s in linked_servers:
+        servers_data.append({
+            "id": s.id,
+            "host": s.host,
+            "port": s.port,
+            "username": s.username,
+            "folders": s.folders or "INBOX",
+            "enabled": bool(s.enabled),
+            "is_primary": False,
+        })
+    current_count = len(servers_data)
+    return {
+        "servers": servers_data,
+        "current_count": current_count,
+        "max_allowed": MAX_PAGE_IMAP_SERVERS,
+        "can_create_more": current_count < MAX_PAGE_IMAP_SERVERS,
+    }
+
 @user_auth_bp.route("/my_page/<int:imap2_id>/create_and_link_imap", methods=["POST"])
 @login_required
 @csrf_exempt_route
@@ -707,14 +742,11 @@ def create_and_link_imap_to_my_page(imap2_id):
         if not host or not username:
             return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
 
-        # Verificar límite de 4 servidores IMAP vinculados para usuarios
-        current_linked_count = imap2_server.linked_imap_servers.count()
-        MAX_LINKED_IMAP_FOR_USERS = 4
-        
-        if current_linked_count >= MAX_LINKED_IMAP_FOR_USERS:
+        page_state = _user_page_imap_state(imap2_server)
+        if not page_state["can_create_more"]:
             return jsonify({
                 "status": "error",
-                "message": f"Has alcanzado el límite máximo de {MAX_LINKED_IMAP_FOR_USERS} servidores IMAP vinculados. Puedes eliminar uno existente para crear uno nuevo."
+                "message": f"Has alcanzado el límite máximo de {MAX_PAGE_IMAP_SERVERS} servidores. Puedes eliminar uno de los adicionales para crear otro. El primero no se elimina."
             }), 400
 
         # Crear el servidor IMAP
@@ -730,29 +762,11 @@ def create_and_link_imap_to_my_page(imap2_id):
         
         db.session.commit()
 
-        # Obtener todos los servidores IMAP vinculados para devolver la lista actualizada
-        linked_servers = imap2_server.linked_imap_servers.all()
-        current_count = len(linked_servers)
-        MAX_LINKED_IMAP_FOR_USERS = 4
-        
-        servers_data = []
-        for s in linked_servers:
-            servers_data.append({
-                "id": s.id,
-                "host": s.host,
-                "port": s.port,
-                "username": s.username,
-                "folders": s.folders,
-                "enabled": s.enabled
-            })
-
+        page_state = _user_page_imap_state(imap2_server)
         return jsonify({
             "status": "ok",
             "message": f"Servidor IMAP {host}:{port} creado y vinculado correctamente.",
-            "servers": servers_data,
-            "current_count": current_count,
-            "max_allowed": MAX_LINKED_IMAP_FOR_USERS,
-            "can_create_more": current_count < MAX_LINKED_IMAP_FOR_USERS
+            **page_state,
         }), 200
     except Exception as e:
         db.session.rollback()
@@ -776,27 +790,9 @@ def get_my_page_linked_imap_servers(imap2_id):
         if not has_permission:
             return jsonify({"status": "error", "message": "No tienes permiso"}), 403
         
-        linked_servers = imap2_server.linked_imap_servers.all()
-        current_count = len(linked_servers)
-        MAX_LINKED_IMAP_FOR_USERS = 4
-        
-        servers_data = []
-        for s in linked_servers:
-            servers_data.append({
-                "id": s.id,
-                "host": s.host,
-                "port": s.port,
-                "username": s.username,
-                "folders": s.folders,
-                "enabled": s.enabled
-            })
-        
         return jsonify({
             "status": "ok",
-            "servers": servers_data,
-            "current_count": current_count,
-            "max_allowed": MAX_LINKED_IMAP_FOR_USERS,
-            "can_create_more": current_count < MAX_LINKED_IMAP_FOR_USERS
+            **_user_page_imap_state(imap2_server),
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
@@ -839,16 +835,11 @@ def unlink_imap_from_my_page(imap2_id, imap_id):
         
         db.session.commit()
         
-        # Obtener el conteo actualizado
-        current_count = imap2_server.linked_imap_servers.count()
-        MAX_LINKED_IMAP_FOR_USERS = 4
-        
+        page_state = _user_page_imap_state(imap2_server)
         return jsonify({
             "status": "ok",
             "message": f"Servidor IMAP {imap_server.host}:{imap_server.port} eliminado correctamente.",
-            "current_count": current_count,
-            "max_allowed": MAX_LINKED_IMAP_FOR_USERS,
-            "can_create_more": current_count < MAX_LINKED_IMAP_FOR_USERS
+            **page_state,
         }), 200
     except Exception as e:
         db.session.rollback()
@@ -868,11 +859,21 @@ def test_my_page_imap_ajax():
         if not user:
             return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
         
-        data = request.get_json()
+        data = request.get_json() or {}
         server_id = data.get("server_id")
+        is_primary = data.get("is_primary") in (True, "true", "1", 1)
         
         if not server_id:
             return jsonify({"status": "error", "message": "server_id es requerido"}), 400
+
+        if is_primary:
+            has_permission, imap2_server = check_imap2_permission(user, server_id)
+            if not has_permission or not imap2_server:
+                return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+            is_ok, message = test_imap_connection(server_id, model_cls=IMAPServer2)
+            if is_ok:
+                return jsonify({"status": "ok", "message": message}), 200
+            return jsonify({"status": "error", "message": message}), 200
         
         # Obtener el servidor IMAP
         imap_server = IMAPServer.query.get(server_id)
@@ -978,6 +979,20 @@ def toggle_my_page_imap():
         if not srv_id:
             return jsonify({"status": "error", "message": "server_id es requerido"}), 400
 
+        is_primary = data.get("is_primary") in (True, "true", "1", 1)
+        if is_primary:
+            if not imap2_id or int(srv_id) != int(imap2_id):
+                return jsonify({"status": "error", "message": "Servidor principal no válido"}), 400
+            has_permission, imap2_server = check_imap2_permission(user, imap2_id)
+            if not has_permission or not imap2_server:
+                return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+            imap2_server.enabled = not currently_enabled
+            current_user = User.query.get(user_id)
+            if current_user:
+                session["user_session_rev_count_local"] = current_user.user_session_rev_count
+            db.session.commit()
+            return jsonify({"status": "ok", **_user_page_imap_state(imap2_server)}), 200
+
         srv = IMAPServer.query.get_or_404(srv_id)
         
         # Si tenemos imap2_id, verificar permiso directamente (más rápido)
@@ -1021,33 +1036,119 @@ def toggle_my_page_imap():
         
         db.session.commit()
 
-        # Obtener todos los servidores IMAP vinculados para devolver la lista actualizada
         if imap2_id:
-            # Recargar desde la sesión para obtener datos frescos
             db.session.refresh(imap2_server)
-            linked_servers = imap2_server.linked_imap_servers.all()
-            current_count = len(linked_servers)
-            MAX_LINKED_IMAP_FOR_USERS = 4
-            
-            servers_data = []
-            for s in linked_servers:
-                servers_data.append({
-                    "id": s.id,
-                    "host": s.host,
-                    "port": s.port,
-                    "username": s.username,
-                    "folders": s.folders,
-                    "enabled": s.enabled
-                })
-            return jsonify({
-                "status": "ok",
-                "servers": servers_data,
-                "current_count": current_count,
-                "max_allowed": MAX_LINKED_IMAP_FOR_USERS,
-                "can_create_more": current_count < MAX_LINKED_IMAP_FOR_USERS
-            }), 200
+            return jsonify({"status": "ok", **_user_page_imap_state(imap2_server)}), 200
 
         return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@user_auth_bp.route("/my_page/<int:imap2_id>/update_primary_imap", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def update_primary_imap(imap2_id):
+    """El usuario edita el servidor principal (el que creó el admin). No se puede eliminar."""
+    try:
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"status": "error", "message": "No autenticado"}), 401
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+
+        has_permission, imap2_server = check_imap2_permission(user, imap2_id)
+        if not has_permission or not imap2_server:
+            return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+
+        data = request.get_json() or {}
+        host = (data.get("host") or "").strip()
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+        folders = (data.get("folders") or "INBOX").strip() or "INBOX"
+        try:
+            port = int(data.get("port") or 993)
+        except (TypeError, ValueError):
+            port = 993
+
+        if not host or not username:
+            return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
+
+        imap2_server.host = host
+        imap2_server.port = port
+        imap2_server.username = username
+        imap2_server.folders = folders
+        if password.strip():
+            imap2_server.password_enc = encrypt_password(password.strip())
+
+        current_user = User.query.get(user_id)
+        if current_user:
+            session["user_session_rev_count_local"] = current_user.user_session_rev_count
+
+        db.session.commit()
+        return jsonify({
+            "status": "ok",
+            "message": "Servidor principal actualizado.",
+            **_user_page_imap_state(imap2_server),
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@user_auth_bp.route("/my_page/<int:imap2_id>/update_linked_imap/<int:imap_id>", methods=["POST"])
+@login_required
+@csrf_exempt_route
+def update_linked_imap(imap2_id, imap_id):
+    """El usuario edita un servidor IMAP que él agregó a la página."""
+    try:
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"status": "error", "message": "No autenticado"}), 401
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "Usuario no encontrado"}), 404
+
+        has_permission, imap2_server = check_imap2_permission(user, imap2_id)
+        if not has_permission or not imap2_server:
+            return jsonify({"status": "error", "message": "No tienes permiso"}), 403
+
+        imap_server = IMAPServer.query.get(imap_id)
+        if not imap_server or imap_server not in imap2_server.linked_imap_servers:
+            return jsonify({"status": "error", "message": "Este servidor IMAP no está vinculado."}), 400
+
+        data = request.get_json() or {}
+        host = (data.get("host") or "").strip()
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+        folders = (data.get("folders") or "INBOX").strip() or "INBOX"
+        try:
+            port = int(data.get("port") or 993)
+        except (TypeError, ValueError):
+            port = 993
+
+        if not host or not username:
+            return jsonify({"status": "error", "message": "Host y usuario son obligatorios."}), 400
+
+        imap_server.host = host
+        imap_server.port = port
+        imap_server.username = username
+        imap_server.folders = folders
+        if password.strip():
+            imap_server.password_enc = encrypt_password(password.strip())
+
+        current_user = User.query.get(user_id)
+        if current_user:
+            session["user_session_rev_count_local"] = current_user.user_session_rev_count
+
+        db.session.commit()
+        return jsonify({
+            "status": "ok",
+            "message": "Servidor actualizado.",
+            **_user_page_imap_state(imap2_server),
+        }), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 400

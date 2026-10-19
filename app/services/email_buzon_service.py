@@ -19,7 +19,7 @@ EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES = 5
 
 # Lista de correos (admin buzón): tamaño por defecto y opciones tipo Gmail
 BUZON_LIST_PER_PAGE_DEFAULT = 100
-BUZON_LIST_PER_PAGE_CHOICES = (25, 50, 100, 200)
+BUZON_LIST_PER_PAGE_CHOICES = (25, 50, 100, 200, 500, 1000, 10000)
 
 
 def normalize_buzon_list_page(value):
@@ -558,6 +558,39 @@ def _delete_received_emails_bulk(emails):
     return count
 
 
+def _emails_for_cleanup_key(key):
+    """Correos que pertenecen a una carpeta de la limpieza automática."""
+    if key == "inbox":
+        return ReceivedEmail.query.filter(
+            ReceivedEmail.deleted.is_(False),
+            ~ReceivedEmail.tags.any(),
+        ).all()
+    if key == "trash":
+        return ReceivedEmail.query.filter(ReceivedEmail.deleted.is_(True)).all()
+    if key == "spam":
+        spam_tag = EmailTag.query.filter(func.lower(EmailTag.name) == "spam").first()
+        if not spam_tag:
+            return []
+        return (
+            ReceivedEmail.query.join(ReceivedEmail.tags)
+            .filter(EmailTag.id == spam_tag.id, ReceivedEmail.deleted.is_(False))
+            .all()
+        )
+    if isinstance(key, str) and key.startswith("tag:"):
+        try:
+            tag_id = int(key.split(":", 1)[1])
+        except ValueError:
+            return []
+        if not EmailTag.query.get(tag_id):
+            return []
+        return (
+            ReceivedEmail.query.join(ReceivedEmail.tags)
+            .filter(EmailTag.id == tag_id)
+            .all()
+        )
+    return []
+
+
 def run_scheduled_email_cleanups_for_colombia_clock():
     """
     Ejecuta las reglas EmailCleanup activas cuando la hora Colombia cae en la ventana configurada.
@@ -568,10 +601,11 @@ def run_scheduled_email_cleanups_for_colombia_clock():
 
     - inbox: correos no eliminados y sin etiquetas (misma lógica que vista Recibidos).
     - trash: todos los correos en papelera (borrado permanente).
-    - tag: correos que tienen la etiqueta indicada en cleanup.tag_id (borrado permanente).
+    - spam: correos con la etiqueta spam.
+    - tag:<id>: correos de esa etiqueta (borrado permanente).
+    Una regla puede incluir varias carpetas; se borran todas en la misma hora.
     """
     from app.models.email_cleanup import EmailCleanup
-    from app.models.email_buzon import EmailTag
     from app.utils.timezone import get_colombia_now
 
     now = get_colombia_now()
@@ -585,33 +619,12 @@ def run_scheduled_email_cleanups_for_colombia_clock():
         if not _cleanup_rule_fires_in_window(now, t, window):
             continue
 
-        if rule.folder_type == "inbox":
-            q = ReceivedEmail.query.filter(
-                ReceivedEmail.deleted.is_(False),
-                ~ReceivedEmail.tags.any(),
-            )
-            emails = q.all()
-            n = _delete_received_emails_bulk(emails)
-            total += n
-
-        elif rule.folder_type == "trash":
-            emails = ReceivedEmail.query.filter(ReceivedEmail.deleted.is_(True)).all()
-            n = _delete_received_emails_bulk(emails)
-            total += n
-
-        elif rule.folder_type == "tag":
-            if not rule.tag_id:
-                continue
-            tag = EmailTag.query.get(rule.tag_id)
-            if not tag:
-                continue
-            emails = (
-                ReceivedEmail.query.join(ReceivedEmail.tags)
-                .filter(EmailTag.id == rule.tag_id)
-                .all()
-            )
-            n = _delete_received_emails_bulk(emails)
-            total += n
+        keys = rule.folder_keys()
+        to_delete = {}
+        for key in keys:
+            for email in _emails_for_cleanup_key(key):
+                to_delete[email.id] = email
+        total += _delete_received_emails_bulk(list(to_delete.values()))
 
     try:
         from app.services.email_filter_service import purge_orphan_email_filters

@@ -1391,24 +1391,8 @@ function toggleServer(serverId) {
     if (data.success) {
       // Actualizar el botón según el nuevo estado
       const isEnabled = data.enabled;
-      const icon = toggleBtn.querySelector('i');
-      const span = toggleBtn.querySelector('span');
-      
-      if (isEnabled) {
-        // Servidor ahora está activo -> mostrar OFF (rojo)
-        toggleBtn.className = 'btn btn-red server-toggle-btn';
-        icon.className = 'fas fa-toggle-off';
-        span.textContent = 'OFF';
-        toggleBtn.title = 'Desactivar servidor';
-        toggleBtn.setAttribute('data-enabled', 'true');
-      } else {
-        // Servidor ahora está inactivo -> mostrar ON (verde)
-        toggleBtn.className = 'btn btn-green server-toggle-btn';
-        icon.className = 'fas fa-toggle-on';
-        span.textContent = 'ON';
-        toggleBtn.title = 'Activar servidor';
-        toggleBtn.setAttribute('data-enabled', 'false');
-      }
+      toggleBtn.setAttribute('data-enabled', isEnabled ? 'true' : 'false');
+      paintStateSwitch(toggleBtn, !!isEnabled);
       
       // El estado ahora se muestra solo con el botón ON/OFF
       
@@ -1449,24 +1433,8 @@ function toggleForwarding(forwardingId) {
     if (data.success) {
       // Actualizar el botón según el nuevo estado
       const isEnabled = data.enabled;
-      const icon = toggleBtn.querySelector('i');
-      const span = toggleBtn.querySelector('span');
-      
-      if (isEnabled) {
-        // Reenvío ahora está activo -> mostrar OFF (rojo)
-        toggleBtn.className = 'btn btn-red forwarding-toggle-btn';
-        icon.className = 'fas fa-toggle-off';
-        span.textContent = 'OFF';
-        toggleBtn.title = 'Desactivar reenvío';
-        toggleBtn.setAttribute('data-enabled', 'true');
-      } else {
-        // Reenvío ahora está inactivo -> mostrar ON (verde)
-        toggleBtn.className = 'btn btn-green forwarding-toggle-btn';
-        icon.className = 'fas fa-toggle-on';
-        span.textContent = 'ON';
-        toggleBtn.title = 'Activar reenvío';
-        toggleBtn.setAttribute('data-enabled', 'false');
-      }
+      toggleBtn.setAttribute('data-enabled', isEnabled ? 'true' : 'false');
+      paintStateSwitch(toggleBtn, !!isEnabled);
       
     } else {
       alert('Error al cambiar estado del reenvío: ' + (data.message || 'Error desconocido'));
@@ -1555,29 +1523,16 @@ toggleServerForms.forEach(form => {
       if (response.ok) {
         // Actualizar el botón toggle
         const toggleBtn = form.querySelector('.server-toggle-btn');
-        const serverStatus = form.closest('.server-item').querySelector('.server-status');
+        const serverStatus = form.closest('.server-item') && form.closest('.server-item').querySelector('.server-status');
         
-        // Cambiar el estado visual
-        if (toggleBtn.classList.contains('btn-green')) {
-          // Cambiar a OFF (rojo)
-          toggleBtn.classList.remove('btn-green');
-          toggleBtn.classList.add('btn-red');
-          toggleBtn.innerHTML = '<i class="fas fa-toggle-off"></i><span>OFF</span>';
-          toggleBtn.title = 'Activar servidor';
-          serverStatus.textContent = 'Inactivo';
-          serverStatus.style.color = '#e74c3c';
-        } else {
-          // Cambiar a ON (verde)
-          toggleBtn.classList.remove('btn-red');
-          toggleBtn.classList.add('btn-green');
-          toggleBtn.innerHTML = '<i class="fas fa-toggle-on"></i><span>ON</span>';
-          toggleBtn.title = 'Desactivar servidor';
-          serverStatus.textContent = 'Activo';
-          serverStatus.style.color = '#27ae60';
+        const wasOn = toggleBtn && toggleBtn.classList.contains('is-on');
+        if (toggleBtn) paintStateSwitch(toggleBtn, !wasOn);
+        if (serverStatus) {
+          serverStatus.textContent = wasOn ? 'Inactivo' : 'Activo';
+          serverStatus.style.color = wasOn ? '#e74c3c' : '#27ae60';
         }
         
-        // Mostrar mensaje de éxito
-        const statusText = toggleBtn.classList.contains('btn-green') ? 'activado' : 'desactivado';
+        const statusText = wasOn ? 'desactivado' : 'activado';
         showNotification(`Servidor ${statusText} exitosamente`, 'success');
       } else {
         showNotification('Error al cambiar el estado del servidor', 'error');
@@ -1878,6 +1833,360 @@ function showNotification(message, type) {
   // Event listeners para botones de toggle de servidor - DESHABILITADO
   // const serverToggleBtns = document.querySelectorAll('.server-toggle-btn');
 
+  function buzonCsrfToken() {
+    const el = document.querySelector('#csrf_token');
+    return el ? el.value : '';
+  }
+
+  function showBuzonFormNote(form, ok, message) {
+    if (!form) return;
+    let note = form.querySelector('.buzon-ajax-note');
+    if (!note) {
+      note = document.createElement('p');
+      note.className = 'buzon-ajax-note';
+      form.appendChild(note);
+    }
+    note.textContent = message || '';
+    note.classList.toggle('is-error', !ok);
+    clearTimeout(note._hideTimer);
+    note._hideTimer = setTimeout(function() { note.remove(); }, ok ? 2200 : 4200);
+  }
+
+  function bindForwardingRow(row, forwarding) {
+    const editBtn = row.querySelector('.edit-forwarding-btn');
+    if (editBtn) {
+      editBtn.addEventListener('click', function() {
+        openEditForwardingModal(editBtn);
+      });
+    }
+    const toggleBtn = row.querySelector('.forwarding-toggle-btn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function() {
+        toggleForwarding(forwarding.id);
+      });
+    }
+    const deleteForm = row.querySelector('.delete-forwarding-form');
+    if (deleteForm) {
+      deleteForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const label = row.querySelector('.forwarding-info strong');
+        const name = label ? label.textContent : 'esta dirección';
+        if (confirm('¿Estás seguro de que deseas eliminar el reenvío para ' + name + '?')) {
+          deleteForm.submit();
+        }
+      });
+    }
+  }
+
+  function refreshSmtpAddressList() {
+    const list = document.getElementById('smtpAddressList');
+    const tools = document.getElementById('smtpAddressTools');
+    const pager = document.getElementById('smtpAddressPagination');
+    const info = document.getElementById('smtpAddressPageInfo');
+    const prev = document.getElementById('smtpAddressPrev');
+    const next = document.getElementById('smtpAddressNext');
+    const search = document.getElementById('smtpAddressSearch');
+    if (!list) return;
+    const pageSize = 10;
+    const rows = [...list.querySelectorAll(':scope > .forwarding-item')];
+    const showSearch = rows.length > pageSize;
+    if (tools) tools.hidden = !showSearch;
+    const query = showSearch && search ? search.value.trim().toLowerCase() : '';
+    const matched = rows.filter(function(row) {
+      if (!query) return true;
+      return row.innerText.toLowerCase().indexOf(query) !== -1;
+    });
+    const pages = Math.max(1, Math.ceil(matched.length / pageSize));
+    if (window.smtpAddressPage > pages) window.smtpAddressPage = pages;
+    if (!window.smtpAddressPage || window.smtpAddressPage < 1) window.smtpAddressPage = 1;
+    const start = (window.smtpAddressPage - 1) * pageSize;
+    const pageRows = matched.slice(start, start + pageSize);
+    const visible = new Set(pageRows);
+    rows.forEach(function(row) {
+      row.hidden = !visible.has(row);
+    });
+    let emptyNote = list.querySelector('.smtp-address-no-match');
+    if (query && !matched.length) {
+      if (!emptyNote) {
+        emptyNote = document.createElement('p');
+        emptyNote.className = 'smtp-address-no-match';
+        emptyNote.textContent = 'No hay direcciones que coincidan.';
+        list.appendChild(emptyNote);
+      }
+      emptyNote.hidden = false;
+    } else if (emptyNote) {
+      emptyNote.hidden = true;
+    }
+    const showPager = matched.length > pageSize;
+    if (pager) pager.hidden = !showPager;
+    if (showPager && info && prev && next) {
+      const from = start + 1;
+      const to = Math.min(start + pageSize, matched.length);
+      info.textContent = from + '–' + to + ' de ' + matched.length;
+      prev.disabled = window.smtpAddressPage <= 1;
+      next.disabled = window.smtpAddressPage >= pages;
+      prev.classList.toggle('email-pagination-btn-disabled', prev.disabled);
+      next.classList.toggle('email-pagination-btn-disabled', next.disabled);
+    }
+  }
+  window.refreshSmtpAddressList = refreshSmtpAddressList;
+
+  function appendForwardingRow(forwarding) {
+    const content = document.getElementById('email-forwarding-content');
+    const form = document.querySelector('.smtp-address-add');
+    if (!content || !form || !forwarding) return;
+    const empty = content.querySelector('.no-forwardings');
+    if (empty) empty.remove();
+
+    const row = document.createElement('div');
+    row.className = 'forwarding-item';
+
+    const info = document.createElement('div');
+    info.className = 'forwarding-info';
+    const strong = document.createElement('strong');
+    strong.textContent = forwarding.source_email || forwarding.destination_email || '';
+    info.appendChild(strong);
+    if (forwarding.title) {
+      const title = document.createElement('small');
+      title.className = 'forwarding-title';
+      title.textContent = forwarding.title;
+      info.appendChild(title);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'forwarding-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'btn btn-orange edit-forwarding-btn row-icon-btn';
+    editBtn.setAttribute('data-forwarding-id', forwarding.id);
+    editBtn.setAttribute('data-source', forwarding.source_email || '');
+    editBtn.setAttribute('data-destination', forwarding.destination_email || '');
+    editBtn.setAttribute('data-enabled', forwarding.enabled ? 'true' : 'false');
+    editBtn.setAttribute('data-title', forwarding.title || '');
+    editBtn.setAttribute('data-folders', JSON.stringify(forwarding.folders || []));
+    editBtn.title = 'Editar';
+    editBtn.setAttribute('aria-label', 'Editar');
+    const pen = document.createElement('i');
+    pen.className = 'fas fa-pen';
+    pen.setAttribute('aria-hidden', 'true');
+    editBtn.appendChild(pen);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'user-switch forwarding-toggle-btn' + (forwarding.enabled ? ' is-on' : '');
+    toggleBtn.setAttribute('data-forwarding-id', forwarding.id);
+    toggleBtn.setAttribute('data-enabled', forwarding.enabled ? 'true' : 'false');
+    toggleBtn.setAttribute('aria-pressed', forwarding.enabled ? 'true' : 'false');
+    const track = document.createElement('span');
+    track.className = 'user-switch-track';
+    track.setAttribute('aria-hidden', 'true');
+    const knob = document.createElement('span');
+    knob.className = 'user-switch-knob';
+    track.appendChild(knob);
+    toggleBtn.appendChild(track);
+    if (window.paintStateSwitch) paintStateSwitch(toggleBtn, !!forwarding.enabled);
+
+    const deleteForm = document.createElement('form');
+    deleteForm.method = 'POST';
+    deleteForm.action = '/admin/email-buzon/delete-forwarding/' + forwarding.id;
+    deleteForm.className = 'inline-form delete-forwarding-form';
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = '_csrf_token';
+    csrf.value = buzonCsrfToken();
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'submit';
+    deleteBtn.className = 'btn btn-red delete-forwarding-btn';
+    deleteBtn.title = 'Eliminar reenvío';
+    deleteBtn.setAttribute('aria-label', 'Eliminar reenvío de correo');
+    const trash = document.createElement('i');
+    trash.className = 'fas fa-trash';
+    deleteBtn.appendChild(trash);
+    deleteForm.appendChild(csrf);
+    deleteForm.appendChild(deleteBtn);
+
+    actions.appendChild(editBtn);
+    actions.appendChild(toggleBtn);
+    actions.appendChild(deleteForm);
+    row.appendChild(info);
+    row.appendChild(actions);
+    const list = document.getElementById('smtpAddressList');
+    if (list) list.appendChild(row);
+    else content.insertBefore(row, form);
+    bindForwardingRow(row, forwarding);
+    window.smtpAddressPage = 9999;
+    refreshSmtpAddressList();
+  }
+
+  function bindCleanupRow(row, cleanup) {
+    const editBtn = row.querySelector('.edit-cleanup-btn');
+    if (editBtn) {
+      editBtn.addEventListener('click', function() {
+        openEditCleanupModal(cleanup.id, cleanup.time_24h, cleanup.folders);
+      });
+    }
+    const toggleBtn = row.querySelector('.cleanup-toggle-btn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function() {
+        toggleCleanup(cleanup.id);
+      });
+    }
+    const deleteForm = row.querySelector('.delete-cleanup-form');
+    if (deleteForm) {
+      deleteForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (confirm('¿Estás seguro de que deseas eliminar esta limpieza automática?')) {
+          deleteForm.submit();
+        }
+      });
+    }
+  }
+
+  function appendCleanupRow(cleanup) {
+    const content = document.getElementById('email-cleanup-content');
+    const form = content ? content.querySelector('form.create-server-form') : null;
+    if (!content || !form || !cleanup) return;
+    const empty = content.querySelector('.no-forwardings');
+    if (empty) empty.remove();
+
+    const row = document.createElement('div');
+    row.className = 'forwarding-item';
+
+    const info = document.createElement('div');
+    info.className = 'forwarding-info';
+    const strong = document.createElement('strong');
+    strong.textContent = (cleanup.time_12h || '') + ' - ' + (cleanup.folder_name || '');
+    info.appendChild(strong);
+
+    const actions = document.createElement('div');
+    actions.className = 'forwarding-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'btn btn-orange edit-cleanup-btn row-icon-btn';
+    editBtn.setAttribute('data-cleanup-id', cleanup.id);
+    editBtn.setAttribute('data-cleanup-time', cleanup.time_24h || '');
+    editBtn.setAttribute('data-folders', JSON.stringify(cleanup.folders || ['inbox']));
+    editBtn.title = 'Editar';
+    editBtn.setAttribute('aria-label', 'Editar');
+    const pen = document.createElement('i');
+    pen.className = 'fas fa-pen';
+    pen.setAttribute('aria-hidden', 'true');
+    editBtn.appendChild(pen);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'user-switch cleanup-toggle-btn' + (cleanup.enabled ? ' is-on' : '');
+    toggleBtn.setAttribute('data-cleanup-id', cleanup.id);
+    toggleBtn.setAttribute('data-enabled', cleanup.enabled ? 'true' : 'false');
+    toggleBtn.setAttribute('aria-pressed', cleanup.enabled ? 'true' : 'false');
+    const track = document.createElement('span');
+    track.className = 'user-switch-track';
+    track.setAttribute('aria-hidden', 'true');
+    const knob = document.createElement('span');
+    knob.className = 'user-switch-knob';
+    track.appendChild(knob);
+    toggleBtn.appendChild(track);
+    if (window.paintStateSwitch) paintStateSwitch(toggleBtn, !!cleanup.enabled);
+
+    const deleteForm = document.createElement('form');
+    deleteForm.method = 'POST';
+    deleteForm.action = '/admin/email-buzon/cleanup/delete/' + cleanup.id;
+    deleteForm.className = 'inline-form delete-cleanup-form';
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = '_csrf_token';
+    csrf.value = buzonCsrfToken();
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'submit';
+    deleteBtn.className = 'btn btn-red delete-cleanup-btn';
+    deleteBtn.title = 'Eliminar limpieza automática';
+    deleteBtn.setAttribute('aria-label', 'Eliminar limpieza automática');
+    const trash = document.createElement('i');
+    trash.className = 'fas fa-trash';
+    deleteBtn.appendChild(trash);
+    deleteForm.appendChild(csrf);
+    deleteForm.appendChild(deleteBtn);
+
+    actions.appendChild(editBtn);
+    actions.appendChild(toggleBtn);
+    actions.appendChild(deleteForm);
+    row.appendChild(info);
+    row.appendChild(actions);
+    content.insertBefore(row, form);
+    bindCleanupRow(row, cleanup);
+  }
+
+  const smtpAddressForm = document.querySelector('.smtp-address-add');
+  if (smtpAddressForm) {
+    smtpAddressForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const submitBtn = smtpAddressForm.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      fetch(smtpAddressForm.action, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': buzonCsrfToken(),
+          'Accept': 'application/json'
+        },
+        body: new FormData(smtpAddressForm)
+      })
+      .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+      .then(function(result) {
+        if (result.data && result.data.success && result.data.forwarding) {
+          appendForwardingRow(result.data.forwarding);
+          smtpAddressForm.reset();
+          showBuzonFormNote(smtpAddressForm, true, result.data.message || 'Dirección agregada.');
+        } else {
+          showBuzonFormNote(smtpAddressForm, false, (result.data && result.data.message) || 'No se pudo agregar la dirección.');
+        }
+      })
+      .catch(function() {
+        showBuzonFormNote(smtpAddressForm, false, 'No se pudo agregar la dirección.');
+      })
+      .finally(function() {
+        if (submitBtn) submitBtn.disabled = false;
+      });
+    });
+  }
+
+  const cleanupCreateForm = document.querySelector('#email-cleanup-content form.create-server-form');
+  if (cleanupCreateForm) {
+    cleanupCreateForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const submitBtn = cleanupCreateForm.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      fetch(cleanupCreateForm.action, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': buzonCsrfToken(),
+          'Accept': 'application/json'
+        },
+        body: new FormData(cleanupCreateForm)
+      })
+      .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+      .then(function(result) {
+        if (result.data && result.data.success && result.data.cleanup) {
+          appendCleanupRow(result.data.cleanup);
+          cleanupCreateForm.reset();
+          renderFolderChips('cleanupFoldersValue', 'cleanupFolderChips');
+          showBuzonFormNote(cleanupCreateForm, true, result.data.message || 'Limpieza creada.');
+        } else {
+          showBuzonFormNote(cleanupCreateForm, false, (result.data && result.data.message) || 'No se pudo crear la limpieza.');
+        }
+      })
+      .catch(function() {
+        showBuzonFormNote(cleanupCreateForm, false, 'No se pudo crear la limpieza.');
+      })
+      .finally(function() {
+        if (submitBtn) submitBtn.disabled = false;
+      });
+    });
+  }
+
   // Event listeners para botones de toggle de reenvío
   const forwardingToggleBtns = document.querySelectorAll('.forwarding-toggle-btn');
   forwardingToggleBtns.forEach(btn => {
@@ -1905,12 +2214,8 @@ function showNotification(message, type) {
   const editForwardingBtns = document.querySelectorAll('.edit-forwarding-btn');
   editForwardingBtns.forEach(btn => {
     btn.addEventListener('click', function() {
-      const forwardingId = this.getAttribute('data-forwarding-id');
-      const sourceEmail = this.getAttribute('data-source');
-      const destinationEmail = this.getAttribute('data-destination');
-      
-      if (forwardingId) {
-        openEditForwardingModal(forwardingId, sourceEmail, destinationEmail);
+      if (this.getAttribute('data-forwarding-id')) {
+        openEditForwardingModal(this);
       }
     });
   });
@@ -1954,11 +2259,10 @@ function showNotification(message, type) {
     btn.addEventListener('click', function() {
       const cleanupId = this.getAttribute('data-cleanup-id');
       const cleanupTime = this.getAttribute('data-cleanup-time');
-      const cleanupFolder = this.getAttribute('data-cleanup-folder');
-      const cleanupTagId = this.getAttribute('data-cleanup-tag-id');
+      const cleanupFolders = parseFolderKeys(this.getAttribute('data-folders'));
       
       if (cleanupId) {
-        openEditCleanupModal(cleanupId, cleanupTime, cleanupFolder, cleanupTagId);
+        openEditCleanupModal(cleanupId, cleanupTime, cleanupFolders);
       }
     });
   });
@@ -2020,12 +2324,64 @@ function showNotification(message, type) {
 });
 
 // Funciones para el modal de edición de reenvío
-function openEditForwardingModal(forwardingId, sourceEmail, destinationEmail) {
+function parseFolderKeys(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return String(raw).split(',').map(function(part) { return part.trim(); }).filter(Boolean);
+  }
+}
+
+function smtpFolderCatalog() {
+  const node = document.getElementById('smtpFolderCatalog');
+  if (!node) return [{value: 'inbox', label: 'Recibidos'}];
+  try {
+    const data = JSON.parse(node.textContent || '[]');
+    return Array.isArray(data) && data.length ? data : [{value: 'inbox', label: 'Recibidos'}];
+  } catch (e) {
+    return [{value: 'inbox', label: 'Recibidos'}];
+  }
+}
+
+function folderLabel(value) {
+  const found = smtpFolderCatalog().find(function(item) { return item.value === value; });
+  return found ? found.label : value;
+}
+
+function folderSummary(keys) {
+  const shown = (keys && keys.length) ? keys : ['inbox'];
+  const first = folderLabel(shown[0]) || 'Recibidos';
+  return shown.length > 1 ? first + ' ' + shown.length : first;
+}
+
+function renderFolderChips(inputId, chipsId) {
+  const input = document.getElementById(inputId);
+  const chips = document.getElementById(chipsId);
+  if (!input || !chips) return;
+  const keys = parseFolderKeys(input.value);
+  const shown = keys.length ? keys : ['inbox'];
+  chips.textContent = folderSummary(shown);
+  chips.title = shown.map(folderLabel).join(', ');
+}
+
+function openEditForwardingModal(btn) {
+  if (!btn) return;
+  const forwardingId = btn.getAttribute('data-forwarding-id');
+  const sourceEmail = btn.getAttribute('data-source');
+  const destinationEmail = btn.getAttribute('data-destination');
   const el = document.getElementById('editSourceEmail');
   if (el) {
     const s = sourceEmail && sourceEmail !== 'null' && sourceEmail !== '' ? sourceEmail : null;
     el.value = s || destinationEmail || '';
   }
+  const titleInput = document.getElementById('editForwardingTitle');
+  if (titleInput) titleInput.value = btn.getAttribute('data-title') || '';
+  const foldersInput = document.getElementById('editFoldersValue');
+  if (foldersInput) foldersInput.value = btn.getAttribute('data-folders') || '';
+  renderFolderChips('editFoldersValue', 'editFolderChips');
   document.getElementById('editForwardingForm').action = `/admin/email-buzon/edit-forwarding/${forwardingId}`;
   showElement('editForwardingModal');
 }
@@ -2035,14 +2391,12 @@ function closeEditForwardingModal() {
 }
 
 // Funciones para el modal de edición de limpieza automática
-function openEditCleanupModal(cleanupId, cleanupTime, cleanupFolder, cleanupTagId) {
+function openEditCleanupModal(cleanupId, cleanupTime, folders) {
   document.getElementById('editCleanupTime').value = cleanupTime || '';
-  const folderSelect = document.getElementById('editCleanupFolder');
-  if (cleanupFolder === 'tag' && cleanupTagId) {
-    folderSelect.value = `tag:${cleanupTagId}`;
-  } else {
-    folderSelect.value = cleanupFolder || 'inbox';
-  }
+  const input = document.getElementById('editCleanupFolders');
+  const keys = (folders && folders.length) ? folders : ['inbox'];
+  if (input) input.value = JSON.stringify(keys);
+  renderFolderChips('editCleanupFolders', 'editCleanupFolderChips');
   document.getElementById('editCleanupForm').action = `/admin/email-buzon/cleanup/edit/${cleanupId}`;
   showElement('editCleanupModal');
 }
@@ -2068,20 +2422,7 @@ function toggleCleanup(cleanupId) {
       // Actualizar el botón
       const toggleBtn = document.querySelector(`[data-cleanup-id="${cleanupId}"].cleanup-toggle-btn`);
       if (toggleBtn) {
-        const icon = toggleBtn.querySelector('i');
-        const span = toggleBtn.querySelector('span');
-        
-        if (data.enabled) {
-          toggleBtn.className = 'btn btn-red cleanup-toggle-btn';
-          icon.className = 'fas fa-toggle-off';
-          span.textContent = 'OFF';
-          toggleBtn.title = 'Limpieza activa - Click para desactivar';
-        } else {
-          toggleBtn.className = 'btn btn-green cleanup-toggle-btn';
-          icon.className = 'fas fa-toggle-on';
-          span.textContent = 'ON';
-          toggleBtn.title = 'Limpieza inactiva - Click para activar';
-        }
+        paintStateSwitch(toggleBtn, !!data.enabled);
       }
     } else {
       alert('Error al cambiar estado de limpieza: ' + (data.message || 'Error desconocido'));
@@ -2313,7 +2654,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Acordeón desplegable
   document.querySelectorAll('[data-action="toggle-accordion"]').forEach(header => {
-    header.addEventListener('click', function() {
+    header.addEventListener('click', function(e) {
+      if (e.target.closest('#smtpDomainInfoBtn')) return;
       const targetId = this.getAttribute('data-target');
       const content = document.getElementById(targetId);
       
@@ -2328,6 +2670,41 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
     });
+  });
+
+  const smtpDomainInfoBtn = document.getElementById('smtpDomainInfoBtn');
+  const smtpDomainInfoModal = document.getElementById('smtpDomainInfoModal');
+  const closeSmtpDomainInfoBtn = document.getElementById('closeSmtpDomainInfoBtn');
+  const okSmtpDomainInfoBtn = document.getElementById('okSmtpDomainInfoBtn');
+
+  function openSmtpDomainInfoModal() {
+    if (!smtpDomainInfoModal) return;
+    smtpDomainInfoModal.removeAttribute('hidden');
+    smtpDomainInfoModal.classList.remove('popup-hide');
+    smtpDomainInfoModal.classList.add('popup-show');
+  }
+
+  function closeSmtpDomainInfoModal() {
+    if (!smtpDomainInfoModal) return;
+    smtpDomainInfoModal.classList.remove('popup-show');
+    smtpDomainInfoModal.classList.add('popup-hide');
+    smtpDomainInfoModal.setAttribute('hidden', '');
+  }
+
+  if (smtpDomainInfoBtn) {
+    smtpDomainInfoBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openSmtpDomainInfoModal();
+    });
+  }
+  if (closeSmtpDomainInfoBtn) closeSmtpDomainInfoBtn.addEventListener('click', closeSmtpDomainInfoModal);
+  if (okSmtpDomainInfoBtn) okSmtpDomainInfoBtn.addEventListener('click', closeSmtpDomainInfoModal);
+  document.addEventListener('mousedown', function(e) {
+    if (!smtpDomainInfoModal || !smtpDomainInfoModal.classList.contains('popup-show')) return;
+    if (smtpDomainInfoModal.contains(e.target)) return;
+    if (smtpDomainInfoBtn && smtpDomainInfoBtn.contains(e.target)) return;
+    closeSmtpDomainInfoModal();
   });
 
   // Botones de configuración de etiquetas
@@ -2507,8 +2884,167 @@ function toggleElement(element) {
 
 document.addEventListener('DOMContentLoaded', function () {
   var perPage = document.getElementById('buzonPerPageSelect');
-  if (!perPage || !perPage.form) return;
-  perPage.addEventListener('change', function () {
-    perPage.form.submit();
+  if (perPage && perPage.form) {
+    perPage.addEventListener('change', function () {
+      perPage.form.submit();
+    });
+  }
+
+  renderFolderChips('smtpFoldersValue', 'smtpFolderChips');
+  renderFolderChips('cleanupFoldersValue', 'cleanupFolderChips');
+  if (window.refreshSmtpAddressList) window.refreshSmtpAddressList();
+  const smtpAddressSearch = document.getElementById('smtpAddressSearch');
+  if (smtpAddressSearch) {
+    smtpAddressSearch.addEventListener('input', function() {
+      window.smtpAddressPage = 1;
+      if (window.refreshSmtpAddressList) window.refreshSmtpAddressList();
+    });
+  }
+  const smtpAddressPrev = document.getElementById('smtpAddressPrev');
+  const smtpAddressNext = document.getElementById('smtpAddressNext');
+  if (smtpAddressPrev) {
+    smtpAddressPrev.addEventListener('click', function() {
+      window.smtpAddressPage = Math.max(1, (window.smtpAddressPage || 1) - 1);
+      if (window.refreshSmtpAddressList) window.refreshSmtpAddressList();
+    });
+  }
+  if (smtpAddressNext) {
+    smtpAddressNext.addEventListener('click', function() {
+      window.smtpAddressPage = (window.smtpAddressPage || 1) + 1;
+      if (window.refreshSmtpAddressList) window.refreshSmtpAddressList();
+    });
+  }
+
+  let folderInput = null;
+  let folderChips = null;
+
+  function openSmtpFolderModal(inputId, chipsId) {
+    folderInput = document.getElementById(inputId);
+    folderChips = document.getElementById(chipsId);
+    const selected = parseFolderKeys(folderInput ? folderInput.value : '');
+    const active = selected.length ? selected : ['inbox'];
+    const box = document.getElementById('smtpFolderChoices');
+    if (!box) return;
+    box.textContent = '';
+    const search = document.getElementById('smtpFolderSearch');
+    if (search) search.value = '';
+    smtpFolderCatalog().forEach(function(item) {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = item.value;
+      checkbox.checked = active.indexOf(item.value) !== -1;
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(' ' + item.label));
+      box.appendChild(label);
+    });
+    showElement('smtpFoldersModal');
+  }
+
+  function closeSmtpFolderModal() {
+    hideElement('smtpFoldersModal');
+  }
+
+  document.querySelectorAll('.smtp-folders-open').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      openSmtpFolderModal(btn.getAttribute('data-folders-target'), btn.getAttribute('data-chips-target'));
+    });
   });
+
+  const smtpFolderSearch = document.getElementById('smtpFolderSearch');
+  if (smtpFolderSearch) {
+    smtpFolderSearch.addEventListener('input', function() {
+      const query = smtpFolderSearch.value.trim().toLowerCase();
+      const box = document.getElementById('smtpFolderChoices');
+      if (!box) return;
+      box.querySelectorAll('label').forEach(function(label) {
+        const name = label.textContent.trim().toLowerCase();
+        label.hidden = !!(query && name.indexOf(query) === -1);
+      });
+    });
+  }
+
+  const okFolders = document.getElementById('okSmtpFoldersModal');
+  if (okFolders) {
+    okFolders.addEventListener('click', function() {
+      const box = document.getElementById('smtpFolderChoices');
+      const keys = box ? [...box.querySelectorAll('input:checked')].map(function(input) { return input.value; }) : [];
+      if (folderInput) folderInput.value = JSON.stringify(keys.length ? keys : ['inbox']);
+      if (folderInput && folderChips) renderFolderChips(folderInput.id, folderChips.id);
+      closeSmtpFolderModal();
+    });
+  }
+  ['closeSmtpFoldersModal'].forEach(function(id) {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', closeSmtpFolderModal);
+  });
+
+  const smtpFoldersModal = document.getElementById('smtpFoldersModal');
+  if (smtpFoldersModal) {
+    smtpFoldersModal.addEventListener('click', function(e) {
+      if (e.target === smtpFoldersModal) closeSmtpFolderModal();
+    });
+    const smtpFoldersContent = smtpFoldersModal.querySelector('.edit-modal-content');
+    if (smtpFoldersContent) {
+      smtpFoldersContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+    }
+  }
+
+  const editForwardingForm = document.getElementById('editForwardingForm');
+  if (editForwardingForm) {
+    editForwardingForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const submitBtn = editForwardingForm.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      const tokenEl = document.querySelector('#csrf_token');
+      fetch(editForwardingForm.action, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': tokenEl ? tokenEl.value : '',
+          'Accept': 'application/json'
+        },
+        body: new FormData(editForwardingForm)
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data || !data.success || !data.forwarding) {
+          alert((data && data.message) || 'No se pudo guardar el correo.');
+          return;
+        }
+        const forwarding = data.forwarding;
+        const editBtn = document.querySelector('.edit-forwarding-btn[data-forwarding-id="' + forwarding.id + '"]');
+        if (editBtn) {
+          editBtn.setAttribute('data-source', forwarding.source_email || '');
+          editBtn.setAttribute('data-destination', forwarding.destination_email || '');
+          editBtn.setAttribute('data-title', forwarding.title || '');
+          editBtn.setAttribute('data-folders', JSON.stringify(forwarding.folders || []));
+          const info = editBtn.closest('.forwarding-item').querySelector('.forwarding-info');
+          const strong = info.querySelector('strong');
+          if (strong) strong.textContent = forwarding.source_email || forwarding.destination_email || '';
+          let title = info.querySelector('.forwarding-title');
+          if (forwarding.title) {
+            if (!title) {
+              title = document.createElement('small');
+              title.className = 'forwarding-title';
+              info.appendChild(title);
+            }
+            title.textContent = forwarding.title;
+          } else if (title) {
+            title.remove();
+          }
+        }
+        closeEditForwardingModal();
+        if (window.refreshSmtpAddressList) window.refreshSmtpAddressList();
+      })
+      .catch(function() {
+        alert('No se pudo guardar el correo.');
+      })
+      .finally(function() {
+        if (submitBtn) submitBtn.disabled = false;
+      });
+    });
+  }
 });

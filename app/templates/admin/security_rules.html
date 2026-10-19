@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'includes/state_switch.html' import state_switch %}
 {% block title %}Capa de Seguridad - Reglas{% endblock %}
 
 {% block head %}
@@ -57,15 +58,11 @@
                 <div><strong>Patrón Observador:</strong> <code>{{ rule.observer_pattern }}</code></div>
                 <div><strong>Servidor IMAP:</strong> {{ rule.imap_server_id if rule.imap_server_id else '(Todos)' }}{% if rule.imap_folder %} / Carpeta: {{ rule.imap_folder }}{% endif %}</div>
                 <div> 
-                    <a href="{{ url_for('admin_bp.edit_security_rule_page', rule_id=rule.id) }}" class="btn-panel btn-orange btn-sm">Editar</a>
+                    <a href="{{ url_for('admin_bp.edit_security_rule_page', rule_id=rule.id) }}" class="btn-panel btn-orange btn-sm row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                     <button class="btn-panel btn-red btn-sm delete-security-rule" data-id="{{ rule.id }}" title="Eliminar">
                       <i class="fas fa-trash"></i>
                     </button>
-                    {% if rule.enabled %}
-                        <button class="btn btn-red toggle-security-rule" data-id="{{ rule.id }}" data-enabled="true">Off</button>
-                    {% else %}
-                        <button class="btn btn-green toggle-security-rule" data-id="{{ rule.id }}" data-enabled="false">On</button>
-                    {% endif %}
+                    {% call state_switch(rule.enabled, 'toggle-security-rule') %}data-id="{{ rule.id }}" data-enabled="{{ 'true' if rule.enabled else 'false' }}"{% endcall %}
                 </div>
             </div>
             {% endfor %}
@@ -123,14 +120,12 @@
         <div class="mt-05">
           <form action="{{ url_for('admin_bp.observer_test_imap', server_id=s.id) }}" method="POST" class="d-inline">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn-blue btn-imap-action btn-imap-small">Probar</button>
+            <button type="submit" class="btn-blue row-test-btn" title="Probar" aria-label="Probar">
+              <i class="fas fa-plug" aria-hidden="true"></i>
+            </button>
           </form>
-          {% if s.enabled %}
-            <button class="btn-red toggle-observer-imap ml-03 btn-imap-action btn-imap-small" data-id="{{ s.id }}" data-enabled="true">Off</button>
-          {% else %}
-            <button class="btn-green toggle-observer-imap ml-03 btn-imap-action btn-imap-small" data-id="{{ s.id }}" data-enabled="false">On</button>
-          {% endif %}
-          <button type="button" class="btn-orange ml-03 edit-observer-imap btn-imap-action btn-imap-small" data-url="{{ url_for('admin_bp.observer_edit_imap', server_id=s.id) }}">Editar</button>
+          {% call state_switch(s.enabled, 'toggle-observer-imap ml-03') %}data-id="{{ s.id }}" data-enabled="{{ 'true' if s.enabled else 'false' }}"{% endcall %}
+          <button type="button" class="btn-orange ml-03 edit-observer-imap row-icon-btn" data-url="{{ url_for('admin_bp.observer_edit_imap', server_id=s.id) }}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
           <button type="button" class="btn-panel btn-red btn-sm delete-observer-imap ml-03" data-id="{{ s.id }}" title="Eliminar">
             <i class="fas fa-trash"></i>
           </button>
@@ -185,6 +180,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_security_rules.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_observer_imap.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_security_rules.js') }}?v=20261016-switch" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_observer_imap.js') }}?v=20261016-imap-errores" defer></script>
 {% endblock %}

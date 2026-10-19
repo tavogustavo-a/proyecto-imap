@@ -12,12 +12,17 @@ from app.services.filter_service import (
     delete_filter_service
 )
 from app.admin.decorators import admin_required
+from app.services.sender_list import InvalidSenderError, normalize_sender_list
 
 @admin_bp.route("/create_filter", methods=["POST"])
 @admin_required
 def create_filter():
-    sender = request.form.get("sender", "").strip()
     keyword = request.form.get("keyword", "").strip()
+    try:
+        sender = normalize_sender_list(request.form.get("sender", ""))
+    except InvalidSenderError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("admin_bp.filters_page"))
     enabled = request.form.get("enabled") == "on" 
     # Obtener el valor de cut_after_html
     cut_after_html = request.form.get("cut_after_html", "").strip() # Obtener valor
@@ -38,7 +43,7 @@ def create_filter():
         return redirect(url_for("admin_bp.filters_page"))
 
     new_filter = FilterModel(
-        sender=sender if sender else None,
+        sender=sender,
         keyword=keyword if keyword else None,
         enabled=enabled,
         cut_after_html=cut_after_html if cut_after_html else None,
@@ -117,8 +122,17 @@ def edit_filter(filter_id):
     f = FilterModel.query.get_or_404(filter_id)
 
     if request.method == "POST":
-        sender = request.form.get("sender", "").strip()
         keyword = request.form.get("keyword", "").strip()
+        posted_sender = request.form.get("sender", "")
+        try:
+            sender = normalize_sender_list(posted_sender)
+        except InvalidSenderError as exc:
+            flash(str(exc), "danger")
+            db.session.rollback()
+            f = FilterModel.query.get_or_404(filter_id)
+            db.session.expunge(f)
+            f.sender = posted_sender.strip()
+            return render_template("edit_filter.html", filter=f)
         enabled = True if request.form.get("enabled") == "on" else False
         cut_after_html = request.form.get("cut_after_html", "").strip()
         cut_before_html = request.form.get("cut_before_html", "").strip()

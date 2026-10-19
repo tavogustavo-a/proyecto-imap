@@ -455,11 +455,13 @@
             // Botón Editar
             const editBtn = document.createElement('button');
             editBtn.type = 'button';
-            editBtn.className = 'btn-orange btn-small edit-twofa-config';
+            editBtn.className = 'btn-orange edit-twofa-config row-icon-btn';
             editBtn.setAttribute('data-config-id', config.id.toString());
             editBtn.title = 'Editar';
+            editBtn.setAttribute('aria-label', 'Editar');
             const editIcon = document.createElement('i');
-            editIcon.className = 'fas fa-edit';
+            editIcon.className = 'fas fa-pen';
+            editIcon.setAttribute('aria-hidden', 'true');
             editBtn.appendChild(editIcon);
             buttonsDiv.appendChild(editBtn);
             
@@ -705,4 +707,40 @@
     } else {
         loadConfigs();
     }
+
+    const twofaInfoBtn = document.getElementById('imap2TwofaInfoBtn');
+    const twofaInfoModal = document.getElementById('imap2TwofaInfoModal');
+    const closeTwofaInfoBtn = document.getElementById('closeImap2TwofaInfoBtn');
+    const okTwofaInfoBtn = document.getElementById('okImap2TwofaInfoBtn');
+
+    function openTwofaInfoModal() {
+        if (!twofaInfoModal) return;
+        twofaInfoModal.removeAttribute('hidden');
+        twofaInfoModal.classList.remove('popup-hide');
+        twofaInfoModal.classList.add('popup-show');
+    }
+
+    function closeTwofaInfoModal() {
+        if (!twofaInfoModal) return;
+        twofaInfoModal.classList.remove('popup-show');
+        twofaInfoModal.classList.add('popup-hide');
+        twofaInfoModal.setAttribute('hidden', '');
+    }
+
+    if (twofaInfoBtn) {
+        twofaInfoBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openTwofaInfoModal();
+        });
+    }
+    if (closeTwofaInfoBtn) closeTwofaInfoBtn.addEventListener('click', closeTwofaInfoModal);
+    if (okTwofaInfoBtn) okTwofaInfoBtn.addEventListener('click', closeTwofaInfoModal);
+
+    document.addEventListener('mousedown', function(e) {
+        if (!twofaInfoModal || !twofaInfoModal.classList.contains('popup-show')) return;
+        if (twofaInfoModal.contains(e.target)) return;
+        if (twofaInfoBtn && twofaInfoBtn.contains(e.target)) return;
+        closeTwofaInfoModal();
+    });
 })();

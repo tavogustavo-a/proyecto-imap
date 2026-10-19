@@ -63,8 +63,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     let html = "";
     filters.forEach(f => {
-      const toggleClass = f.enabled ? 'btn-red' : 'btn-green';
-      const toggleText = f.enabled ? 'Off' : 'On';
       const editUrl = `/admin/edit_filter/${f.id}`;
 
       html += `
@@ -77,19 +75,14 @@ document.addEventListener("DOMContentLoaded", function() {
           <div class="mt-05"> 
             <button
               type="button"
-              class="btn-orange mr-05 edit-filter-btn"
-              data-url="${editUrl}" 
+              class="btn-orange mr-05 edit-filter-btn row-icon-btn"
+              data-url="${editUrl}"
+              title="Editar"
+              aria-label="Editar"
             >
-              Editar
+              <i class="fas fa-pen" aria-hidden="true"></i>
             </button>
-            <button
-              type="button"
-              class="${toggleClass} toggle-filter mr-05"
-              data-id="${f.id}"
-              data-enabled="${f.enabled}"
-            >
-              ${toggleText}
-            </button>
+            ${stateSwitchHtml(!!f.enabled, 'toggle-filter mr-05', `data-id="${f.id}" data-enabled="${f.enabled ? 'true' : 'false'}"`)}
             <button
               type="button"
               class="btn-panel btn-red btn-sm delete-filter"
@@ -124,11 +117,12 @@ document.addEventListener("DOMContentLoaded", function() {
     let toggleId = "";
     let currentlyEnabled = false;
 
-    if (target.classList.contains("toggle-filter")) {
+    const filterToggle = target.closest(".toggle-filter");
+    if (filterToggle) {
         isToggle = true;
         toggleUrl = "/admin/toggle_filter_ajax";
-        toggleId = target.getAttribute("data-id");
-        currentlyEnabled = (target.getAttribute("data-enabled") === "true");
+        toggleId = filterToggle.getAttribute("data-id");
+        currentlyEnabled = (filterToggle.getAttribute("data-enabled") === "true");
     }
 
     if (isToggle) {

@@ -167,7 +167,7 @@ function toggleFilter(filterId) {
     return;
   }
   
-  const toggleBtn = filterRow.querySelector('.btn-toggle');
+  const toggleBtn = filterRow.querySelector('.toggle-filter-btn');
   if (!toggleBtn) {
     return;
   }
@@ -187,21 +187,8 @@ function toggleFilter(filterId) {
   .then(data => {
     if (data.success) {
       // Actualizar el botón según el nuevo estado
-      if (data.enabled) {
-        // Filtro ahora está activo -> mostrar OFF (rojo)
-        toggleBtn.className = 'btn btn-toggle btn-off btn-sm toggle-filter-btn';
-        toggleBtn.textContent = 'OFF';
-        toggleBtn.title = 'Filtro activo - Click para desactivar';
-        toggleBtn.setAttribute('aria-label', `Desactivar filtro`);
-        toggleBtn.dataset.filterId = filterId;
-      } else {
-        // Filtro ahora está inactivo -> mostrar ON (verde)
-        toggleBtn.className = 'btn btn-toggle btn-on btn-sm toggle-filter-btn';
-        toggleBtn.textContent = 'ON';
-        toggleBtn.title = 'Filtro inactivo - Click para activar';
-        toggleBtn.setAttribute('aria-label', `Activar filtro`);
-        toggleBtn.dataset.filterId = filterId;
-      }
+      toggleBtn.dataset.filterId = filterId;
+      paintStateSwitch(toggleBtn, !!data.enabled);
       
     } else {
       alert('Error al cambiar estado del filtro: ' + data.message);
@@ -560,7 +547,7 @@ function toggleBlockedSender(senderId) {
     return;
   }
   
-  const toggleBtn = senderRow.querySelector('.btn-toggle');
+  const toggleBtn = senderRow.querySelector('.toggle-blocked-sender-btn');
   if (!toggleBtn) {
     return;
   }
@@ -580,19 +567,8 @@ function toggleBlockedSender(senderId) {
   .then(data => {
     if (data.success) {
       // Actualizar el botón según el nuevo estado
-      if (data.enabled) {
-        toggleBtn.className = 'btn btn-toggle btn-off toggle-blocked-sender-btn';
-        toggleBtn.textContent = 'OFF';
-        toggleBtn.title = 'Remitente bloqueado - Click para desbloquear';
-        toggleBtn.setAttribute('aria-label', `Desbloquear remitente`);
-        toggleBtn.dataset.senderId = senderId;
-      } else {
-        toggleBtn.className = 'btn btn-toggle btn-on toggle-blocked-sender-btn';
-        toggleBtn.textContent = 'ON';
-        toggleBtn.title = 'Remitente desbloqueado - Click para bloquear';
-        toggleBtn.setAttribute('aria-label', `Bloquear remitente`);
-        toggleBtn.dataset.senderId = senderId;
-      }
+      toggleBtn.dataset.senderId = senderId;
+      paintStateSwitch(toggleBtn, !!data.enabled);
       
     } else {
       alert('Error al cambiar estado del remitente: ' + data.message);

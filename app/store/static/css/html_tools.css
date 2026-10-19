@@ -20,7 +20,17 @@
 }
 
 .html-tools-container h2.html-tools-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   font-size: 1.35rem;
+}
+
+.html-tools-title-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .html-toolbar {
@@ -384,19 +394,24 @@
   color: #999;
 }
 
+.html-panel-label {
+  display: block;
+  margin-bottom: 8px;
+  text-align: center;
+  font-weight: 700;
+  color: #333;
+}
+
 .html-output-wrap {
   margin-top: 0;
 }
 
-.html-output-wrap label {
-  font-weight: bold;
-  display: block;
-  margin-bottom: 6px;
-}
-
 .html-output-wrap textarea {
+  display: block;
   width: 100%;
+  box-sizing: border-box;
   min-height: 150px;
+  padding: 8px;
   font-family: monospace;
   font-size: 12px;
   border: 2px solid #e0e0e0;
@@ -408,9 +423,31 @@
 
 .html-output-actions {
   display: flex;
+  justify-content: center;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   margin-top: 8px;
+}
+
+.html-output-actions .html-output-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 8.6rem;
+  min-width: 8.6rem;
+  height: 2.35rem;
+  margin: 0;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  box-sizing: border-box;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* No superponer Limpiar/Copiar sobre el menú lateral abierto */
@@ -427,18 +464,48 @@ body.store-side-menu-open .mobile-menu-store:not(.hidden) {
   z-index: 10051;
 }
 
-.btn-copy-html {
-  padding: 8px 14px;
-  background: #28a745;
+.html-output-btn-clean {
+  background: #6c757d;
   color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
 }
 
-.btn-copy-html:hover {
+.html-output-btn-clean:hover {
+  background: #5a6268;
+}
+
+.html-output-btn-copy {
+  background: #28a745;
+  color: #fff;
+}
+
+.html-output-btn-copy:hover {
   background: #218838;
+}
+
+.html-tools-info-box .html-modal-header {
+  position: relative;
+  justify-content: center;
+}
+
+.html-tools-info-box .html-modal-close {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+}
+
+.html-tools-info-box .html-modal-body p {
+  margin: 0 0 0.75rem;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.html-tools-info-box .html-modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.html-tools-info-box .html-modal-footer {
+  justify-content: center;
 }
 
 .html-tools-btn-back {
@@ -460,23 +527,11 @@ body.store-side-menu-open .mobile-menu-store:not(.hidden) {
 }
 
 .html-tools-container > .d-flex.gap-05.mb-1 {
-  gap: 0.25rem;
   margin-top: 0;
 }
 
 .html-tools-title {
   font-size: 1.35rem;
-}
-
-.html-tools-instructions {
-  font-size: 13px;
-}
-
-.html-tools-img-info {
-  display: block;
-  font-size: 11px;
-  color: #6c757d;
-  margin-top: 4px;
 }
 
 .toast-copy {

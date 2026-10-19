@@ -14,14 +14,19 @@ from app.services.regex_service import (
     regex_list_order_by,
 )
 from app.admin.decorators import admin_required
+from app.services.sender_list import InvalidSenderError, normalize_sender_list
 
 @admin_bp.route("/create_regex", methods=["POST"])
 @admin_required
 def create_regex():
-    sender = request.form.get("sender", "").strip()
     pattern = request.form.get("pattern", "").strip()
     description = request.form.get("description", "").strip()
     enabled = request.form.get("enabled") == "on"
+    try:
+        sender = normalize_sender_list(request.form.get("sender", ""))
+    except InvalidSenderError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("admin_bp.regex_page"))
 
     # Verificamos si es admin => skip revocation
     admin_username = current_app.config["ADMIN_USER"]
@@ -36,7 +41,7 @@ def create_regex():
         return redirect(url_for("admin_bp.regex_page"))
 
     new_regex = RegexModel(
-        sender=sender if sender else None,
+        sender=sender,
         pattern=pattern,
         description=description,  # Descripción es obligatoria, no puede ser None
         enabled=enabled,
@@ -113,10 +118,19 @@ def edit_regex(regex_id):
         return redirect(url_for("admin_bp.regex_page"))
 
     if request.method == "POST":
-        sender = request.form.get("sender", "").strip()
         pattern = request.form.get("pattern", "").strip()
         description = request.form.get("description", "").strip()
         enabled = True if request.form.get("enabled") == "on" else False
+        posted_sender = request.form.get("sender", "")
+        try:
+            sender = normalize_sender_list(posted_sender)
+        except InvalidSenderError as exc:
+            flash(str(exc), "danger")
+            db.session.rollback()
+            r = RegexModel.query.get_or_404(regex_id)
+            db.session.expunge(r)
+            r.sender = posted_sender.strip()
+            return render_template("edit_regex.html", regex=r)
 
         if not pattern:
             flash("El patrón Regex es obligatorio.", "danger")

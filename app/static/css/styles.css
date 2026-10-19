@@ -17,9 +17,34 @@ body.theme-active {
   background-size: cover;
 }
 
-/* Gestión de permisos: el fondo fijo congela el scroll de Chrome en tablas grandes. */
+/* Gestión de permisos: el fondo fijo del body congela el scroll de Chrome.
+   El tema se pinta en una capa fija para que siga viéndose al bajar. */
 body.theme-active:has(.perm-page) {
-  background-attachment: scroll !important;
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+body.theme-active:has(.perm-page)::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+
+body.theme-active.tema1:has(.perm-page)::before {
+  background-image: url("/static/images/tema1.png");
+}
+
+body.theme-active.tema2:has(.perm-page)::before {
+  background-image: url("/static/images/tema2.png");
+}
+
+body.theme-active.tema3:has(.perm-page)::before {
+  background-image: url("/static/images/tema3.png");
 }
 
 .perm-page .permissions-table tbody tr {
@@ -1147,9 +1172,21 @@ noscript p {
     display: none;
 }
 #searchEmailsForm {
-  display: flex;
+  display: block;
   margin-bottom: 0.5rem;
-  align-items: center;
+}
+#searchEmailsForm .search-textarea-clear-btn {
+  min-width: 0 !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  color: #666 !important;
 }
 /* .admin-card + .admin-card { margin-top: 1.5rem; } */ /* Comentado: Regla ya existe globalmente? */
 /* .admin-card h3:first-child, .admin-card h4:first-child { margin-top: 0; } */ /* Comentado: Regla ya existe globalmente? */
@@ -1811,14 +1848,19 @@ noscript p {
 }
 
 #allowedEmailsPagination > #deleteAllEmailsBtn {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
   width: auto !important;
-  min-width: 60px !important;
-  font-size: 1.08rem !important;
+  min-width: 0 !important;
+  height: 2rem;
+  padding: 0 0.55rem !important;
+  font-size: 1rem !important;
   font-weight: 600;
-  padding: 2px 7px !important;
   border-radius: 6px !important;
-  line-height: normal;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -1863,8 +1905,10 @@ noscript p {
 
   #allowedEmailsPagination > #deleteAllEmailsBtn {
     width: auto !important;
-    font-size: 1.08rem !important;
-    padding: 2px 7px !important;
+    min-width: 0 !important;
+    height: 2rem;
+    padding: 0 0.45rem !important;
+    font-size: 1rem !important;
   }
 
   #allowedEmailsPagination .allowed-emails-page-nav .btn-panel,
@@ -1938,7 +1982,25 @@ noscript p {
 
 .modal-subuser-list-item-actions {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+#subusersModal .modal-delete-subuser {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  line-height: 1 !important;
+  flex: 0 0 auto !important;
 }
 
 /* Estilos para items de regex/filtros en modales (sin estilos inline) */
@@ -3188,6 +3250,21 @@ body.dark-mode .filter-match .filter-single-cta a {
   gap: 0.3rem !important;
   margin-left: auto;
 }
+.usuarios-page #userListContainer button.email-user {
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  max-height: 1.45rem !important;
+  padding: 0 0.55rem !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
 .usuarios-page #userListContainer .user-item-name strong {
   white-space: nowrap;
 }
@@ -3517,6 +3594,21 @@ body #popupFilter.popup-base.popup-small {
 }
 #user-management-container .admin-card .subusers-perm-row #saveCanCreateSubusersBtn {
   flex: 0 0 auto;
+}
+@media (min-width: 768px) {
+  #user-management-container .admin-card .user-config-options-stack {
+    align-items: flex-start;
+    width: fit-content;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #user-management-container .admin-card .user-config-options-stack .subusers-perm-row,
+  #user-management-container .admin-card .user-config-options-stack .unique-emails-toggle-row {
+    justify-content: flex-start;
+    width: max-content;
+    max-width: 100%;
+  }
 }
 #user-management-container .admin-card label.d-flex input[type="checkbox"] {
   margin-left: 0 !important;
@@ -4049,6 +4141,273 @@ a.btn-search.btn-rounded:hover {
   line-height: 1;
   cursor: pointer;
 }
+button.user-switch {
+  width: 2.75rem !important;
+  min-width: 2.75rem !important;
+  max-width: 2.75rem !important;
+  height: 1.45rem !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  cursor: pointer;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+button.user-switch:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+button.user-switch .user-switch-track {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: #bdbdbd;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  position: relative;
+  pointer-events: none !important;
+  transition: background 0.18s ease;
+}
+button.user-switch.is-on .user-switch-track {
+  background: #4caf50;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+button.user-switch .user-switch-knob {
+  position: absolute;
+  top: 0.14rem;
+  left: 0.14rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: #f5f5f5;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  pointer-events: none !important;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+button.user-switch.is-on .user-switch-knob {
+  transform: translateX(1.28rem);
+  background: #fff;
+}
+a.row-icon-btn,
+button.row-icon-btn,
+.action-stack a.row-icon-btn,
+.action-stack button.row-icon-btn,
+.store-light .action-stack a.row-icon-btn,
+.store-light .action-stack button.row-icon-btn,
+.store-dark .action-stack a.row-icon-btn,
+.store-dark .action-stack button.row-icon-btn,
+.anuncios-admin-panel .anuncios-admin-row__actions a.row-icon-btn,
+.anuncios-admin-panel .anuncios-admin-row__actions button.row-icon-btn,
+.store-light .anuncios-admin-row__actions a.row-icon-btn,
+.store-light .anuncios-admin-row__actions button.row-icon-btn {
+  all: unset;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #f39c12 !important;
+  background-color: #f39c12 !important;
+  border: 2px solid #f39c12 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  cursor: pointer !important;
+  font-size: 0.8rem !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  vertical-align: middle;
+  flex: 0 0 auto !important;
+  white-space: nowrap;
+}
+a.row-icon-btn:hover,
+button.row-icon-btn:hover,
+.action-stack a.row-icon-btn:hover,
+.action-stack button.row-icon-btn:hover {
+  background: #d35400 !important;
+  background-color: #d35400 !important;
+  border-color: #d35400 !important;
+  color: #fff !important;
+}
+.row-icon-btn i,
+.row-test-btn i {
+  pointer-events: none;
+}
+button.btn-blue.row-test-btn,
+.store-light button.btn-blue.row-test-btn,
+.manage-my-page-shell button.btn-blue.row-test-btn {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  border: 2px solid #0d6efd !important;
+  background: #0d6efd !important;
+  color: #fff !important;
+  font-size: 0.8rem !important;
+  line-height: 1 !important;
+  flex: 0 0 auto !important;
+  cursor: pointer !important;
+}
+button.btn-blue.row-test-btn:hover,
+.store-light button.btn-blue.row-test-btn:hover {
+  background: #0b5ed7 !important;
+  border-color: #0b5ed7 !important;
+  color: #fff !important;
+}
+button.btn-blue.row-test-btn.is-testing,
+button.btn-blue.row-test-btn.is-testing:hover,
+.store-light button.btn-blue.row-test-btn.is-testing,
+.manage-my-page-shell button.btn-blue.row-test-btn.is-testing {
+  background: #f39c12 !important;
+  border-color: #e67e22 !important;
+  color: #fff !important;
+  cursor: wait !important;
+  opacity: 1 !important;
+}
+.imap-test-notice {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10050;
+  max-width: min(92vw, 420px);
+  padding: 12px 16px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+.imap-test-notice--ok {
+  background: #4caf50;
+}
+.imap-test-notice--fail {
+  background: #e74c3c;
+}
+/* En Gestionar mi página, store.css pinta el naranja con borde grueso.
+   El lápiz debe verse igual que en el admin. */
+.manage-my-page-shell button.btn-orange.row-icon-btn,
+.store-light button.btn-orange.row-icon-btn {
+  background: #f39c12 !important;
+  background-color: #f39c12 !important;
+  border: 2px solid #f39c12 !important;
+  border-width: 2px !important;
+  border-style: solid !important;
+  color: #fff !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  line-height: 1 !important;
+}
+.manage-my-page-shell button.btn-orange.row-icon-btn:hover,
+.store-light button.btn-orange.row-icon-btn:hover {
+  background: #d35400 !important;
+  background-color: #d35400 !important;
+  border-color: #d35400 !important;
+}
+/* Misma separación entre Probar, interruptor, lápiz y basura que en el admin. */
+.manage-my-page-shell .imap-item > .mt-05 {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+.manage-my-page-shell .imap-item > .mt-05 > form,
+.manage-my-page-shell .imap-item > .mt-05 > button,
+.manage-my-page-shell .imap-item > .mt-05 > form > button {
+  margin: 0 !important;
+}
+#imap2List .imap-item > .mt-05 {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem !important;
+}
+#imap2List .imap-item > .mt-05 > form,
+#imap2List .imap-item > .mt-05 > button,
+#imap2List .imap-item > .mt-05 > form > button,
+#imap2List .imap-item > .mt-05 .btn-imap-small,
+#imap2List .imap-item > .mt-05 .ml-03 {
+  margin: 0 !important;
+}
+.import-export-title {
+  text-align: center;
+}
+.import-export-row {
+  justify-content: center;
+}
+.import-export-row label {
+  text-align: center;
+}
+button.btn-blue.row-test-btn.buzon-imap2-btn {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  padding: 0 0.55rem !important;
+  gap: 0.28rem;
+}
+.imap2-buzon-folder-search {
+  width: 100%;
+  box-sizing: border-box;
+  height: 2.45rem;
+  margin: 0.35rem 0 0.15rem;
+  padding: 0 0.7rem;
+  border: 2px solid #111 !important;
+  border-radius: 6px !important;
+  background: #fff;
+}
+.imap2-buzon-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 0.5rem 0 1rem;
+}
+.imap2-buzon-folder-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.imap2-buzon-folder-list label[hidden] {
+  display: none !important;
+}
+.imap2-buzon-heading .admin-global-api-info-btn {
+  margin-left: 0.35rem !important;
+  vertical-align: middle;
+}
+.imap2-buzon-info-overlay {
+  z-index: 10050;
+}
 .duplicate-user-btn:hover {
   background: #4f6ef7;
   border-color: #4f6ef7;
@@ -4094,6 +4453,50 @@ a.btn-search.btn-rounded:hover {
   margin-right: 0 !important;
   float: left !important;
   display: inline-block !important;
+}
+
+/* Mismo espacio entre Menú y Menú2 que en Gestión de Usuarios para Soporte. */
+:is(.d-flex, nav, .email-menu-buttons, .admin-store-menus, .purchase-history-admin-toolbar, .configuraciones-admin-toolbar, .herramientas-admin-toolbar):has(> #menuToggleBtn):has(> #menu2ToggleBtn),
+:is(.d-flex, .admin-store-menus):has(> #menu2ToggleBtn):has(> #menu3ToggleBtn) {
+  gap: 11px !important;
+}
+#menuToggleBtn:has(+ #menu2ToggleBtn),
+#menu1ToggleBtn:has(+ #menu2ToggleBtn),
+#menu2ToggleBtn:has(+ #menu3ToggleBtn) {
+  margin-right: 0 !important;
+}
+#menuToggleBtn + #menu2ToggleBtn,
+#menu1ToggleBtn + #menu2ToggleBtn,
+#menu2ToggleBtn + #menu3ToggleBtn {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Misma distancia al borde superior del panel que en /admin/ (15px). */
+#menuToggleBtn,
+#menu1ToggleBtn,
+#menu2ToggleBtn,
+#menu3ToggleBtn {
+  margin-top: 0 !important;
+}
+.admin-card:has(#menuToggleBtn),
+.store-light:has(#menuToggleBtn),
+.store-light:has(#menu1ToggleBtn),
+.html-tools-container:has(#menuToggleBtn),
+.email-interface:has(#menuToggleBtn),
+.card:has(#menuToggleBtn) {
+  padding-top: 15px !important;
+}
+.store-front-header:has(#menuToggleBtn),
+.admin-licencias-toolbar:has(#menuToggleBtn),
+.email-menu-buttons,
+.configuraciones-admin-toolbar:has(#menuToggleBtn),
+.herramientas-admin-toolbar:has(#menuToggleBtn),
+.purchase-history-admin-toolbar:has(#menuToggleBtn),
+.worksheet-panel > .d-flex.p-05-12,
+.admin-licencias-page > .d-flex.p-05-12 {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
 .select-auto {
@@ -5094,14 +5497,159 @@ a.btn-search.btn-rounded:hover {
   overflow: visible !important;
 }
 
+/* Gestionar mi página: sin el panel blanco de la tienda.
+   Las tarjetas quedan sueltas sobre el fondo, como en el admin. */
+.manage-my-page-shell.store-light.store-front-main {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  max-width: 1000px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  color: inherit !important;
+}
+.manage-my-page-menu-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.35rem;
+}
+.manage-my-page-menu-row #menuToggleBtn,
+.manage-my-page-menu-row #menu2ToggleBtn,
+.manage-my-page-menu-row a.menu-btn-worksheet {
+  float: none !important;
+  position: static !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 6.4rem !important;
+  min-width: 6.4rem !important;
+  max-width: 6.4rem !important;
+  height: 2.05rem !important;
+  min-height: 2.05rem !important;
+  padding: 0 0.45rem !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 8px !important;
+  border: 2px solid #0d6efd !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: #fff !important;
+  text-align: center !important;
+}
+.manage-my-page-shell button.btn-green {
+  background: #4caf50 !important;
+  color: #fff !important;
+  border: 2px solid #4caf50 !important;
+  border-radius: 6px !important;
+  font-size: 1.08rem !important;
+  font-weight: 600 !important;
+  padding: 2px 7px !important;
+  min-width: 60px !important;
+  width: auto !important;
+  height: auto !important;
+  line-height: normal !important;
+  box-sizing: border-box !important;
+}
+.manage-my-page-shell button.btn-green:hover {
+  background: #388e3c !important;
+  border-color: #388e3c !important;
+}
+.manage-my-page-shell #imap2-twofa-upload-qr-btn,
+.manage-my-page-shell #edit-imap2-twofa-upload-qr-btn,
+.twofa-section-card #imap2-twofa-upload-qr-btn,
+#imap2-twofa-edit-modal #edit-imap2-twofa-upload-qr-btn {
+  font-size: 1.08rem !important;
+  font-weight: 600 !important;
+  padding: 2px 7px !important;
+  min-width: 60px !important;
+  width: auto !important;
+  height: auto !important;
+  line-height: normal !important;
+  border-radius: 6px !important;
+  border-width: 2px !important;
+  box-sizing: border-box !important;
+}
+.manage-my-page-shell .admin-card,
+.manage-my-page-shell .card {
+  background-color: var(--card-bg) !important;
+  color: var(--text-color) !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07) !important;
+  border-radius: 16px !important;
+  max-width: 750px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+.imap2-paragraph-actions {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100%;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
 .imap2-background-upload-label {
   cursor: pointer;
   margin: 0;
 }
 
-.imap2-background-delete-btn {
+button.btn-red.imap2-background-delete-btn,
+.store-light button.btn-red.imap2-background-delete-btn,
+.manage-my-page-shell button.btn-red.imap2-background-delete-btn {
   cursor: pointer;
-  margin: 0;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  line-height: 1 !important;
+  flex: 0 0 auto !important;
+}
+
+/* Basura de fila: mismo ancho que el lápiz de editar. No toca “Limpiar Logs” ni “Eliminar todo”. */
+button.btn-red.btn-imap-small:has(> i.fa-trash),
+.store-light button.btn-red.btn-imap-small:has(> i.fa-trash),
+button.btn-red.btn-sm:has(> i.fa-trash):not(.mobile-menu-btn),
+button.btn-panel.btn-red:has(> i.fa-trash):not(.mobile-menu-btn),
+button.btn.btn-red.btn-sm:has(> i.fa-trash),
+button.action-btn.action-red:has(> i.fa-trash),
+.action-stack button.action-btn.action-red:has(> i.fa-trash),
+.store-light .action-stack button.action-btn.action-red:has(> i.fa-trash),
+.store-light .action-stack button.btn-panel.btn-red.btn-sm:has(> i.fa-trash),
+button.delete-forwarding-btn:has(> i.fa-trash),
+button.delete-cleanup-btn:has(> i.fa-trash) {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  line-height: 1 !important;
+  flex: 0 0 auto !important;
 }
 
 /* Estilos para tags de usuarios en edit_imap2.html */
@@ -5619,14 +6167,14 @@ body:not(.theme-active) .site-footer__social-config-btn {
   #menu2ToggleBtnAccum.btn-panel,
   .menu-toggle-btn.btn-panel,
   .mobile-menu-store .mobile-menu-btn,
-  .btn-panel.btn-blue:not(.btn-sm):not(.mobile-menu-btn),
-  .btn-panel.btn-red:not(.btn-sm):not(.mobile-menu-btn),
+  .btn-panel.btn-blue:not(.btn-sm):not(.mobile-menu-btn):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn),
+  .btn-panel.btn-red:not(.btn-sm):not(.mobile-menu-btn):not(:has(> i.fa-trash)),
   .btn-panel.btn-green:not(.btn-sm):not(.mobile-menu-btn),
-  .btn-panel.btn-orange:not(.btn-sm):not(.mobile-menu-btn),
-  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle),
-  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-red:not(.btn-sm):not(.btn-small),
-  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-green:not(.btn-sm):not(.btn-small),
-  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-orange:not(.btn-sm):not(.btn-small) {
+  .btn-panel.btn-orange:not(.btn-sm):not(.mobile-menu-btn):not(.row-icon-btn),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-red:not(.btn-sm):not(.btn-small):not(.imap2-background-delete-btn):not(:has(> i.fa-trash)),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-orange:not(.btn-sm):not(.btn-small):not(.row-icon-btn) {
     font-size: 1.08rem !important;
     font-weight: 600 !important;
     padding: 2px 7px !important;
@@ -5635,6 +6183,23 @@ body:not(.theme-active) .site-footer__social-config-btn {
     height: auto !important;
     line-height: normal !important;
     box-sizing: border-box !important;
+  }
+
+  .store-light button.btn-red.imap2-background-delete-btn,
+  .manage-my-page-shell button.btn-red.imap2-background-delete-btn,
+  .store-light button.btn-red:has(> i.fa-trash):not(.mobile-menu-btn):not(#deleteAllEmailsBtn):not(#deleteAllNumbersBtn):not(#btnLimpiarMensajes),
+  button.btn-red.btn-imap-small:has(> i.fa-trash),
+  button.btn-panel.btn-red:has(> i.fa-trash):not(.mobile-menu-btn) {
+    width: 2.55rem !important;
+    min-width: 2.55rem !important;
+    max-width: 2.55rem !important;
+    height: 1.45rem !important;
+    min-height: 1.45rem !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    font-size: 0.8rem !important;
+    line-height: 1 !important;
+    font-weight: 600 !important;
   }
 
   .mobile-menu-store .mobile-menu-btn {
@@ -5661,4 +6226,20 @@ body:not(.theme-active) .site-footer__social-config-btn {
     font-size: 12px !important;
     padding: 6px 10px !important;
   }
+}
+
+/* Enlaces de Menú y Menú2: mismo tamaño que Chat de Soporte. */
+.mobile-menu-store .mobile-menu-btn,
+#mobileMenu .mobile-menu-btn,
+#mobileMenu2 .mobile-menu-btn,
+#sms-management-container .mobile-menu-btn {
+  font-size: 0.92rem !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
 }

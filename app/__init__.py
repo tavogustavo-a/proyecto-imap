@@ -122,10 +122,76 @@ def create_app(config_class_passed=None):
                     app.logger.info(
                         "Esquema: columna original_to_email añadida a received_emails"
                     )
+            if insp.has_table("email_forwarding"):
+                fwd_cols = {c["name"] for c in insp.get_columns("email_forwarding")}
+                if "title" not in fwd_cols:
+                    db.session.execute(
+                        text("ALTER TABLE email_forwarding ADD COLUMN title VARCHAR(200)")
+                    )
+                    db.session.commit()
+                    app.logger.info("Esquema: columna title añadida a email_forwarding")
+                fwd_cols = {c["name"] for c in insp.get_columns("email_forwarding")}
+                if "folders_json" not in fwd_cols:
+                    db.session.execute(
+                        text("ALTER TABLE email_forwarding ADD COLUMN folders_json TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info("Esquema: columna folders_json añadida a email_forwarding")
+            if insp.has_table("email_cleanup"):
+                cleanup_cols = {c["name"] for c in insp.get_columns("email_cleanup")}
+                if "folders_json" not in cleanup_cols:
+                    db.session.execute(
+                        text("ALTER TABLE email_cleanup ADD COLUMN folders_json TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info("Esquema: columna folders_json añadida a email_cleanup")
+            if insp.has_table("imap_servers2"):
+                imap2_cols = {c["name"] for c in insp.get_columns("imap_servers2")}
+                if "buzon_folders_json" not in imap2_cols:
+                    db.session.execute(
+                        text("ALTER TABLE imap_servers2 ADD COLUMN buzon_folders_json TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info("Esquema: columna buzon_folders_json añadida a imap_servers2")
         except Exception as schema_err:
             db.session.rollback()
             app.logger.warning(
                 "No se pudo aplicar parche de esquema email buzón: %s", schema_err
+            )
+
+        try:
+            insp = inspect(db.engine)
+            dialect = getattr(db.engine.dialect, "name", "") or ""
+            for table_name in ("filters", "regexes"):
+                if not insp.has_table(table_name):
+                    continue
+                sender_col = next(
+                    (col for col in insp.get_columns(table_name) if col["name"] == "sender"),
+                    None,
+                )
+                if sender_col is None:
+                    continue
+                length = getattr(sender_col.get("type"), "length", None)
+                if length is None or length >= 500:
+                    continue
+                if dialect == "postgresql":
+                    db.session.execute(
+                        text(f"ALTER TABLE {table_name} ALTER COLUMN sender TYPE VARCHAR(500)")
+                    )
+                elif dialect in ("mysql", "mariadb"):
+                    db.session.execute(
+                        text(f"ALTER TABLE {table_name} MODIFY sender VARCHAR(500) NULL")
+                    )
+                else:
+                    continue
+                db.session.commit()
+                app.logger.info(
+                    "Esquema: columna sender de %s ampliada a VARCHAR(500)", table_name
+                )
+        except Exception as schema_err:
+            db.session.rollback()
+            app.logger.warning(
+                "No se pudo ampliar la columna sender de filtros/regex: %s", schema_err
             )
 
         try:
@@ -726,6 +792,19 @@ def create_app(config_class_passed=None):
             pass
         return response
 
+    @app.after_request
+    def _html_no_store(response):
+        """Evita que Atrás muestre una página ya cerrada (app móvil y navegador)."""
+        try:
+            ctype = (response.headers.get("Content-Type") or "").lower()
+            if "text/html" in ctype:
+                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+        except Exception:
+            pass
+        return response
+
     # ✅ VERIFICACIÓN GLOBAL DE REVOCACIÓN DE SESIONES (Cerrar sesión de todos)
     @app.before_request
     def check_global_session_revocation():
@@ -750,11 +829,14 @@ def create_app(config_class_passed=None):
             from app.admin.site_settings import get_site_setting
             from flask import redirect, url_for, flash
             
-            # Obtener el contador global actual
-            current_global_count = int(get_site_setting("session_revocation_count", "0"))
-            
-            # Obtener el contador guardado en la sesión (puede no existir en sesiones antiguas)
-            session_count = session.get("session_revocation_count", 0)
+            try:
+                current_global_count = int(get_site_setting("session_revocation_count", "0") or 0)
+            except (TypeError, ValueError):
+                current_global_count = 0
+            try:
+                session_count = int(session.get("session_revocation_count", 0) or 0)
+            except (TypeError, ValueError):
+                session_count = 0
             
             # Si el contador global es mayor que el de la sesión, forzar logout
             if current_global_count > session_count:
