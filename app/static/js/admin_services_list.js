@@ -931,59 +931,52 @@ document.addEventListener("DOMContentLoaded", function() {
       
         html += `
           <div class="admin-card service-item-container">
-            <strong>${s.name}</strong>
-            <br>
-          <div class="service-item-content">
-            <!-- Posición -->
-            <span class="service-position-label">
-              Pos: ${s.position}
-            </span>
-            <!-- Botón Visibilidad (AHORA CON CLASES) -->
-            <button class="single-visibility-btn visibility-btn ${visibilityBtnClass}" data-id="${s.id}" data-current-state="${s.visibility_mode}">
-              ${visibilityBtnText}
-            </button>
-            <!-- Iconos del servicio (AHORA CON CLASES) -->
-            ${s.service_icons && s.service_icons.length>0 ? s.service_icons.map(iconObj => `
-              <span class="service-icon-wrapper">
-                <img src="${decideIconPath(iconObj.icon_name)}" class="service-icon-img">
-                <button class="delete-service-icon delete-service-icon-btn" data-icon-id="${iconObj.id}">X</button>
-              </span>
-            `).join('') : ''}
-          </div>
-          <!-- Bloque final de botones -->
-          <div class="mt-05">
+            <div class="service-item-head">
+              <strong class="service-item-name">${s.name}</strong>
+              <span class="service-position-label">Pos: ${s.position}</span>
+              <button type="button" class="single-visibility-btn visibility-btn ${visibilityBtnClass}" data-id="${s.id}" data-current-state="${s.visibility_mode}">
+                ${visibilityBtnText}
+              </button>
+              ${s.service_icons && s.service_icons.length>0 ? s.service_icons.map(iconObj => `
+                <span class="service-icon-wrapper">
+                  <img src="${decideIconPath(iconObj.icon_name)}" class="service-icon-img" alt="">
+                  <button type="button" class="delete-service-icon delete-service-icon-btn" data-icon-id="${iconObj.id}" title="Quitar icono" aria-label="Quitar icono">&times;</button>
+                </span>
+              `).join('') : ''}
+            </div>
+            <div class="service-item-actions" aria-label="Acciones del servicio">
       `;
         // Botones para servicios no protegidos
         if (!s.protected) {
             // Si es SMS, no mostrar botones "re" y "fi"
             if (s.visibility_mode === 'sms') {
                 html += `
-                    <button class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
-                    <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
-                    <button class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar">
-                      <i class="fas fa-trash"></i>
+                    <button type="button" class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
+                    <button type="button" class="add-service-icon-btn btn-blue service-row-icon-btn" data-id="${s.id}" title="Añadir icono">+Icon</button>
+                    <button type="button" class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar" aria-label="Eliminar">
+                      <i class="fas fa-trash" aria-hidden="true"></i>
                     </button>
                 `;
             } else {
                 html += `
-                    <button class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
-                    <button class="link-regex-service btn-blue" data-id="${s.id}">re</button>
-                    <button class="link-filter-service btn-blue" data-id="${s.id}">fi</button>
-                    <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
-                    <button class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar">
-                      <i class="fas fa-trash"></i>
+                    <button type="button" class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
+                    <button type="button" class="link-regex-service btn-blue service-row-btn" data-id="${s.id}" title="Regex">regex</button>
+                    <button type="button" class="link-filter-service btn-blue service-row-btn" data-id="${s.id}" title="Filtro">filtro</button>
+                    <button type="button" class="add-service-icon-btn btn-blue service-row-icon-btn" data-id="${s.id}" title="Añadir icono">+Icon</button>
+                    <button type="button" class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar" aria-label="Eliminar">
+                      <i class="fas fa-trash" aria-hidden="true"></i>
                     </button>
                 `;
             }
         } else {
              html += `
-                <button class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
-                <button class="add-service-icon-btn btn-blue" data-id="${s.id}">+Icon</button>
+                <button type="button" class="edit-service btn-orange row-icon-btn" data-id="${s.id}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
+                <button type="button" class="add-service-icon-btn btn-blue service-row-icon-btn" data-id="${s.id}" title="Añadir icono">+Icon</button>
             `;
         }
         html += `
-          </div> <!-- Cierre div botones -->
-        </div> <!-- Cierre admin-card -->
+            </div>
+          </div>
         `;
 
     }); // Fin del forEach(s => ...)

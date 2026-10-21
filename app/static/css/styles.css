@@ -4220,25 +4220,171 @@ a.btn-search.btn-rounded:hover {
 }
 /* =========== ESTILOS PARA SERVICIOS ================== */
 /* Botones de servicios sin m�rgenes para mejor alineaci�n */
-.edit-service, 
-.link-regex-service, 
-.link-filter-service, 
-.add-service-icon-btn, 
-.delete-service {
+.admin-card.service-item-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+  padding: 0.7rem 0.75rem;
+}
+
+.service-item-head {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.admin-card.service-item-container .service-item-name {
+  display: inline;
+  margin: 0;
+  line-height: 1.45rem;
+}
+
+.service-item-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  max-width: 100%;
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .admin-card.service-item-container {
+    gap: 0.3rem;
+  }
+
+  .service-item-head {
+    gap: 0.3rem;
+  }
+
+  .service-item-actions {
+    gap: 0.3rem;
+  }
+}
+
+.service-item-head > *,
+.service-item-actions > * {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+@media (max-width: 767px) {
+  .service-item-actions {
+    flex-basis: 100%;
+  }
+}
+
+.service-item-container .visibility-btn {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  padding: 0 6px !important;
   margin: 0 !important;
-  margin-right: 2px !important; /* Espaciado m�nimo entre botones */
+  border-radius: 8px !important;
+  border-width: 2px !important;
+  border-style: solid !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.service-item-container .service-icon-wrapper {
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  vertical-align: middle;
+  line-height: 0;
+  flex: 0 0 auto;
+}
+
+.service-item-container .service-icon-img {
+  display: block;
+  max-height: 1.45rem !important;
+  height: 1.45rem !important;
+  width: auto;
+  margin: 0;
+}
+
+.service-item-container .delete-service-icon-btn {
+  position: absolute;
+  top: -0.32rem;
+  right: -0.32rem;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 0.82rem !important;
+  min-width: 0 !important;
+  max-width: 0.82rem !important;
+  height: 0.82rem !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
+  border: 1px solid #c62828 !important;
+  background: #f44336 !important;
+  color: #fff !important;
+  font-size: 0.58rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  z-index: 1;
+}
+
+.edit-service,
+.link-regex-service,
+.link-filter-service,
+.add-service-icon-btn,
+.delete-service {
+  margin: 0 !important; /* Espaciado m�nimo entre botones */
 }
 
 /* En pantallas peque�as, eliminar completamente el espaciado */
-@media (max-width: 768px) {
-  .edit-service, 
-  .link-regex-service, 
-  .link-filter-service, 
-  .add-service-icon-btn, 
-  .delete-service {
-    margin: 0 !important;
-    margin-right: 1px !important;
-  }
+button.service-row-btn,
+button.service-row-icon-btn {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  max-width: none !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  padding: 0 6px !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  flex: 0 0 auto !important;
+  cursor: pointer !important;
+  white-space: nowrap;
+  font-weight: 600 !important;
+}
+
+button.service-row-btn {
+  min-width: 3.35rem !important;
+  font-size: 0.72rem !important;
+}
+
+button.service-row-icon-btn {
+  min-width: 2.55rem !important;
+  padding: 0 5px !important;
+  font-size: 0.62rem !important;
 }
 
 /* =========== ESTILOS PARA USUARIOS ================== */
@@ -6698,12 +6844,17 @@ button.delete-cleanup-btn:has(> i.fa-trash) {
 }
 
 .service-item-content {
-  margin: 0.5rem 0;
+  margin: 0;
 }
 
 .service-position-label {
   color: #666;
-  margin-right: 0.6rem;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 1.45rem;
+  line-height: 1.45rem;
+  font-size: 0.72rem;
 }
 
 .service-icon-wrapper {
