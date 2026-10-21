@@ -551,6 +551,63 @@ def send_text_message(
     return {'success': ok, 'status_code': code, 'error': err, 'data': data}
 
 
+def _message_key_from_send(data: Any) -> dict | None:
+    if isinstance(data, list):
+        for item in data:
+            found = _message_key_from_send(item)
+            if found:
+                return found
+        return None
+    if not isinstance(data, dict):
+        return None
+    key = data.get('key')
+    if isinstance(key, dict) and key.get('id'):
+        return key
+    for child_key in ('data', 'response', 'message'):
+        child = data.get(child_key)
+        if child is not data:
+            found = _message_key_from_send(child)
+            if found:
+                return found
+    return None
+
+
+def delete_sent_message(
+    base_url: str,
+    api_key: str,
+    instance_name: str,
+    send_data: Any,
+    to_number: str,
+) -> bool:
+    """Borra para todos el mensaje recién enviado. No lanza si Evolution no lo permite."""
+    key = _message_key_from_send(send_data)
+    if not key or not key.get('id'):
+        return False
+    digits = ''.join(ch for ch in str(to_number or '') if ch.isdigit())
+    remote = str(key.get('remoteJid') or '').strip()
+    if not remote and digits:
+        remote = f'{digits}@s.whatsapp.net'
+    if not remote:
+        return False
+    from_me = key.get('fromMe')
+    code, data = _request(
+        'POST',
+        _norm_base_url(base_url),
+        f'/chat/deleteMessageForEveryone/{_norm_instance(instance_name)}',
+        api_key,
+        json_body={
+            'id': str(key.get('id')),
+            'remoteJid': remote,
+            'fromMe': True if from_me is None else bool(from_me),
+        },
+    )
+    if code not in (200, 201):
+        return False
+    if isinstance(data, dict) and (data.get('error') or str(data.get('status') or '').lower() == 'error'):
+        return False
+    return True
+
+
 def status_label_es(status: str | None) -> str:
     mapping = {
         STATUS_CONNECTED: 'Conectado',

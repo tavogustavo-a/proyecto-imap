@@ -136,9 +136,11 @@ document.addEventListener("DOMContentLoaded", function() {
     if (deleteAllEmailsBtn) {
         const totalItems = pagination.total_items || 0;
         const label = totalItems > 0
-          ? `Eliminar todos (${totalItems})`
+          ? `Eliminar todos los correos permitidos (${totalItems})`
           : 'Eliminar todos los correos permitidos';
-        deleteAllEmailsBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i> Todo';
+        const countText = totalItems > 0 ? ' (' + totalItems + ')' : '';
+        deleteAllEmailsBtn.innerHTML =
+          '<i class="fas fa-trash" aria-hidden="true"></i> Todo' + countText;
         deleteAllEmailsBtn.title = label;
         deleteAllEmailsBtn.setAttribute('aria-label', label);
         deleteAllEmailsBtn.disabled = totalItems <= 0;

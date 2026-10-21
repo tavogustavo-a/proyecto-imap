@@ -1175,7 +1175,8 @@ noscript p {
   display: block;
   margin-bottom: 0.5rem;
 }
-#searchEmailsForm .search-textarea-clear-btn {
+#searchEmailsForm .search-textarea-clear-btn,
+#subuserAddEmailsSection .search-textarea-clear-btn {
   min-width: 0 !important;
   width: 24px !important;
   height: 24px !important;
@@ -1187,6 +1188,19 @@ noscript p {
   font-size: 18px !important;
   line-height: 1 !important;
   color: #666 !important;
+}
+
+#subuserAddEmailsSection .search-textarea-wrapper {
+  width: 100%;
+  max-width: 100%;
+}
+
+#subuserAddEmailsSection .search-textarea-wrapper textarea {
+  width: 100% !important;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-right: 35px;
+  border-radius: 4px !important;
 }
 /* .admin-card + .admin-card { margin-top: 1.5rem; } */ /* Comentado: Regla ya existe globalmente? */
 /* .admin-card h3:first-child, .admin-card h4:first-child { margin-top: 0; } */ /* Comentado: Regla ya existe globalmente? */
@@ -1837,7 +1851,8 @@ noscript p {
   padding: 3px;
 }
 
-#allowedEmailsPagination {
+#allowedEmailsPagination,
+#subuserAllowedEmailsPagination {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -1847,24 +1862,36 @@ noscript p {
   min-width: 0;
 }
 
-#allowedEmailsPagination > #deleteAllEmailsBtn {
+#allowedEmailsPagination > #deleteAllEmailsBtn,
+#subuserAllowedEmailsPagination > #subuserDeleteAllEmailsBtn,
+#allowedEmailsPagination .allowed-emails-page-nav .btn-panel,
+#allowedEmailsPagination .allowed-emails-page-nav .btn-blue,
+#subuserAllowedEmailsPagination .allowed-emails-page-nav .btn-panel,
+#subuserAllowedEmailsPagination .allowed-emails-page-nav .btn-blue {
   flex: 0 0 auto;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  gap: 0.28rem;
+  box-sizing: border-box !important;
+  min-width: 60px !important;
   width: auto !important;
-  min-width: 0 !important;
-  height: 2rem;
-  padding: 0 0.55rem !important;
-  font-size: 1rem !important;
+  height: auto !important;
+  min-height: 0;
+  font-size: 1.08rem !important;
   font-weight: 600;
+  padding: 2px 7px !important;
   border-radius: 6px !important;
-  line-height: 1;
+  line-height: normal !important;
   white-space: nowrap;
 }
 
-#allowedEmailsPagination .allowed-emails-page-nav {
+#allowedEmailsPagination > #deleteAllEmailsBtn,
+#subuserAllowedEmailsPagination > #subuserDeleteAllEmailsBtn {
+  gap: 0.28rem;
+}
+
+#allowedEmailsPagination .allowed-emails-page-nav,
+#subuserAllowedEmailsPagination .allowed-emails-page-nav {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -1873,17 +1900,8 @@ noscript p {
   min-width: 0;
 }
 
-#allowedEmailsPagination .allowed-emails-page-nav .btn-panel,
-#allowedEmailsPagination .allowed-emails-page-nav .btn-blue {
-  min-width: 60px !important;
-  width: auto !important;
-  font-size: 1.08rem !important;
-  padding: 2px 7px !important;
-  border-radius: 6px !important;
-  white-space: nowrap;
-}
-
-#paginationInfo {
+#paginationInfo,
+#subuserPaginationInfo {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -1892,33 +1910,88 @@ noscript p {
 }
 
 @media (max-width: 768px) {
-  #allowedEmailsPagination {
+  #allowedEmailsPagination,
+  #subuserAllowedEmailsPagination {
     flex-wrap: nowrap;
     gap: 0.22rem;
   }
 
-  #allowedEmailsPagination .allowed-emails-page-nav {
+  #allowedEmailsPagination .allowed-emails-page-nav,
+  #subuserAllowedEmailsPagination .allowed-emails-page-nav {
     width: auto;
     justify-content: flex-end;
     margin-left: auto;
   }
 
-  #allowedEmailsPagination > #deleteAllEmailsBtn {
-    width: auto !important;
-    min-width: 0 !important;
-    height: 2rem;
-    padding: 0 0.45rem !important;
-    font-size: 1rem !important;
-  }
-
+  #allowedEmailsPagination > #deleteAllEmailsBtn,
+  #subuserAllowedEmailsPagination > #subuserDeleteAllEmailsBtn,
   #allowedEmailsPagination .allowed-emails-page-nav .btn-panel,
-  #allowedEmailsPagination .allowed-emails-page-nav .btn-blue {
+  #allowedEmailsPagination .allowed-emails-page-nav .btn-blue,
+  #subuserAllowedEmailsPagination .allowed-emails-page-nav .btn-panel,
+  #subuserAllowedEmailsPagination .allowed-emails-page-nav .btn-blue {
+    min-width: 60px !important;
+    width: auto !important;
+    height: auto !important;
     font-size: 1.08rem !important;
     padding: 2px 7px !important;
+    line-height: normal !important;
   }
 
-  #paginationInfo {
+  #paginationInfo,
+  #subuserPaginationInfo {
     font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 576px) {
+  #allowedEmailsPagination,
+  #subuserAllowedEmailsPagination {
+    width: 100%;
+    max-width: 100%;
+    gap: 0.16rem;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  #allowedEmailsPagination > #deleteAllEmailsBtn,
+  #subuserAllowedEmailsPagination > #subuserDeleteAllEmailsBtn {
+    flex: 0 0 auto;
+    min-width: 0 !important;
+    max-width: none;
+    padding: 2px 4px !important;
+    font-size: 0.66rem !important;
+    line-height: 1.15 !important;
+  }
+
+  #allowedEmailsPagination .allowed-emails-page-nav,
+  #subuserAllowedEmailsPagination .allowed-emails-page-nav {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-left: 0;
+    justify-content: space-between;
+    gap: 0.1rem;
+    width: auto;
+  }
+
+  #allowedEmailsPagination .allowed-emails-page-nav .btn-blue,
+  #subuserAllowedEmailsPagination .allowed-emails-page-nav .btn-blue {
+    flex: 1 1 0;
+    min-width: 0 !important;
+    padding: 2px 3px !important;
+    font-size: 0.66rem !important;
+    line-height: 1.15 !important;
+  }
+
+  #paginationInfo,
+  #subuserPaginationInfo {
+    flex: 0 0 auto;
+    font-size: 0.6rem !important;
+    gap: 0.12rem;
+  }
+
+  #paginationInfo i,
+  #subuserPaginationInfo i {
+    font-size: 0.58rem !important;
   }
 }
 
@@ -3146,12 +3219,15 @@ body.dark-mode .filter-match .filter-single-cta a {
 /* Clase para ocultar visualmente pero mantener accesible (Screen Reader Only) */
 .sr-only {
   position: absolute;
+  left: 0;
+  top: 0;
   width: 1px;
   height: 1px;
   padding: 0;
   margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap; /* Evitar que el texto se divida en m�ltiples l�neas */
   border: 0;
 }
@@ -3792,6 +3868,75 @@ a.btn-search.btn-rounded:hover {
   width: 100% !important;
   max-width: none !important;
 }
+.subusers-list-card .subusers-list-toolbar {
+  width: 100%;
+}
+
+.subusers-list-card .subusers-search-wrap {
+  width: 100%;
+  max-width: 100%;
+}
+
+.subusers-list-card .subusers-search-wrap .subusers-search-input,
+.subusers-list-card .subusers-search-wrap input[type="search"] {
+  width: 100% !important;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 2rem 0.4rem 0.4rem;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  color: #111 !important;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.subusers-list-card .subusers-search-wrap input[type="search"]::-webkit-search-cancel-button,
+.subusers-list-card .subusers-search-wrap input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.subusers-list-card .subusers-search-wrap input[type="search"]::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.subusers-list-card .subusers-search-wrap .search-textarea-clear-btn {
+  top: 50%;
+  transform: translateY(-50%);
+  right: 10px;
+  min-width: 0 !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  color: #666 !important;
+}
+
+.subusers-list-card .subusers-search-wrap .search-textarea-clear-btn:hover {
+  transform: translateY(-50%);
+}
+
+.subusers-list-card .subusers-per-page-select,
+.subusers-list-card .usuarios-per-page-select,
+.subusers-list-card #showSubuserCount {
+  min-width: 5.5rem;
+  border-radius: 4px !important;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc !important;
+  background: #fff !important;
+  color: #111 !important;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
 .subusers-list-card .pagination-buttons {
   display: flex;
   justify-content: center;
@@ -4344,17 +4489,63 @@ button.btn-blue.row-test-btn.is-testing:hover,
 .manage-my-page-shell .imap-item > .mt-05 > form > button {
   margin: 0 !important;
 }
-#imap2List .imap-item > .mt-05 {
-  display: flex !important;
+/* Filas IMAP / IMAP2 (admin y Gestionar mi página): usuario y botones en una
+   línea, centrados; lo que no cabe baja centrado. */
+.imap-item.imap-admin-row {
+  display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 0.45rem !important;
+  column-gap: 0.55rem;
+  row-gap: 0.4rem;
+  text-align: center;
+  padding: 0.7rem 0.75rem;
 }
-#imap2List .imap-item > .mt-05 > form,
-#imap2List .imap-item > .mt-05 > button,
-#imap2List .imap-item > .mt-05 > form > button,
-#imap2List .imap-item > .mt-05 .btn-imap-small,
-#imap2List .imap-item > .mt-05 .ml-03 {
+
+.imap-admin-row__meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.15rem 0.35rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.imap-admin-row__email {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.imap-admin-row__folders,
+.imap-admin-row__route,
+.imap-admin-row__owner,
+.imap-admin-row__domain {
+  white-space: nowrap;
+}
+
+.imap-admin-row__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.imap-admin-row__actions > form,
+.imap-admin-row__actions > button,
+.imap-admin-row__actions > form > button,
+.imap-admin-row__actions .btn-imap-small,
+.imap-admin-row__actions .ml-03 {
+  margin: 0 !important;
+}
+
+#security-rules-list .security-rule-actions > *,
+#security-rules-list .security-rule-actions > form,
+#security-rules-list .security-rule-actions > form > button {
   margin: 0 !important;
 }
 .import-export-title {
@@ -4366,7 +4557,194 @@ button.btn-blue.row-test-btn.is-testing:hover,
 .import-export-row label {
   text-align: center;
 }
-button.btn-blue.row-test-btn.buzon-imap2-btn {
+
+.import-export-card {
+  --import-export-btn-col: 4.5rem;
+  --import-export-row-width: 19.75rem;
+}
+
+.import-export-card .import-export-row-line {
+  box-sizing: border-box;
+  width: min(100%, var(--import-export-row-width));
+  max-width: var(--import-export-row-width);
+  margin-left: auto;
+  margin-right: auto;
+  display: grid;
+  align-items: end;
+  gap: 0.35rem 0.5rem;
+}
+
+.import-export-card .import-export-export-row {
+  grid-template-columns: minmax(0, 1fr) var(--import-export-btn-col);
+}
+
+.import-export-card .import-export-import-row {
+  margin-top: 0.45rem;
+  grid-template-columns: auto minmax(0, 1fr) var(--import-export-btn-col);
+}
+
+.import-export-card .import-export-field {
+  min-width: 0;
+}
+
+.import-export-card .import-export-field input[type="text"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (min-width: 992px) {
+  .import-export-card {
+    --import-export-row-width: 27rem;
+    --import-export-btn-col: 5rem;
+  }
+
+  .import-export-card .import-export-row-line {
+    gap: 0.4rem 0.55rem;
+  }
+
+  .import-export-card .import-export-field input[type="text"] {
+    font-size: 0.92rem;
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+  }
+
+  .import-export-card .import-export-file-trigger {
+    padding: 0.32rem 0.75rem;
+    font-size: 0.82rem;
+  }
+
+  .import-export-card .import-export-action-btn {
+    font-size: 0.85rem !important;
+    height: 1.55rem !important;
+    min-height: 1.55rem !important;
+    max-height: 1.55rem !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .import-export-card {
+    --import-export-btn-col: 4.15rem;
+    --import-export-row-width: 100%;
+  }
+
+  .import-export-card .import-export-row-line {
+    width: 100%;
+    max-width: 100%;
+    gap: 0.28rem 0.35rem;
+  }
+
+  .import-export-card .import-export-export-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, var(--import-export-btn-col));
+  }
+
+  .import-export-card .import-export-import-row {
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, var(--import-export-btn-col));
+  }
+
+  .import-export-card .import-export-field input[type="text"] {
+    font-size: 0.72rem;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+
+  .import-export-card .import-export-import-row .import-export-file-trigger {
+    padding: 0.22rem 0.35rem;
+    font-size: 0.65rem;
+    gap: 0.2rem;
+    max-width: 5.35rem;
+  }
+
+  .import-export-card .import-export-import-row .import-export-file-trigger-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.import-export-card .import-export-file-field {
+  flex: 0 0 auto;
+  align-self: flex-end;
+}
+
+.import-export-card .import-export-file-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 1.45rem;
+  margin: 0;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid #111 !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  color: #111 !important;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.import-export-card .import-export-file-trigger .import-export-file-trigger-icon {
+  font-size: 0.85rem;
+}
+
+.import-export-card .import-export-file-trigger--ready {
+  border-color: #15803d !important;
+  color: #15803d !important;
+  background: #f0fdf4 !important;
+}
+
+.import-export-card .import-export-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+.import-export-card .import-export-action-btn {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  max-height: 1.45rem !important;
+  padding: 0 0.35rem !important;
+  min-width: var(--import-export-btn-col) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 6px !important;
+  border-width: 2px !important;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .import-export-card .import-export-action-btn {
+    padding: 0 0.2rem !important;
+    font-size: 0.68rem !important;
+  }
+}
+button.btn-blue.row-test-btn.buzon-imap2-btn,
+button.btn-blue.row-test-btn.buzon-observer-btn {
   width: auto !important;
   min-width: 0 !important;
   max-width: none !important;
@@ -4407,6 +4785,23 @@ button.btn-blue.row-test-btn.buzon-imap2-btn {
 }
 .imap2-buzon-info-overlay {
   z-index: 10050;
+}
+
+.modal-overlay:has(.imap2-buzon-heading),
+.modal-overlay.imap2-buzon-info-overlay {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.modal-overlay:has(.imap2-buzon-heading) > .admin-card,
+.modal-overlay.imap2-buzon-info-overlay > .admin-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+  color: #0f172a !important;
+  border: none !important;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.38) !important;
+}
+
+.modal-overlay:has(.imap2-buzon-heading) .imap2-buzon-folder-list label {
+  color: #0f172a;
 }
 .duplicate-user-btn:hover {
   background: #4f6ef7;
@@ -4479,12 +4874,12 @@ button.btn-blue.row-test-btn.buzon-imap2-btn {
 #menu3ToggleBtn {
   margin-top: 0 !important;
 }
-.admin-card:has(#menuToggleBtn),
-.store-light:has(#menuToggleBtn),
-.store-light:has(#menu1ToggleBtn),
+.admin-card:has(#menuToggleBtn):not(.my-pages-list-panel):not(.manage-my-page-intro-card),
+.store-light:has(#menuToggleBtn):not(.manage-my-page-shell),
+.store-light:has(#menu1ToggleBtn):not(.manage-my-page-shell),
 .html-tools-container:has(#menuToggleBtn),
 .email-interface:has(#menuToggleBtn),
-.card:has(#menuToggleBtn) {
+.card:has(#menuToggleBtn):not(.my-pages-list-panel) {
   padding-top: 15px !important;
 }
 .store-front-header:has(#menuToggleBtn),
@@ -5413,38 +5808,319 @@ button.btn-blue.row-test-btn.buzon-imap2-btn {
   margin-top: 1rem !important;
 }
 
-.twofa-section-card .productos-buscar-mostrar {
+.twofa-section-card .twofa-compact-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.twofa-section-card .twofa-compact-row > .flex-grow-1,
+.twofa-section-card .twofa-compact-row > .twofa-field-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.twofa-section-card .twofa-compact-actions {
+  display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 0.5rem;
 }
 
-.twofa-section-card .productos-buscar-mostrar .search-container {
-  flex: 1;
-  min-width: 200px;
-}
-
-.twofa-section-card .productos-buscar-mostrar .search-container input[type="search"] {
-  height: 32px !important;
-  padding: 6px 10px !important;
+.twofa-section-card .twofa-field-control,
+.twofa-section-card .twofa-field-textarea,
+.twofa-section-card .twofa-show-select {
   border: 1.5px solid #111 !important;
   border-radius: 5px !important;
   font-size: 14px !important;
+  box-sizing: border-box !important;
+  background: #fff !important;
+  color: #111 !important;
+}
+
+.twofa-section-card .twofa-field-control,
+.twofa-section-card .twofa-show-select {
+  height: 32px !important;
+  padding: 6px 10px !important;
+  line-height: 1.5 !important;
+}
+
+.twofa-section-card .twofa-field-textarea {
+  padding: 6px 10px !important;
+  line-height: 1.45 !important;
+  resize: vertical;
+  min-height: 52px;
   width: 100% !important;
-  box-sizing: border-box !important;
-  line-height: 1.5 !important;
 }
 
-.twofa-section-card .productos-buscar-mostrar select {
-  height: 32px !important;
-  padding: 6px 10px !important;
+.twofa-section-card .twofa-emails-textarea-wrap .search-textarea-clear-btn {
+  min-width: 0 !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  color: #666 !important;
+}
+
+.twofa-section-card .twofa-emails-textarea-wrap .search-textarea-clear-btn:hover {
+  color: #333 !important;
+}
+
+.twofa-section-card .twofa-list-toolbar > .twofa-field-control,
+.twofa-section-card .twofa-list-toolbar > #searchImap2TwofaInput {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.twofa-section-card .twofa-compact-actions--select {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.twofa-section-card .twofa-show-select {
+  width: 4.75rem !important;
+  min-width: 4.75rem !important;
+  max-width: 5.5rem !important;
+  flex-shrink: 0;
+}
+
+.bulk-delete-all-emails-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* Añadir masivamente correos a sub-usuarios: campos cuadrados y mismo ancho (como editar sub-usuario) */
+#subuser-management-container .bulk-add-subusers-emails-card .bulk-add-subusers-field-block,
+#subuser-management-container .bulk-add-subusers-emails-card .bulk-add-subusers-search-wrap {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#subuser-management-container .bulk-add-subusers-emails-card .bulk-add-subusers-field-input,
+#subuser-management-container .bulk-add-subusers-emails-card #bulkAddEmailsToSubusersSearch,
+#subuser-management-container .bulk-add-subusers-emails-card #bulkAddEmailsToSubusersInput {
+  display: block;
+  width: 100% !important;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 0.4rem;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+#subuser-management-container .bulk-add-subusers-emails-card #bulkAddEmailsToSubusersSearch {
+  margin-bottom: 0.5rem;
+}
+
+#subuser-management-container .bulk-add-subusers-emails-card #bulkAddEmailsToSubusersSearch::-webkit-search-cancel-button,
+#subuser-management-container .bulk-add-subusers-emails-card #bulkAddEmailsToSubusersSearch::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#subuser-management-container .bulk-add-subusers-emails-card #bulkAddEmailsToSubusersSearch::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+#subuser-management-container .bulk-add-subusers-emails-card #bulkAddEmailsToSubusersInput {
+  resize: vertical;
+  min-height: 5.5rem;
+}
+
+/* Gestionar sub-usuarios: buscadores con borde suave (sin negro grueso al foco) */
+#subuser-management-container .twofa-section-card .productos-buscar-mostrar .search-container input[type="search"],
+#subuser-management-container .twofa-section-card #subuser-searchTwofaInput {
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  color: #111 !important;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+#subuser-management-container .twofa-section-card .productos-buscar-mostrar select,
+#subuser-management-container .twofa-section-card #subuser-showTwofaCount {
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.95rem;
+}
+
+#subuser-management-container input[type="search"]:focus,
+#subuser-management-container input[type="search"]:focus-visible,
+#subuser-management-container .subusers-list-card .subusers-search-wrap input[type="search"]:focus,
+#subuser-management-container .subusers-list-card .subusers-search-wrap input[type="search"]:focus-visible,
+#subuser-management-container .bulk-add-subusers-emails-card input[type="search"]:focus,
+#subuser-management-container .bulk-add-subusers-emails-card input[type="search"]:focus-visible,
+#subuser-management-container .twofa-section-card #subuser-searchTwofaInput:focus,
+#subuser-management-container .twofa-section-card #subuser-searchTwofaInput:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+}
+
+#subuser-management-container .twofa-section-card .productos-buscar-mostrar select:focus,
+#subuser-management-container .twofa-section-card .productos-buscar-mostrar select:focus-visible,
+#subuser-management-container .twofa-section-card #subuser-showTwofaCount:focus,
+#subuser-management-container .twofa-section-card #subuser-showTwofaCount:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+}
+
+.bulk-delete-all-emails-btn__icon {
+  color: #fff;
+  flex-shrink: 0;
+}
+
+#subuser-management-container .twofa-section-card #subuser-twofa-configs-list .regex-item {
+  margin: 0.35rem 0;
+  padding: 0.35rem 0.5rem;
+}
+
+#subuser-management-container .twofa-section-card .subuser-twofa-config-row {
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 0.45rem;
+}
+
+#subuser-management-container .twofa-section-card .subuser-twofa-config-row .flex-grow-1 {
+  min-width: 0;
+}
+
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
+  gap: 0.3rem;
+}
+
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions button.btn-orange.row-icon-btn,
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions button.edit-subuser-twofa-config.row-icon-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  max-height: 1.45rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  vertical-align: middle;
+  background: #f39c12 !important;
+  background-color: #f39c12 !important;
+  border: 2px solid #f39c12 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  font-size: 0.8rem !important;
+}
+
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions button.btn-orange.row-icon-btn:hover,
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions button.edit-subuser-twofa-config.row-icon-btn:hover {
+  background: #d35400 !important;
+  background-color: #d35400 !important;
+  border-color: #d35400 !important;
+}
+
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions button.btn-orange.row-icon-btn i,
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions button.edit-subuser-twofa-config.row-icon-btn i {
+  display: block;
+  line-height: 1;
+  margin: 0;
+}
+
+#subuser-management-container .twofa-section-card .subuser-twofa-config-actions button.delete-subuser-twofa-config {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  max-height: 1.45rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+}
+
+#subuser-management-container .twofa-section-card .regex-description {
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.manage-my-page-shell .twofa-section-card .twofa-field-control,
+.manage-my-page-shell .twofa-section-card .twofa-field-textarea,
+.manage-my-page-shell .twofa-section-card .twofa-show-select,
+.manage-my-page-shell .twofa-section-card #searchImap2TwofaInput,
+.manage-my-page-shell .filters-regex-section #searchFiltersRegexInput {
+  border: 1.5px solid #111 !important;
+}
+
+/* Sin borde/outline negro grueso al enfocar buscadores y correos 2FA (Gestionar mi página / edit IMAP2) */
+.twofa-section-card .twofa-field-control:focus,
+.twofa-section-card .twofa-field-control:focus-visible,
+.twofa-section-card .twofa-field-textarea:focus,
+.twofa-section-card .twofa-field-textarea:focus-visible,
+.filters-regex-section .twofa-field-control:focus,
+.filters-regex-section .twofa-field-control:focus-visible,
+.twofa-section-card #searchImap2TwofaInput:focus,
+.twofa-section-card #searchImap2TwofaInput:focus-visible,
+.filters-regex-section #searchFiltersRegexInput:focus,
+.filters-regex-section #searchFiltersRegexInput:focus-visible,
+.twofa-section-card #imap2-twofa-emails-input:focus,
+.twofa-section-card #imap2-twofa-emails-input:focus-visible,
+.twofa-section-card #edit-imap2-twofa-emails-input:focus,
+.twofa-section-card #edit-imap2-twofa-emails-input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
   border: 1.5px solid #111 !important;
   border-radius: 5px !important;
-  font-size: 14px !important;
-  width: 80px !important;
-  box-sizing: border-box !important;
-  line-height: 1.5 !important;
+}
+
+.filters-regex-section .filters-regex-search-toolbar > .twofa-field-control,
+.filters-regex-section .filters-regex-search-toolbar > #searchFiltersRegexInput {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
 
 .card .productos-buscar-mostrar select {
@@ -5463,38 +6139,236 @@ button.btn-blue.row-test-btn.buzon-imap2-btn {
   border-top: 1px solid #ddd;
 }
 
-/* Estilos para items de p�ginas en my_pages_list.html */
-.my-pages-item {
-  background-color: #ffffff !important;
+.my-pages-list-page .my-pages-list-wrap {
+  margin: 0 auto;
+  max-width: min(1040px, 96vw);
+}
+
+/* Panel: igual que admin-card en editar sub-usuario (sombra, radio, opacidad) */
+.my-pages-list-page .my-pages-list-panel {
+  padding: 0.75rem !important;
+  margin: 0 auto !important;
+  max-width: 750px !important;
+  min-height: 0;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
   border: none !important;
-  border-radius: 8px !important;
-  margin-bottom: 0.5rem !important;
-  padding: 0.5rem 0.75rem !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+  outline: none !important;
 }
 
-/* Estilos para pantallas peque�as (max-width: 768px) - mantener contorno visible */
-@media (max-width: 768px) {
-  .my-pages-item {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
-                0 0 0 2px rgba(255, 255, 255, 1) !important;
-    outline: 2px solid rgba(255, 255, 255, 1) !important;
-    outline-offset: 0 !important;
-  }
+.my-pages-list-head {
+  display: grid;
+  grid-template-columns: 6.4rem 1fr 6.4rem;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  margin-bottom: 0.75rem;
 }
 
-/* Asegurar que el contorno blanco sea visible en pantallas grandes (m�s de 720px) */
-@media (min-width: 721px) {
-  .my-pages-item {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
-                0 0 0 3px rgba(255, 255, 255, 1) !important;
-    outline: 3px solid rgba(255, 255, 255, 1) !important;
-    outline-offset: 0 !important;
-  }
+.my-pages-list-head #menuToggleBtn {
+  float: none !important;
+  position: static !important;
+  margin: 0 !important;
+  width: 6.4rem !important;
+  min-width: 6.4rem !important;
+  box-sizing: border-box !important;
 }
 
-/* Asegurar que el card padre no corte el outline */
-.form-container-medium .card {
+.my-pages-list-title {
+  text-align: center;
+  font-size: clamp(1.15rem, 3.8vw, 1.45rem);
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.my-pages-list-title--solo {
+  width: 100%;
+}
+
+.my-pages-list-head-spacer {
+  width: 6.4rem;
+  min-width: 6.4rem;
+}
+
+.my-pages-list-body {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: visible !important;
+  margin-top: 0.35rem;
+  padding-bottom: 0.35rem;
+  box-sizing: border-box;
+}
+
+.my-pages-search-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.my-pages-list-toolbar {
+  width: 100%;
+}
+
+.my-pages-list-page .my-pages-search-wrap input[type="search"] {
+  padding-right: 35px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+.my-pages-list-page .my-pages-search-wrap input[type="search"]::-webkit-search-cancel-button,
+.my-pages-list-page .my-pages-search-wrap input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.my-pages-list-page .my-pages-search-wrap input[type="search"]::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.my-pages-list-page .my-pages-search-wrap .search-textarea-clear-btn {
+  top: 50%;
+  transform: translateY(-50%);
+  right: 8px;
+}
+
+.my-pages-list-page #searchMyPagesClearBtn.search-textarea-clear-btn:hover {
+  transform: translateY(-50%);
+}
+
+.my-pages-scroll-responsive {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  width: 100%;
+}
+
+#myPagesListContainer .user-list-track {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Filas compactas: mismo ritmo que sub-usuarios / usuarios admin */
+.my-pages-list-page .my-pages-item {
+  background-color: #ffffff !important;
+  border: 1px solid #ccc !important;
+  border-radius: 6px !important;
+  margin: 0.12rem 0 !important;
+  padding: 0.08rem 0.3rem !important;
+  min-height: 0;
+  min-width: 0;
+  width: 100% !important;
+  box-sizing: border-box;
+  box-shadow: none !important;
+  display: block !important;
+  white-space: nowrap;
+  overflow: visible !important;
+}
+
+.my-pages-item-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  width: 100%;
+  min-width: max-content;
+  box-sizing: border-box;
+}
+
+.my-pages-list-page .my-pages-item.my-pages-item--hidden {
+  display: none !important;
+}
+
+.my-pages-route-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.my-pages-route-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  padding-right: 0.25rem;
+}
+
+.my-pages-manage-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.my-pages-empty-msg {
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .my-pages-list-head {
+    grid-template-columns: 5.5rem 1fr 0;
+  }
+
+  .my-pages-list-head-spacer {
+    display: none;
+  }
+
+  .my-pages-list-head #menuToggleBtn {
+    width: 5.5rem !important;
+    min-width: 5.5rem !important;
+    font-size: 0.82rem !important;
+    padding-left: 0.35rem !important;
+    padding-right: 0.35rem !important;
+  }
+
+  .my-pages-item-row {
+    gap: 0.35rem !important;
+  }
+
+  .my-pages-list-page .my-pages-item {
+    padding: 0.08rem 0.25rem !important;
+  }
+
+  .my-pages-manage-btn {
+    width: auto !important;
+    max-width: 42%;
+    padding: 2px 6px !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    justify-content: center;
+  }
+
+  .my-pages-manage-btn i {
+    font-size: 0.75rem;
+  }
+
+  .my-pages-route-text {
+    font-size: 0.88rem;
+  }
 }
 
 /* Gestionar mi página: sin el panel blanco de la tienda.
@@ -5598,6 +6472,25 @@ button.btn-blue.row-test-btn.buzon-imap2-btn {
   margin-top: 0.35rem;
 }
 
+/* Párrafo IMAP2 / Gestionar mi página: caja cuadrada (esquinas rectas, borde como inputs) */
+.imap2-paragraph-textarea,
+#saveParagraphForm .imap2-paragraph-textarea,
+#saveParagraphForm textarea#paragraph {
+  border-radius: 5px !important;
+  border: 1.5px solid #111 !important;
+  background: #fff !important;
+  color: #111 !important;
+  padding: 8px 10px !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 9.5rem;
+  line-height: 1.45 !important;
+  resize: vertical;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .imap2-background-upload-label {
   cursor: pointer;
   margin: 0;
@@ -5628,7 +6521,7 @@ button.btn-red.imap2-background-delete-btn,
 button.btn-red.btn-imap-small:has(> i.fa-trash),
 .store-light button.btn-red.btn-imap-small:has(> i.fa-trash),
 button.btn-red.btn-sm:has(> i.fa-trash):not(.mobile-menu-btn),
-button.btn-panel.btn-red:has(> i.fa-trash):not(.mobile-menu-btn),
+button.btn-panel.btn-red:has(> i.fa-trash):not(.mobile-menu-btn):not(.purchase-history-cleanup-purge-btn),
 button.btn.btn-red.btn-sm:has(> i.fa-trash),
 button.action-btn.action-red:has(> i.fa-trash),
 .action-stack button.action-btn.action-red:has(> i.fa-trash),
@@ -6083,6 +6976,57 @@ body:not(.theme-active) .site-footer__social-config-btn {
   word-break: break-word;
 }
 
+/* Crear sub-usuario: título, catálogo global e icono alineados */
+#subuser-management-container .subuser-create-heading-row {
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  row-gap: 0.35rem;
+  width: 100%;
+  text-align: center;
+}
+
+#subuser-management-container .subuser-create-heading-row > h4 {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  line-height: 1.25;
+  min-height: 1.55rem;
+}
+
+#subuser-management-container .subuser-create-heading-row #btnSubuserCatalogGlobal {
+  margin: 0;
+  line-height: 1.15;
+  align-self: center;
+  flex: 0 0 auto;
+  min-width: 0 !important;
+  width: auto !important;
+  max-width: 100%;
+  min-height: 1.55rem !important;
+  height: auto !important;
+  padding: 0.1rem 0.5rem !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  border-radius: 999px !important;
+  border-width: 1px !important;
+  box-shadow: none !important;
+  white-space: nowrap;
+}
+
+#subuser-management-container .subuser-create-heading-row #subuserCatalogGlobalInfoBtn.admin-global-api-info-btn {
+  align-self: center;
+  min-height: 1.15rem !important;
+  height: 1.15rem !important;
+  width: 1.15rem !important;
+  min-width: 1.15rem !important;
+  padding: 0 !important;
+  font-size: 0.65rem !important;
+}
+
+#subuser-management-container .subuser-create-heading-row #subuserCatalogGlobalInfoBtn.admin-global-api-info-btn i {
+  font-size: 0.65rem !important;
+}
+
 /* Modal catálogo de plataformas para sub-usuarios */
 .subuser-catalog-modal {
   width: min(920px, 96vw);
@@ -6092,9 +7036,30 @@ body:not(.theme-active) .site-footer__social-config-btn {
   padding: 1rem 1.1rem 1.1rem;
 }
 
+.subuser-catalog-modal .subuser-catalog-header {
+  position: relative;
+  justify-content: center;
+}
+
+.subuser-catalog-modal .subuser-catalog-header h4 {
+  width: 100%;
+  text-align: center;
+}
+
+.subuser-catalog-modal .subuser-catalog-header .btn-close {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.subuser-catalog-modal .subuser-catalog-help {
+  text-align: center;
+}
+
 .subuser-catalog-markup-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   margin: 0.6rem 0 0.8rem;
   flex-wrap: wrap;
@@ -6109,10 +7074,29 @@ body:not(.theme-active) .site-footer__social-config-btn {
   max-width: 10rem;
 }
 
+.subuser-catalog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.subuser-catalog-modal input[type="number"] {
+  border: 1px solid #94a3b8 !important;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.subuser-catalog-modal input[type="number"]:focus {
+  outline: none;
+  border-color: #64748b !important;
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.18);
+}
+
 .subuser-catalog-table-wrap {
   max-height: 52vh;
   overflow: auto;
-  border: 1px solid #111;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
 }
 
@@ -6143,7 +7127,7 @@ body:not(.theme-active) .site-footer__social-config-btn {
 }
 
 .subuser-catalog-table .is-manual input[type="number"] {
-  border-color: #7c3aed;
+  border-color: #7c3aed !important;
 }
 
 @media (max-width: 640px) {
@@ -6185,11 +7169,62 @@ body:not(.theme-active) .site-footer__social-config-btn {
     box-sizing: border-box !important;
   }
 
+  .edit-tool-actions > .btn-panel.btn-blue:not(.btn-sm),
+  .edit-tool-actions > .btn-panel.btn-green:not(.btn-sm),
+  .edit-tool-actions > .btn-panel.btn-orange:not(.btn-sm),
+  .edit-tool-actions > .btn-panel.btn-red:not(.btn-sm),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .edit-tool-actions > .btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .edit-tool-actions > .btn-red:not(.btn-sm):not(.btn-small):not(.imap2-background-delete-btn),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .edit-tool-actions > .btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .edit-tool-actions > .btn-orange:not(.btn-sm):not(.btn-small):not(.row-icon-btn) {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    padding: 0.18rem 0.28rem !important;
+    min-width: 0 !important;
+    line-height: 1.15 !important;
+    height: auto !important;
+  }
+
+  .drive-transfer-actions > .btn-panel.btn-blue:not(.btn-sm),
+  .drive-transfer-actions > .btn-panel.btn-green:not(.btn-sm),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .drive-transfer-actions > .btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .drive-transfer-actions > .btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn) {
+    font-size: 0.85rem !important;
+    padding: 0.32rem 0.45rem !important;
+    min-width: 0 !important;
+    line-height: 1.2 !important;
+    height: auto !important;
+  }
+
   .store-light button.btn-red.imap2-background-delete-btn,
   .manage-my-page-shell button.btn-red.imap2-background-delete-btn,
-  .store-light button.btn-red:has(> i.fa-trash):not(.mobile-menu-btn):not(#deleteAllEmailsBtn):not(#deleteAllNumbersBtn):not(#btnLimpiarMensajes),
+  #allowedEmailsPagination > #deleteAllEmailsBtn,
+  #subuserAllowedEmailsPagination > #subuserDeleteAllEmailsBtn {
+    width: auto !important;
+    min-width: 60px !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 2px 7px !important;
+    font-size: 1.08rem !important;
+    line-height: normal !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+  }
+
+  @media (max-width: 576px) {
+    #allowedEmailsPagination > #deleteAllEmailsBtn,
+    #subuserAllowedEmailsPagination > #subuserDeleteAllEmailsBtn {
+      min-width: 0 !important;
+      padding: 2px 4px !important;
+      font-size: 0.66rem !important;
+      line-height: 1.15 !important;
+    }
+  }
+
+  .store-light button.btn-red:has(> i.fa-trash):not(.mobile-menu-btn):not(.purchase-history-cleanup-purge-btn):not(#deleteAllEmailsBtn):not(#subuserDeleteAllEmailsBtn):not(#deleteAllNumbersBtn):not(#btnLimpiarMensajes),
   button.btn-red.btn-imap-small:has(> i.fa-trash),
-  button.btn-panel.btn-red:has(> i.fa-trash):not(.mobile-menu-btn) {
+  button.btn-panel.btn-red:has(> i.fa-trash):not(.mobile-menu-btn):not(.purchase-history-cleanup-purge-btn) {
     width: 2.55rem !important;
     min-width: 2.55rem !important;
     max-width: 2.55rem !important;
@@ -6242,4 +7277,240 @@ body:not(.theme-active) .site-footer__social-config-btn {
   min-height: 0 !important;
   box-sizing: border-box !important;
   text-align: left !important;
+}
+
+/* Menú de usuario: mismo tamaño que Licencias.
+   Menú y Menú2 del admin no usan .store-user-sidebar-links. */
+.store-user-sidebar-links {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+.store-user-sidebar-links .mobile-menu-btn,
+.store-front-main .store-user-sidebar-links .btn-panel.btn-blue.mobile-menu-btn,
+.store-front-main .store-user-sidebar-links .btn-panel.btn-red.mobile-menu-btn,
+.public-tools-container .store-user-sidebar-links .btn-panel.btn-blue.mobile-menu-btn,
+.public-tools-container .store-user-sidebar-links .btn-panel.btn-red.mobile-menu-btn,
+.worksheet-panel .store-user-sidebar-links .btn-panel.mobile-menu-btn,
+.balance-recharge-page .store-user-sidebar-links .btn-panel.mobile-menu-btn {
+  font-size: 0.92rem !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  width: calc(100% - 2rem) !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0.18rem 1rem !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  display: block !important;
+}
+
+.store-user-sidebar-links .codigos-sidebar-codigos-row .mobile-menu-btn {
+  width: auto !important;
+  margin: 0 !important;
+  flex: 1 1 0;
+}
+
+.edit-subuser-page h3,
+.edit-subuser-page h4 {
+  text-align: center;
+}
+
+.edit-subuser-head h3 {
+  text-align: left;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 0.5rem;
+}
+
+.edit-subuser-volver-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.edit-subuser-password-form {
+  align-items: stretch;
+}
+
+.edit-subuser-store-access-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+}
+
+.edit-subuser-store-access-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.edit-subuser-store-access-label input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+  width: auto;
+}
+
+.edit-subuser-store-access-question {
+  line-height: 1.35;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.edit-subuser-store-access-lead,
+.edit-subuser-store-access-tail {
+  display: inline;
+}
+
+.edit-subuser-store-catalog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+@media (max-width: 576px) {
+  .edit-subuser-store-access-main {
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.3rem;
+    row-gap: 0.25rem;
+  }
+
+  .edit-subuser-store-access-label {
+    display: contents;
+  }
+
+  .edit-subuser-store-access-label input[type="checkbox"] {
+    order: 0;
+    align-self: flex-start;
+    margin-top: 0.2rem;
+  }
+
+  .edit-subuser-store-access-question {
+    display: contents;
+  }
+
+  .edit-subuser-store-access-lead {
+    order: 1;
+    display: inline;
+  }
+
+  .edit-subuser-store-access-tail {
+    order: 2;
+    display: inline;
+  }
+
+  .edit-subuser-store-catalog-row {
+    order: 3;
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: 0;
+    flex: 0 0 auto;
+  }
+
+  .edit-subuser-store-catalog-row .btn-small {
+    white-space: nowrap;
+    line-height: 1.2;
+    font-size: 0.78rem !important;
+    padding: 0.2rem 0.45rem !important;
+    min-width: 0 !important;
+  }
+
+  .edit-subuser-store-status {
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+}
+
+.edit-subuser-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+  width: 100%;
+}
+
+@media (max-width: 576px) {
+  .edit-subuser-actions {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 0.35rem 0.25rem;
+  }
+
+  .edit-subuser-actions > .btn-small {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.22rem 0.3rem !important;
+    font-size: 0.72rem !important;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .edit-subuser-actions > .save-status-msg,
+  .edit-subuser-actions > .save-status-msg-tools {
+    flex: 1 1 100%;
+    width: 100%;
+    text-align: center;
+    margin-top: 0.15rem;
+  }
+}
+
+.edit-subuser-page .edit-subuser-email-search-wrap {
+  margin-bottom: 0.55rem;
+}
+
+.edit-subuser-page .edit-subuser-email-search-wrap input[type="search"] {
+  padding-right: 35px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+.edit-subuser-page .edit-subuser-email-search-wrap .search-textarea-clear-btn {
+  top: 50%;
+  transform: translateY(-50%);
+  right: 8px;
+}
+
+.edit-subuser-page #email-search-clear-btn.search-textarea-clear-btn {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  color: #666 !important;
+  font-weight: 400 !important;
+  padding: 4px 8px !important;
+  width: 24px;
+  height: 24px;
+}
+
+.edit-subuser-page #email-search-clear-btn.search-textarea-clear-btn:hover {
+  color: #333 !important;
+  transform: translateY(-50%) !important;
+  box-shadow: none !important;
+}
+
+.edit-subuser-page #email-search-clear-btn.search-textarea-clear-btn:active {
+  transform: translateY(-50%) !important;
+  box-shadow: none !important;
 }

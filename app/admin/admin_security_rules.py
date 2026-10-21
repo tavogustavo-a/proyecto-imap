@@ -65,6 +65,21 @@ def security_rules_page():
     search_query = request.args.get("search_query", "").strip()
     # Obtener lista de servidores Observador para la plantilla
     observer_servers = ObserverIMAPServer.query.all()
+    from app.models.email_forwarding import normalize_folder_keys
+    observer_buzon_folders = normalize_folder_keys(
+        get_site_setting("observer_buzon_folders", ""),
+        empty_as_none=True,
+    ) or []
+    from app.models.email_buzon import EmailTag
+    buzon_folder_catalog = [
+        {"value": "inbox", "label": "Recibidos"},
+        {"value": "trash", "label": "Papelera"},
+        {"value": "spam", "label": "Spam"},
+    ]
+    for tag in EmailTag.query.order_by(EmailTag.name.asc()).all():
+        if (tag.name or "").strip().lower() == "spam":
+            continue
+        buzon_folder_catalog.append({"value": f"tag:{tag.id}", "label": tag.name})
     rules_data = _get_all_security_rules_data(search_query)
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -72,7 +87,14 @@ def security_rules_page():
         return jsonify({"status": "ok", "rules": rules_data})
     else:
         # Si es carga normal de página, pasamos los datos a la plantilla
-        return render_template("admin/security_rules.html", rules=rules_data, search_query=search_query, observer_servers=observer_servers)
+        return render_template(
+            "admin/security_rules.html",
+            rules=rules_data,
+            search_query=search_query,
+            observer_servers=observer_servers,
+            observer_buzon_folders=observer_buzon_folders,
+            buzon_folder_catalog=buzon_folder_catalog,
+        )
     # --- FIN SECCIÓN GET MODIFICADA ---
 
 # --- Página para Editar Regla de Seguridad ---
@@ -153,36 +175,48 @@ def toggle_security_rule_ajax():
 @admin_bp.route("/save_security_settings", methods=["POST"])
 @admin_required
 def save_security_settings():
+    wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    def respond(success, message, status=200, **extra):
+        payload = {"success": success, "message": message, **extra}
+        if wants_json:
+            return jsonify(payload), status if not success else 200
+        if success:
+            flash(message, "success")
+        else:
+            flash(message, "danger")
+        return redirect(url_for("admin_bp.dashboard"))
+
     try:
         retention = request.form.get("log_retention_minutes")
         frequency = request.form.get("observer_check_frequency")
         observer_enabled = request.form.get("observer_enabled", "0")
 
         if retention is None or frequency is None:
-             flash("Faltan valores de tiempo.", "danger")
-        else:
-            try:
-                # Validar que sean números positivos (ahora acepta decimales)
-                ret_minutes = float(retention)
-                freq_minutes = int(frequency) # La frecuencia de chequeo se mantiene en enteros por el scheduler
-                if ret_minutes <= 0 or freq_minutes <= 0:
-                    raise ValueError("Los valores deben ser mayores a cero.")
-                
-                set_site_setting("log_retention_minutes", str(ret_minutes))
-                set_site_setting("observer_check_frequency", str(freq_minutes))
-                set_site_setting("observer_enabled", observer_enabled)
-                flash("Tiempos de seguridad guardados.", "success")
+            return respond(False, "Faltan valores de tiempo.", 400)
 
+        ret_minutes = float(retention)
+        freq_minutes = int(frequency)
+        if ret_minutes <= 0 or freq_minutes <= 0:
+            raise ValueError("Los valores deben ser mayores a cero.")
 
-                
-            except ValueError as ve:
-                 flash(f"Valor inválido: {ve}", "danger")
-                 
+        set_site_setting("log_retention_minutes", str(ret_minutes))
+        set_site_setting("observer_check_frequency", str(freq_minutes))
+        set_site_setting("observer_enabled", observer_enabled)
+
+        return respond(
+            True,
+            "Tiempos de seguridad guardados.",
+            log_retention_minutes=ret_minutes,
+            observer_check_frequency=freq_minutes,
+            observer_enabled=observer_enabled,
+        )
+
+    except ValueError as ve:
+        return respond(False, f"Valor inválido: {ve}", 400)
     except Exception as e:
-        flash(f"Error guardando ajustes: {e}", "danger")
         current_app.logger.error(f"Error guardando ajustes de seguridad: {e}", exc_info=True)
-        
-    return redirect(url_for("admin_bp.dashboard"))
+        return respond(False, f"Error guardando ajustes: {e}", 500)
 
 
 # --- Ruta para Limpiar el Log de Activadores ---

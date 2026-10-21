@@ -16,6 +16,11 @@ def toggle_user(user_id):
     # Cambiar el estado del usuario
     user.enabled = not user.enabled
     db.session.commit()
+    try:
+        from app.store.drive_telegram_send import sync_store_user_telegram_groups
+        sync_store_user_telegram_groups(user)
+    except Exception:
+        current_app.logger.warning('No se pudo actualizar el grupo de Telegram al cambiar el usuario')
 
     # Si el usuario está siendo activado (pasando de disabled a enabled)
     if user.enabled and not estado_anterior:

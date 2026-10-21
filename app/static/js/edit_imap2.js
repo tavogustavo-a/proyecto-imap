@@ -1,6 +1,26 @@
 // JavaScript para manejar los checkboxes de filtros y regex en edit_imap2.html
 
 document.addEventListener("DOMContentLoaded", function() {
+  const searchFiltersRegexInput = document.getElementById('searchFiltersRegexInput');
+  const filtersRegexTableBody = document.getElementById('filtersRegexTableBody');
+
+  function filterFiltersRegexTableRows() {
+    if (!filtersRegexTableBody) return;
+    const searchTerm = searchFiltersRegexInput ? searchFiltersRegexInput.value.trim().toLowerCase() : '';
+    filtersRegexTableBody.querySelectorAll('tr').forEach(function (row) {
+      if (!searchTerm) {
+        row.style.display = '';
+        return;
+      }
+      const haystack = row.getAttribute('data-search-text') || row.textContent.toLowerCase();
+      row.style.display = haystack.includes(searchTerm) ? '' : 'none';
+    });
+  }
+
+  if (searchFiltersRegexInput) {
+    searchFiltersRegexInput.addEventListener('input', filterFiltersRegexTableRows);
+  }
+
   function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf_token"]');
     return meta ? meta.getAttribute('content') : '';

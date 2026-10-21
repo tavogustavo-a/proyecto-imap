@@ -3313,12 +3313,12 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .admin-licencias-page .license-changes-products-container .admin-licencias-bloc--changes-product {
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 !important; /* Totalmente al ras entre productos, como Días */
+    margin: 0 !important;
     padding: 0 !important;
     background: transparent !important;
-    border: none !important; /* Sin borde exterior individual, para que se vea como barras apiladas */
-    border-bottom: 1px solid rgba(59, 130, 246, 0.45) !important; /* Solo línea separadora como Días */
-    border-radius: 0 !important; /* Sin bordes curvos */
+    border: none !important;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.45) !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
     overflow: hidden;
     box-sizing: border-box;
@@ -6289,6 +6289,102 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     max-width: 100%;
     margin-bottom: 0.5rem;
     box-sizing: border-box;
+  }
+
+  .store-light.maxw-800 .edit-tool-main-container form.no-form-styles .edit-tool-text-row {
+    margin-top: 0.75rem;
+  }
+
+  .store-light.maxw-800 .edit-tool-main-container form.no-form-styles .edit-tool-percent-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.45rem;
+    margin-top: 0.85rem;
+    margin-bottom: 0.95rem;
+  }
+
+  .store-light.maxw-800 .edit-tool-main-container form.no-form-styles .edit-tool-percent-row .form-label {
+    width: auto;
+    max-width: none;
+    margin: 0;
+    text-align: left;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .store-light.maxw-800 .edit-tool-main-container form.no-form-styles .edit-tool-percent-row .form-control {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .edit-tool-page-head {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    margin: 0.15rem 0 0.85rem;
+    padding: 0 0.35rem;
+    box-sizing: border-box;
+  }
+
+  .edit-tool-page-head .edit-tool-back {
+    align-self: flex-end;
+    margin: 0;
+  }
+
+  .edit-tool-page-head .edit-tool-page-title {
+    margin: 0;
+    width: 100%;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .edit-tool-public-block {
+    margin: 0.75rem auto 0.15rem;
+    width: min(100%, 36rem);
+    box-sizing: border-box;
+  }
+
+  .edit-tool-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.4rem;
+    width: min(100%, 28rem);
+    margin: 0.55rem auto 0.35rem;
+    box-sizing: border-box;
+  }
+
+  .edit-tool-actions > .btn-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto;
+    min-height: 0;
+    margin: 0 !important;
+    padding: 0.22rem 0.35rem !important;
+    border-width: 1.5px !important;
+    border-style: solid !important;
+    font-size: 0.8rem !important;
+    font-weight: 600;
+    line-height: 1.15 !important;
+    text-align: center;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+
+  @media (max-width: 520px) {
+    .edit-tool-actions {
+      width: 100%;
+    }
+
+    .edit-tool-actions > .btn-panel {
+      font-size: 0.7rem !important;
+      padding: 0.18rem 0.2rem !important;
+    }
   }
   
   /* Media queries para editar_herramienta.html */
@@ -10381,6 +10477,60 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     margin-top: 0;
   }
 
+  .herramientas-admin-hub h4.mb-1 {
+    text-align: center;
+    width: 100%;
+  }
+
+  .herramientas-admin-hub .productos-buscar-mostrar {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .herramientas-admin-hub .herramientas-table-wrap {
+    width: 100%;
+  }
+
+  .herramientas-admin-hub .herramientas-table-wrap .table th,
+  .herramientas-admin-hub .herramientas-table-wrap .table td {
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  .herramientas-admin-hub .herramientas-table-wrap .action-stack {
+    justify-content: center;
+  }
+
+  .herramientas-admin-hub .edit-html-form {
+    width: 100%;
+    max-width: 32rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .herramientas-admin-hub .edit-html-form .mb-2,
+  .herramientas-admin-hub .edit-html-form .mb-3,
+  .herramientas-admin-hub .edit-html-form #drive-folder-id-field {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+    box-sizing: border-box;
+  }
+
+  .herramientas-admin-hub .edit-html-form .form-control {
+    text-align: center;
+  }
+
+  .herramientas-admin-hub .edit-html-form .form-control::placeholder {
+    text-align: center;
+  }
+
+  .herramientas-admin-hub .edit-html-form select.form-control {
+    text-align: center;
+    text-align-last: center;
+  }
+
   .edit-tool-public-label {
     cursor: pointer;
     user-select: none;
@@ -11556,7 +11706,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   /* Misma caja que .btn-blue (styles.css: padding 2px 10px, border 2px) — no usar padding mayor que Menú/Herramientas */
   .admin-licencias-toolbar .menu-btn-worksheet,
-  .user-licencias-toolbar .licenses-collapse-btn--toolbar,
+  .user-licencias-toolbar .licenses-collapse-btn--toolbar:not(.user-licencias-toolbar-icon-btn),
   .user-licencias-toolbar .user-lic-vencimientos-btn.menu-btn-worksheet {
     padding: 2px 10px !important;
     min-width: 0 !important;
@@ -11580,7 +11730,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
 
   .admin-licencias-toolbar .licenses-collapse-btn--toolbar i,
-  .user-licencias-toolbar .licenses-collapse-btn--toolbar i,
+  .user-licencias-toolbar .licenses-collapse-btn--toolbar:not(.user-licencias-toolbar-icon-btn) i,
   .user-licencias-toolbar .user-lic-vencimientos-btn.menu-btn-worksheet > i,
   .admin-licencias-toolbar .licenses-duplicates-btn--toolbar i,
   .admin-licencias-toolbar #licensesMoveToChangesBtn.menu-btn-worksheet > i {
@@ -14588,6 +14738,138 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     font-size: 1.05rem;
     vertical-align: middle;
   }
+
+  .whatsapp-web-config-panel .whatsapp-user-notify-col-icon--telegram {
+    color: #229ed9;
+  }
+
+.whatsapp-user-phone-modal-title {
+  text-align: center;
+  margin: 0 0 0.35rem;
+}
+
+.whatsapp-user-phone-modal-user,
+.whatsapp-user-phone-modal-hint {
+  text-align: center;
+}
+
+.whatsapp-user-phone-modal-field {
+  display: grid;
+  grid-template-columns: 1.35rem 15.2ch 3.5rem;
+  align-items: center;
+  justify-content: center;
+  column-gap: 0.4rem;
+  width: max-content;
+  margin: 0.4rem auto 0;
+}
+
+.whatsapp-user-phone-modal-field > :last-child {
+  justify-self: end;
+}
+
+.whatsapp-user-phone-modal-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  margin: 0;
+  color: #25d366;
+  font-size: 1.25rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.whatsapp-user-phone-modal-icon--telegram {
+  color: #229ed9;
+}
+
+.whatsapp-user-phone-modal .whatsapp-user-phone-modal-field .form-control {
+  width: 15.2ch !important;
+  min-width: 15.2ch !important;
+  max-width: 15.2ch !important;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.whatsapp-phone-hint-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.whatsapp-phone-hint-wrap .info-icon.info-icon-square {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.whatsapp-phone-hint-wrap .purchase-history-cleanup-info-box {
+  width: 16rem;
+  max-width: min(16rem, 70vw);
+  text-align: center;
+  z-index: 30;
+}
+
+.telegram-user-link-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+}
+
+.telegram-link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: #94a3b8;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.telegram-link-icon--ok {
+  background: #16a34a;
+}
+
+.telegram-link-icon--bad {
+  background: #dc2626;
+}
+
+.telegram-link-icon--busy {
+  background: #ca8a04;
+}
+
+.telegram-user-link-status {
+  min-height: 1.15rem;
+  margin: 0.45rem 0 0;
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.telegram-user-link-status--ok {
+  color: #15803d;
+}
+
+.telegram-user-link-status--bad {
+  color: #b91c1c;
+}
+
+.whatsapp-user-phone-modal-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.85rem;
+}
   
   .license-position-content {
     background: white;
@@ -15754,6 +16036,26 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     min-height: 1500px !important;
     margin-top: 0rem !important;
   }
+
+  .worksheet-hojas-page.store-light {
+    color: #111 !important;
+  }
+
+  #worksheetTableContainer .worksheet-table-pagination,
+  #worksheetTableContainer .worksheet-pagination-label,
+  #worksheetTableContainer .worksheet-pagination-btn {
+    color: #111 !important;
+  }
+
+  #worksheetTableContainer .worksheet-pagination-btn {
+    border-color: #64748b !important;
+    background: #fff !important;
+  }
+
+  #worksheetTableContainer .worksheet-pagination-btn:disabled {
+    color: #94a3b8 !important;
+    opacity: 1;
+  }
   
   /* ⭐ NUEVO: Evitar que worksheets usen estilos de container-max-width-900 */
   .container.container-max-width-900.store-light:has(.worksheet-panel) {
@@ -15830,7 +16132,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
       font-size: 13px !important;
       padding: 6px 10px !important;
     }
-    .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
+    .user-licencias-toolbar-cambios-link.menu-btn-worksheet:not(.user-licencias-toolbar-cambios-link--icon-only) {
       font-size: 14px !important;
       padding: 5px 8px !important;
     }
@@ -16172,10 +16474,36 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     max-height: min(90vh, 36rem);
   }
 
+  .purchase-history-filter-modal .purchase-licencias-modal-head {
+    position: relative;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .purchase-history-filter-modal .purchase-licencias-modal-head > div:first-child {
+    flex: 1 1 auto;
+    width: 100%;
+    padding: 0 2.75rem;
+    box-sizing: border-box;
+  }
+
+  .purchase-history-filter-modal .purchase-licencias-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
   .purchase-history-filter-modal-body {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 0.85rem;
+    text-align: center;
+  }
+
+  .purchase-history-filter-field {
+    width: 100%;
+    max-width: 22rem;
   }
 
   .purchase-history-filter-field .form-label {
@@ -16183,17 +16511,20 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     margin-bottom: 0.3rem;
     font-size: 0.85rem;
     font-weight: 600;
+    text-align: center;
   }
 
   .purchase-history-filter-hint {
     margin: 0.35rem 0 0;
     font-size: 0.75rem;
     opacity: 0.75;
+    text-align: center;
   }
 
   .purchase-history-filter-presets {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 0.4rem;
   }
 
@@ -16217,8 +16548,10 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .purchase-history-filter-actions {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 0.5rem;
     margin-top: 0.25rem;
+    width: 100%;
   }
 
   .purchase-history-page .purchase-history-user-header + .purchase-history-page-title {
@@ -16527,6 +16860,48 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     .purchase-history-cleanup-scope-row .purchase-history-cleanup-scope-field .form-select {
       font-size: 0.74rem !important;
       padding: 0.08rem 1.25rem 0.08rem 0.32rem !important;
+    }
+  }
+
+  /* Icono de basura + «ahora». Gana al botón cuadrado de styles.css (:has > i.fa-trash). */
+  .purchase-history-page .purchase-history-cleanup-scope-row > button.purchase-history-cleanup-purge-btn.btn-panel.btn-red {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.28rem;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: var(--purchase-history-cleanup-scope-control-h) !important;
+    min-height: 0 !important;
+    max-height: var(--purchase-history-cleanup-scope-control-h) !important;
+    padding: 0 0.55rem !important;
+    border-radius: 6px !important;
+    font-size: 0.8rem !important;
+    line-height: 1 !important;
+    font-weight: 600 !important;
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+  }
+
+  .purchase-history-page .purchase-history-cleanup-purge-btn > .fa-trash {
+    font-size: 0.72rem;
+    line-height: 1;
+  }
+
+  @media (max-width: 768px) {
+    .purchase-history-page .purchase-history-cleanup-scope-row > button.purchase-history-cleanup-purge-btn.btn-panel.btn-red {
+      gap: 0.16rem;
+      height: 1.4rem !important;
+      min-height: 0 !important;
+      max-height: 1.4rem !important;
+      padding: 0 0.32rem !important;
+      font-size: 0.66rem !important;
+      border-radius: 5px !important;
+    }
+
+    .purchase-history-page .purchase-history-cleanup-purge-btn > .fa-trash {
+      font-size: 0.58rem;
     }
   }
 
@@ -17187,8 +17562,15 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   .purchase-history-page .purchase-history-pagination {
     display: flex;
-    justify-content: center;
+    flex-wrap: wrap;
+    justify-content: safe center;
+    align-items: center;
+    gap: 0.35rem 0.15rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     margin-top: 3rem;
+    box-sizing: border-box;
   }
 
   .purchase-history-table-wrapper {
@@ -17781,6 +18163,70 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     font-size: 0.92rem;
   }
 
+  /* Resúmenes proveedor / ventas por servicio (historial de compras) */
+  .purchase-licencias-modal--centered .purchase-licencias-modal-head {
+    position: relative;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .purchase-licencias-modal--centered .purchase-licencias-modal-head > div:first-child {
+    flex: 1 1 auto;
+    width: 100%;
+    padding: 0 2.75rem;
+    box-sizing: border-box;
+  }
+
+  .purchase-licencias-modal--centered .purchase-licencias-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  .purchase-licencias-modal--centered .purchase-licencias-modal-title,
+  .purchase-licencias-modal--centered .purchase-licencias-modal-sub {
+    text-align: center;
+  }
+
+  .purchase-licencias-modal--centered .purchase-licencias-modal-sub {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .purchase-licencias-modal--centered .purchase-licencias-modal-body-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .purchase-licencias-modal--centered #purchaseLicenciasModalBody {
+    width: 100%;
+    max-width: 26rem;
+    text-align: center;
+  }
+
+  .purchase-licencias-modal--centered .purchase-licencias-empty {
+    text-align: center;
+  }
+
+  .purchase-licencias-modal--centered .ph-proveedor-servicios-modal-total {
+    text-align: center;
+  }
+
+  .purchase-licencias-modal--centered .ph-proveedor-resumen-item {
+    text-align: center;
+  }
+
+  .purchase-licencias-modal--centered .ph-proveedor-resumen-item__head {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .purchase-licencias-modal--centered .ph-proveedor-resumen-item__pre {
+    text-align: left;
+  }
+
   table#tabla-compras td .btn-ver-licencias-compra,
   table#tabla-compras td .purchase-history-renewal-rejected-btn {
     white-space: nowrap;
@@ -18140,7 +18586,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     }
     
     #menuToggleBtn.menu-btn-worksheet,
-    .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
+    .user-licencias-toolbar-cambios-link.menu-btn-worksheet:not(.user-licencias-toolbar-cambios-link--icon-only) {
       padding: 4px 6px !important;
     }
     
@@ -22191,55 +22637,6 @@ body.shared-mode .connection-logs-btn {
   font-weight: 500 !important;
 }
 
-.container.container-max-width-900.store-light.edit-youtube-container #selectAllBtn {
-  background-color: #28a745 !important;
-  border-color: #28a745 !important;
-  color: white !important;
-}
-
-.container.container-max-width-900.store-light.edit-youtube-container #selectAllBtn:hover {
-  background-color: #198754 !important;
-  border-color: #198754 !important;
-}
-
-.container.container-max-width-900.store-light.edit-youtube-container #deselectAllBtn {
-  background-color: #dc3545 !important;
-  border-color: #dc3545 !important;
-  color: white !important;
-}
-
-.container.container-max-width-900.store-light.edit-youtube-container #deselectAllBtn:hover {
-  background-color: #c82333 !important;
-  border-color: #c82333 !important;
-}
-
-.container.container-max-width-900.store-light.edit-youtube-container button[type="submit"] {
-  border-width: 2px !important;
-  background-color: #28a745 !important;
-  border: 2px solid #28a745 !important;
-  color: white !important;
-  background: #28a745 !important;
-}
-
-.container.container-max-width-900.store-light.edit-youtube-container button[type="submit"]:hover {
-  background-color: #198754 !important;
-  color: white !important;
-  background: #198754 !important;
-}
-
-.container.container-max-width-900.store-light.edit-youtube-container a[href*="admin_tools"] {
-  background-color: #dc3545 !important;
-  border-color: #dc3545 !important;
-  color: white !important;
-  text-decoration: none !important;
-}
-
-.container.container-max-width-900.store-light.edit-youtube-container a[href*="admin_tools"]:hover {
-  background-color: #c82333 !important;
-  border-color: #bd2130 !important;
-  text-decoration: none !important;
-}
-
 .container.container-max-width-900.store-light.edit-youtube-container .mt-4.text-center {
   gap: 0.1rem !important;
 }
@@ -22399,8 +22796,12 @@ body.shared-mode .connection-logs-btn {
 /* ================== SOBRESCRIBIR MARGIN-LEFT PARA ADMIN STORE ================== */
 
 /* Sobrescribir margin-left solo para admin_store (no toolbar licencias) */
-.admin-licencias-page .d-flex.align-items-center:not(.admin-licencias-toolbar):not(.user-licencias-toolbar) {
+.admin-licencias-page .d-flex.align-items-center:not(.admin-licencias-toolbar):not(.user-licencias-toolbar):not(.admin-store-menus) {
   margin-left: auto !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .admin-store-menus {
+  margin-left: 0 !important;
 }
 
 /* ================== ESTILOS PARA PÁGINA DE ARCHIVADOS ================== */
@@ -23075,7 +23476,131 @@ body.shared-mode .connection-logs-btn {
     border: 1.5px solid #2196f3;
 }
 
-/* Estilos para tabla de Drive Transfers (seguridad: sin estilos inline) */
+.drive-transfer-panel .drive-transfer-heading,
+.drive-transfer-panel .form-label,
+.drive-transfer-panel .form-text {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+#drive-transfer-form,
+#drive-edit-form {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.7rem;
+  row-gap: 0.45rem;
+}
+
+#drive-transfer-form > .mb-1:has(> .form-label),
+#drive-edit-form > .mb-1:has(> .form-label) {
+  display: contents;
+}
+
+#drive-transfer-form > #drive-status:empty {
+  display: none;
+}
+
+.drive-transfer-panel h5.drive-transfer-heading {
+  margin-top: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+#drive-transfer-form > .mb-1:has(> .form-label) > .form-label,
+#drive-edit-form > .mb-1:has(> .form-label) > .form-label {
+  width: auto;
+  margin: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+#drive-transfer-form > .mb-1:has(> .form-label) > .form-control,
+#drive-edit-form > .mb-1:has(> .form-label) > .form-control {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+#drive-transfer-form > .mb-1:has(> .form-label) > .form-text,
+#drive-edit-form > .mb-1:has(> .form-label) > .form-text {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+}
+
+#drive-transfer-form > .mb-1:has(#drive-credentials-json) {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr;
+  row-gap: 0.15rem;
+}
+
+#drive-transfer-form > .mb-1:has(#drive-credentials-json) > .form-label {
+  width: 100%;
+  text-align: center;
+  white-space: normal;
+}
+
+@media (max-width: 700px) {
+  #drive-transfer-form,
+  #drive-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  #drive-transfer-form > .mb-1:has(> .form-label),
+  #drive-edit-form > .mb-1:has(> .form-label) {
+    display: grid;
+    grid-template-columns: 1fr;
+    row-gap: 0.15rem;
+  }
+
+  #drive-transfer-form > .mb-1:has(> .form-label) > .form-label,
+  #drive-edit-form > .mb-1:has(> .form-label) > .form-label,
+  #drive-transfer-form > .mb-1:has(> .form-label) > .form-text,
+  #drive-edit-form > .mb-1:has(> .form-label) > .form-text {
+    text-align: center;
+  }
+
+  #drive-transfer-form > .mb-1:has(> .form-label) > .form-text,
+  #drive-edit-form > .mb-1:has(> .form-label) > .form-text {
+    grid-column: 1;
+  }
+}
+
+#drive-transfer-form > .drive-transfer-actions,
+#drive-transfer-form > #drive-status {
+  grid-column: 1 / -1;
+}
+
+.drive-transfer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  justify-self: center;
+  gap: 0.5rem;
+  width: min(100%, 22rem);
+  margin: 0.7rem auto 0.35rem;
+  box-sizing: border-box;
+}
+
+.drive-transfer-actions > .btn-panel {
+  width: 100%;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0.32rem 0.45rem !important;
+  border-width: 1.5px !important;
+  border-style: solid !important;
+  font-size: 0.85rem !important;
+  font-weight: 600;
+  line-height: 1.2 !important;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
 .drive-transfers-table {
     border: 1px solid #dee2e6;
     border-radius: 8px;
@@ -23087,6 +23612,74 @@ body.shared-mode .connection-logs-btn {
 .drive-transfers-table-inner {
     margin-bottom: 0;
     min-width: 600px;
+}
+
+.drive-transfers-table .drive-row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    flex-wrap: nowrap;
+}
+
+.drive-transfers-table .drive-row-action {
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 2.55rem !important;
+    min-width: 2.55rem !important;
+    max-width: 2.55rem !important;
+    height: 1.45rem !important;
+    min-height: 1.45rem !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    border-width: 2px !important;
+    border-style: solid !important;
+    color: #fff !important;
+    font-size: 0.8rem !important;
+    line-height: 1 !important;
+    cursor: pointer;
+    flex: 0 0 auto !important;
+}
+
+.drive-transfers-table .drive-row-action--cleanup {
+    background: #8e44ad !important;
+    border-color: #8e44ad !important;
+}
+
+.drive-transfers-table .drive-row-action--cleanup:hover {
+    background: #7d3c98 !important;
+    border-color: #7d3c98 !important;
+}
+
+.drive-transfers-table .drive-row-action--run {
+    background: #27ae60 !important;
+    border-color: #27ae60 !important;
+}
+
+.drive-transfers-table .drive-row-action--run:hover {
+    background: #1e8449 !important;
+    border-color: #1e8449 !important;
+}
+
+.drive-transfers-table .drive-row-action i {
+    pointer-events: none;
+}
+
+.drive-telegram-problems {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid #f0c36d;
+    background: #fff8e8;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+.drive-telegram-problems ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1.1rem;
 }
 
 .drive-id-code {
@@ -23214,6 +23807,91 @@ body.shared-mode .connection-logs-btn {
         max-width: 100% !important;
         font-size: 16px; /* Evitar zoom en iOS */
     }
+}
+
+/* Herramientas admin: bloques y formularios centrados (todas las pantallas) */
+.herramientas-admin-hub h4.mb-1 {
+    text-align: center;
+    width: 100%;
+}
+
+.herramientas-admin-hub .productos-buscar-mostrar {
+    justify-content: center;
+    width: 100%;
+}
+
+.herramientas-admin-hub .herramientas-table-wrap {
+    width: 100%;
+}
+
+.herramientas-admin-hub .herramientas-table-wrap .table th,
+.herramientas-admin-hub .herramientas-table-wrap .table td {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.herramientas-admin-hub .herramientas-table-wrap .action-stack {
+    justify-content: center;
+}
+
+.herramientas-admin-hub .edit-html-form {
+    width: 100%;
+    max-width: 32rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.herramientas-admin-hub .edit-html-form .mb-2,
+.herramientas-admin-hub .edit-html-form .mb-3,
+.herramientas-admin-hub .edit-html-form #drive-folder-id-field {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+    box-sizing: border-box;
+}
+
+.herramientas-admin-hub .edit-html-form .form-control {
+    text-align: center;
+}
+
+.herramientas-admin-hub .edit-html-form .form-control::placeholder {
+    text-align: center;
+}
+
+.herramientas-admin-hub .edit-html-form select.form-control {
+    text-align: center;
+    text-align-last: center;
+}
+
+.store-light.maxw-800 .herramientas-import-export-block.import-export-card {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 0.25rem 0.15rem;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.store-light.maxw-800 .herramientas-import-export-block .import-export-field input.form-control {
+    text-align: center;
+}
+
+.store-light.maxw-800 .herramientas-import-export-block .import-export-field input.form-control::placeholder {
+    text-align: center;
+}
+
+.store-light.maxw-800 .herramientas-import-export-file-trigger.import-export-file-trigger {
+    border-radius: 16px !important;
+}
+
+.herramientas-admin-hub .edit-html-form textarea.form-control {
+    background: #fff !important;
+    color: #111 !important;
+    border: 1.5px solid #111 !important;
+    font-size: 0.9rem;
+    border-radius: 3px;
+    box-sizing: border-box;
 }
 
 /* Estilos para campos de búsqueda en editar API */
@@ -26574,6 +27252,7 @@ body .card.product-texture-bg::before,
   padding-left: 0.35rem !important;
   padding-right: 0.35rem !important;
   padding-top: 0.35rem !important;
+  margin-bottom: 0.15rem !important;
 }
 /* Barra superior: Menú + usuario + saldo (misma fila) */
 .user-licencias-toolbar {
@@ -26628,17 +27307,18 @@ body .card.product-texture-bg::before,
   margin-right: 0;
 }
 
-/* Misma caja que .btn-blue (gradiente, borde y alto) para Menú y Cambios — pisa reglas globales sueltas de #menuToggleBtn */
+/* Misma caja que .btn-blue (gradiente, borde y alto) — solo botones con texto; iconos usan .user-licencias-toolbar-icon-btn */
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
+.admin-licencias-page.user-licencias-shell
+  .user-licencias-toolbar
+  .user-licencias-toolbar-cambios-link.menu-btn-worksheet:not(.user-licencias-toolbar-icon-btn),
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   box-sizing: border-box !important;
   padding: 2px 10px !important;
   width: auto !important;
-  /* Misma caja visual que .btn-blue: altura mínima por línea + padding + borde */
   min-height: calc(1.08rem * 1.25 + 8px) !important;
   height: auto !important;
   font-size: 1.08rem !important;
@@ -26653,52 +27333,31 @@ body .card.product-texture-bg::before,
   text-shadow: none !important;
 }
 
-/* Anula .worksheet-panel #licensesCollapseBtn { font-size: 22px } en ≤768px para igualar Menú/Historial */
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
-  font-size: 1.08rem !important;
-  line-height: 1.25 !important;
-}
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar > i,
-.admin-licencias-page.user-licencias-shell
-  .user-licencias-toolbar
-  .user-licencias-toolbar-cambios-link.user-licencias-toolbar-cambios-link--icon-only.menu-btn-worksheet
-  > i {
-  font-size: 1em !important;
-  line-height: 1 !important;
-}
-
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet {
-  min-width: 83px !important;
-}
-
 .admin-licencias-page.user-licencias-shell
   .user-licencias-toolbar
-  .user-licencias-toolbar-cambios-link.user-licencias-toolbar-cambios-link--icon-only.menu-btn-worksheet {
-  min-width: 0 !important;
-  padding-left: 10px !important;
-  padding-right: 10px !important;
-}
-
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
-  min-width: 0 !important;
+  .user-licencias-toolbar-cambios-link.menu-btn-worksheet:not(.user-licencias-toolbar-icon-btn) {
+  min-width: 83px !important;
 }
 
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar {
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-icon-btn,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet {
+  color: #f8fbff !important;
+  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
+  border-color: #8498dc !important;
+  /* Un solo borde: sin sombra exterior/inset que imitaba un segundo contorno */
   box-shadow: none !important;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  border-color: #0d6efd !important;
-  color: #fff !important;
 }
 
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet:hover,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet:hover,
-.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .licenses-collapse-btn--toolbar:hover {
-  background: #1256a6 !important;
-  border-color: #1256a6 !important;
-  color: #fff !important;
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-icon-btn:hover,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet:hover {
+  background: linear-gradient(180deg, #5a76c4 0%, #4259a3 100%) !important;
+  border-color: #9aacf0 !important;
+  color: #f8fbff !important;
 }
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar a.user-licencias-toolbar-cambios-link.menu-btn-worksheet:link,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar a.user-licencias-toolbar-cambios-link.menu-btn-worksheet:visited {
@@ -26706,32 +27365,30 @@ body .card.product-texture-bg::before,
   text-decoration: none !important;
 }
 
-/* Responsive: los cuatro controles con mismo padding / min-height (evita que #licensesCollapseBtn se quede fuera de reglas sólo para texto) */
+/* Responsive: solo Menú y Notificación (los iconos no heredan padding/font distintos) */
 @media (max-width: 768px) {
   .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
-  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet,
+  .admin-licencias-page.user-licencias-shell
+    .user-licencias-toolbar
+    .user-licencias-toolbar-cambios-link.menu-btn-worksheet:not(.user-licencias-toolbar-icon-btn) {
     padding: 4px 10px !important;
     font-size: 1rem !important;
     line-height: 1.25 !important;
     min-height: calc(1rem * 1.25 + 8px) !important;
   }
-  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
-    font-size: 1rem !important;
-  }
 }
 
 @media (max-width: 480px) {
   .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
-  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
-  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
+  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet,
+  .admin-licencias-page.user-licencias-shell
+    .user-licencias-toolbar
+    .user-licencias-toolbar-cambios-link.menu-btn-worksheet:not(.user-licencias-toolbar-icon-btn) {
     padding: 4px 8px !important;
     font-size: 0.95rem !important;
     line-height: 1.25 !important;
     min-height: calc(0.95rem * 1.25 + 8px) !important;
-  }
-  .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #licensesCollapseBtn.menu-btn-worksheet.licenses-collapse-btn--toolbar {
-    font-size: 1.1rem !important;
   }
 }
 
@@ -26802,23 +27459,26 @@ body .card.product-texture-bg::before,
   font-weight: 500;
   padding: 1.25rem 0.5rem !important;
 }
-/* Buscador usuario: fondo blanco (no heredar gris oscuro del admin) + altura cómoda */
+/* Buscador usuario: mismo acabado que el de admin (borde gris, sin el negro grueso). */
 .admin-licencias-page.user-licencias-shell.store-light .productos-buscar-mostrar input.form-control,
 .admin-licencias-page.user-licencias-shell.store-light .productos-buscar-mostrar .search-container input,
 .admin-licencias-page.user-licencias-shell .user-licencias-search-wrap input.form-control,
 .admin-licencias-page.user-licencias-shell .user-licencias-search-wrap input[type="search"] {
-  height: auto !important;
-  min-height: 2.75rem !important;
-  padding: 0.62rem 0.9rem !important;
-  line-height: 1.45 !important;
-  letter-spacing: 0.02em !important;
-  font-size: 0.9375rem !important;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 6px 10px !important;
+  line-height: 1.5 !important;
+  letter-spacing: normal !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
   box-sizing: border-box !important;
-  background: #fff !important;
-  border: 1.5px solid #111 !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  border: 0.8px solid #8192aa !important;
   border-radius: 5px !important;
-  color: #111 !important;
-  box-shadow: none !important;
+  color: #172033 !important;
+  box-shadow:
+    inset 0 1px 2px rgba(15, 23, 42, 0.08),
+    0 1px 2px rgba(15, 23, 42, 0.12) !important;
 }
 .admin-licencias-page.user-licencias-shell .user-licencias-search-wrap input.form-control::placeholder,
 .admin-licencias-page.user-licencias-shell .user-licencias-search-wrap input[type="search"]::placeholder,
@@ -26838,10 +27498,11 @@ body .card.product-texture-bg::before,
 @media (max-width: 768px) {
   .admin-licencias-page.user-licencias-shell .user-licencias-search-wrap input.form-control,
   .admin-licencias-page.user-licencias-shell .user-licencias-search-wrap input[type="search"] {
-    min-height: 2.85rem !important;
-    padding: 0.68rem 0.8rem !important;
-    font-size: 1rem !important;
-    letter-spacing: 0.03em !important;
+    height: 32px !important;
+    min-height: 0 !important;
+    padding: 6px 10px !important;
+    font-size: 14px !important;
+    letter-spacing: normal !important;
   }
 }
 
@@ -26849,7 +27510,7 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .productos-buscar-mostrar.productos-buscar-mostrar-centered {
   max-width: none !important;
   width: 100% !important;
-  margin: 0.15rem 0 0.75rem 0 !important;
+  margin: 0 0 0.75rem 0 !important;
   padding-left: 0.35rem;
   padding-right: 0.35rem;
   box-sizing: border-box;
@@ -26962,10 +27623,7 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .license-notepads-wrap.user-lic-bundle-wrap .user-lic-days-expand-all {
   margin-right: 0.28rem;
 }
-/* Días del bundle: micro-separación como Admin (#licenseAllDaysContainer → 0.12rem tras toolbar, ~0.08rem entre barras contraídas) */
-.admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap > .day-section.user-lic-readonly-day:first-of-type {
-  margin-top: 0.12rem !important;
-}
+/* Días del bundle: micro-separación como Admin (#licenseAllDaysContainer → ~0.08rem entre barras contraídas) */
 .admin-licencias-page.user-licencias-shell .user-lic-bundle-wrap > .day-section.user-lic-readonly-day ~ .day-section.user-lic-readonly-day {
   margin-top: 0.08rem !important;
 }
@@ -29017,15 +29675,11 @@ body .card.product-texture-bg::before,
   margin: 0 !important;
 }
 
-/* Chips de filtro de producto: sin banda inferior oscura del ::before global (parecía sombra pegada al bloque «Día 1») */
-.admin-licencias-page.user-licencias-shell .licenses-grid .license-card:not(.active)::before {
-  background: linear-gradient(
-    185deg,
-    rgba(255, 255, 255, 0.07) 0%,
-    rgba(147, 197, 253, 0.04) 38%,
-    transparent 72%
-  );
-  opacity: 1;
+/* Chips de filtro de producto: sin la banda de color bajo el título (azul y luego roja). */
+.admin-licencias-page.user-licencias-shell .licenses-grid .license-card::before {
+  content: none !important;
+  display: none !important;
+  background: none !important;
 }
 
 .admin-licencias-page.user-licencias-shell .licenses-grid .license-card.active::before {
@@ -38217,7 +38871,7 @@ body.balance-recharge-qr-lightbox-open {
   }
 
   .admin-licencias-page.user-licencias-shell .productos-buscar-mostrar.productos-buscar-mostrar-centered {
-    margin: 0.15rem 0 0.75rem 0 !important;
+    margin: 0 0 0.75rem 0 !important;
     padding: 0 0.15rem;
   }
 
@@ -38932,6 +39586,36 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   margin-left: 0.15rem;
 }
 
+.whatsapp-web-config-panel button.info-icon.info-icon-square {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  max-width: 22px;
+  max-height: 22px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  flex: 0 0 22px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  background: #1976d2;
+  color: #fff;
+  border: 2.5px solid #1976d2;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px #1976d2aa;
+}
+
+.whatsapp-web-config-panel button.info-icon.info-icon-square:hover,
+.whatsapp-web-config-panel button.info-icon.info-icon-square:focus-visible {
+  background: #1256a6;
+  border-color: #1256a6;
+  color: #fff;
+  box-shadow: 0 0 0 2.5px #1256a6;
+  outline: none;
+}
+
 .whatsapp-web-config-panel {
   position: relative;
 }
@@ -38949,9 +39633,13 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   z-index: 10600;
   width: min(340px, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
+  max-height: min(52vh, 20rem);
+  overflow-x: hidden;
+  overflow-y: auto;
   box-sizing: border-box;
   text-align: center;
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+  -webkit-overflow-scrolling: touch;
 }
 
 .whatsapp-web-info-box {
@@ -38965,16 +39653,77 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   border-radius: 3px;
 }
 
+.whatsapp-test-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.whatsapp-test-channel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  margin: 0;
+  color: #25d366;
+  font-size: 1.05rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.whatsapp-test-channel-icon--telegram {
+  color: #229ed9;
+}
+
+.whatsapp-web-config-panel .whatsapp-phone-test-btn--telegram.btn-panel {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.15rem !important;
+  padding: 0.1rem 0.28rem !important;
+  font-size: 0.65rem !important;
+  line-height: 1 !important;
+  min-height: 1.2rem !important;
+  max-height: 1.2rem !important;
+  min-width: 0 !important;
+  width: auto !important;
+  border-width: 1px !important;
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  background: #229ed9 !important;
+  border-color: #1b8bc4 !important;
+  color: #fff !important;
+}
+
+.whatsapp-web-config-panel .whatsapp-phone-test-btn--telegram.btn-panel:hover {
+  background: #1b8bc4 !important;
+  border-color: #1b8bc4 !important;
+  color: #fff !important;
+}
+
+.whatsapp-web-config-panel .whatsapp-phone-test-btn--telegram.btn-panel i,
+.whatsapp-web-config-panel .whatsapp-phone-test-btn--telegram.btn-panel span {
+  font-size: 0.65rem !important;
+  color: #fff !important;
+}
+
 .whatsapp-web-config-panel .whatsapp-phone-inline-row {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  justify-content: center;
+  gap: 0.4rem;
   flex-wrap: nowrap;
+  width: 100%;
 }
 
 .whatsapp-web-config-panel .whatsapp-phone-inline-row .whatsapp-time-field-group {
   flex: 0 0 auto;
-  margin-left: 0.15rem;
+  width: auto;
+  max-width: none;
+  margin-left: 0;
 }
 
 .whatsapp-web-config-panel .whatsapp-time-field-group {
@@ -39007,11 +39756,11 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 }
 
 .whatsapp-web-config-panel .whatsapp-time-inline-input.form-control {
-  width: auto;
+  width: auto !important;
   flex: 0 0 auto;
-  min-width: 6.5rem;
-  max-width: 9rem;
-  padding: 0.15rem 0.35rem !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 0.15rem 0.28rem !important;
   font-size: 0.78rem !important;
   min-height: 1.2rem !important;
   max-height: 1.2rem !important;
@@ -39022,10 +39771,12 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: max-content;
 }
 
+.whatsapp-web-config-panel.store-light .whatsapp-phone-test-btn.btn-panel.btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
 .whatsapp-web-config-panel .whatsapp-phone-test-btn.btn-panel.btn-green {
   display: inline-flex !important;
   align-items: center !important;
@@ -39106,14 +39857,112 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   gap: 0.4rem 0.45rem;
 }
 
-.whatsapp-web-config-panel .whatsapp-health-row--top {
+.whatsapp-web-config-panel .whatsapp-health-row--controls {
   flex-wrap: nowrap;
   justify-content: center;
+  align-items: center;
   width: 100%;
+  gap: 0.45rem;
 }
 
-.whatsapp-web-config-panel .whatsapp-health-row--bottom {
-  justify-content: flex-start;
+.whatsapp-health-split,
+.whatsapp-web-config-panel .whatsapp-health-split {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.whatsapp-web-config-panel .whatsapp-channel-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.whatsapp-web-config-panel .whatsapp-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.whatsapp-web-config-panel .whatsapp-save-row {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 0.15rem;
+}
+
+.whatsapp-web-config-panel .whatsapp-user-notify-section-title {
+  margin-top: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.whatsapp-web-config-panel .whatsapp-channel-row .whatsapp-enabled-check.form-check {
+  flex: 0 0 11.6rem;
+  width: 11.6rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.whatsapp-web-config-panel .whatsapp-channel-row .whatsapp-enabled-check .form-check-input {
+  position: static;
+  float: none;
+  margin: 0;
+}
+
+.whatsapp-web-config-panel .whatsapp-channel-row .whatsapp-enabled-check .form-check-label {
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.whatsapp-web-config-panel .whatsapp-health-actions > .whatsapp-status-msg {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+}
+
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-red:not(.btn-sm):not(.btn-small):not(.imap2-background-delete-btn):not(:has(> i.fa-trash)),
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-orange:not(.btn-sm):not(.btn-small):not(.row-icon-btn) {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  padding: 0.22rem 0.45rem !important;
+  min-width: 0 !important;
+  min-height: 1.7rem !important;
+  height: auto !important;
+  line-height: 1.2 !important;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .whatsapp-web-config-panel .whatsapp-health-row--controls {
+    gap: 0.28rem;
+  }
+
+  .whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+  .whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
+  .whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-red:not(.btn-sm):not(.btn-small):not(.imap2-background-delete-btn):not(:has(> i.fa-trash)),
+  .whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-health-row--controls > .btn-panel.btn-orange:not(.btn-sm):not(.btn-small):not(.row-icon-btn) {
+    font-size: 0.66rem !important;
+    padding: 0.16rem 0.28rem !important;
+  }
+
+  .whatsapp-web-config-panel .whatsapp-channel-row .whatsapp-enabled-check .form-check-label {
+    font-size: 0.72rem;
+    min-width: 0;
+  }
 }
 
 .whatsapp-web-config-panel .whatsapp-health-sep {
@@ -39137,22 +39986,6 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   align-items: center;
   flex: 0 0 auto;
   white-space: nowrap;
-}
-
-.whatsapp-web-config-panel .whatsapp-health-row .whatsapp-notify-btn {
-  flex: 0 0 auto;
-}
-
-.whatsapp-web-config-panel .whatsapp-health-row .whatsapp-status-msg {
-  flex: 1 1 auto;
-  min-width: 8rem;
-  text-align: left;
-  margin-left: auto;
-}
-
-.whatsapp-web-config-panel .whatsapp-health-row--bottom .whatsapp-enabled-check.form-check {
-  flex: 1 1 auto;
-  min-width: 12rem;
 }
 
 .whatsapp-web-config-panel .whatsapp-health-row .btn-panel {
@@ -39190,22 +40023,334 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   color: #16a34a;
 }
 
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn {
+  white-space: nowrap;
+  min-width: 5.8rem;
+}
+
+.telegram-botfather-label {
+  display: block;
+  margin: 0.65rem 0 0.25rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.telegram-botfather-field.form-control {
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  box-sizing: border-box;
+  border: 2px solid #111 !important;
+  border-radius: 4px;
+  background: #fff;
+  field-sizing: fixed;
+}
+
+.telegram-botfather-status {
+  min-height: 1.2rem;
+  margin: 0.55rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.telegram-botfather-status--ok {
+  color: #15803d;
+}
+
+.telegram-botfather-status--bad {
+  color: #b91c1c;
+}
+
+.telegram-botfather-modal .modal-content {
+  max-height: min(90vh, 40rem);
+  overflow-y: auto;
+}
+
+.telegram-group-extract {
+  margin-top: 0.85rem;
+  text-align: left;
+}
+
+.telegram-group-extract-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.telegram-group-extract-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.telegram-botfather-modal button.info-icon.info-icon-square {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  max-width: 22px;
+  max-height: 22px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  flex: 0 0 22px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  background: #1976d2;
+  color: #fff;
+  border: 2.5px solid #1976d2;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px #1976d2aa;
+}
+
+.telegram-group-extract-info-box {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+  z-index: 10600;
+  width: min(340px, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  max-height: min(52vh, 20rem);
+  overflow: auto;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 0.82rem;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+}
+
+.telegram-botfather-modal button.telegram-group-extract-load {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  height: 1.85rem;
+  min-height: 1.85rem;
+  margin: 0.5rem auto 0.4rem;
+  padding: 0 0.75rem;
+  border: 2px solid #1256a6;
+  border-radius: 4px;
+  background: #1976d2;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.telegram-botfather-modal button.telegram-group-extract-load:disabled {
+  opacity: 0.7;
+}
+
+.telegram-group-extract-table-wrap {
+  max-height: 16rem;
+  overflow: auto;
+  border: 2px solid #111;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.telegram-group-extract-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.telegram-group-extract-table th,
+.telegram-group-extract-table td {
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.telegram-group-extract-table th {
+  position: sticky;
+  top: 0;
+  background: #f3f4f6;
+  font-weight: 700;
+}
+
+.telegram-group-extract-table tr.telegram-group-topic-row td:first-child {
+  padding-left: 0.85rem;
+}
+
+.telegram-group-id-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  max-width: 100%;
+}
+
+.telegram-botfather-modal button.telegram-group-copy-btn {
+  width: 0.95rem;
+  height: 0.95rem;
+  min-width: 0.95rem;
+  min-height: 0.95rem;
+  max-width: 0.95rem;
+  max-height: 0.95rem;
+  padding: 0;
+  border: 1px solid #111;
+  border-radius: 3px;
+  background: #fff;
+  color: #111;
+  font-size: 0.5rem;
+  line-height: 1;
+  flex: 0 0 0.95rem;
+}
+
+.telegram-botfather-modal button.telegram-group-extract-btn {
+  height: 1.7rem;
+  min-height: 1.7rem;
+  padding: 0 0.5rem;
+  border: 2px solid #111;
+  border-radius: 4px;
+  background: #fff;
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.whatsapp-pruebas-modal.modal {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  position: fixed;
+  inset: 0;
+  z-index: 10755;
+}
+
+.whatsapp-pruebas-modal.modal.d-none {
+  display: none !important;
+}
+
+.whatsapp-pruebas-stack {
+  align-items: center;
+  margin-top: 0.35rem;
+}
+
+.whatsapp-pruebas-modal .whatsapp-phone-inline-row {
+  justify-content: center;
+  width: 100%;
+}
+
+.whatsapp-pruebas-modal .whatsapp-phone-field-group {
+  display: grid;
+  grid-template-columns: 1.2rem 15.2ch 7.4rem;
+  align-items: center;
+  column-gap: 0.35rem;
+}
+
+.whatsapp-pruebas-modal .whatsapp-phone-field-group .whatsapp-phone-inline-input.form-control {
+  field-sizing: fixed;
+  width: 15.2ch !important;
+  min-width: 15.2ch !important;
+  max-width: 15.2ch !important;
+  border: 2px solid #111 !important;
+  border-radius: 4px;
+  box-sizing: border-box;
+  background: #fff !important;
+}
+
+.whatsapp-pruebas-modal .whatsapp-phone-field-group .whatsapp-phone-test-btn {
+  width: 7.4rem !important;
+  min-width: 7.4rem !important;
+  max-width: 7.4rem !important;
+  justify-content: center;
+}
+
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-phone-inline-row > button#whatsapp-pruebas-open-btn.whatsapp-mini-btn.btn-panel.btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+.whatsapp-web-config-panel .whatsapp-phone-inline-row > button.whatsapp-mini-btn.btn-panel,
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-channel-row > button.whatsapp-mini-btn.btn-panel.btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-channel-row > button.whatsapp-mini-btn.btn-panel.btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-channel-row > button.whatsapp-mini-btn.btn-panel.btn-red:not(.btn-sm):not(.btn-small):not(.imap2-background-delete-btn):not(:has(> i.fa-trash)),
+.whatsapp-web-config-panel .whatsapp-channel-row > button.whatsapp-mini-btn.btn-panel {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0.1rem 0.28rem !important;
+  font-size: 0.65rem !important;
+  line-height: 1 !important;
+  min-height: 1.2rem !important;
+  max-height: 1.2rem !important;
+  height: auto !important;
+  width: auto !important;
+  border-width: 1px !important;
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  white-space: nowrap;
+}
+
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-channel-row > button#whatsapp-show-qr-btn.whatsapp-mini-btn.btn-panel.btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+.whatsapp-web-config-panel.store-light:not(.worksheet-panel):not(.admin-licencias-page) .whatsapp-channel-row > button#telegram-botfather-open-btn.whatsapp-mini-btn.btn-panel.btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user) {
+  width: 7.7rem !important;
+  min-width: 7.7rem !important;
+  max-width: 7.7rem !important;
+  padding-left: 0.12rem !important;
+  padding-right: 0.12rem !important;
+  font-size: 0.58rem !important;
+}
+
+@media (max-width: 480px) {
+  .whatsapp-web-config-panel .whatsapp-channel-row .whatsapp-enabled-check.form-check {
+    flex-basis: 8.5rem;
+    width: 8.5rem;
+  }
+}
+
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn .whatsapp-health-status__value {
+  color: #fff;
+  font-weight: 600;
+}
+
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn.btn-green,
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn.btn-green:hover {
+  background: #16a34a !important;
+  border-color: #15803d !important;
+  color: #fff !important;
+}
+
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn.btn-red,
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn.btn-red:hover {
+  background: #dc2626 !important;
+  border-color: #b91c1c !important;
+  color: #fff !important;
+}
+
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn.btn-orange,
+.whatsapp-web-config-panel button.whatsapp-verify-state-btn.btn-orange:hover {
+  background: #ca8a04 !important;
+  border-color: #a16207 !important;
+  color: #fff !important;
+}
+
+.whatsapp-web-config-panel.store-light .whatsapp-time-field-group .whatsapp-notify-btn.btn-panel.btn-orange:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
 .whatsapp-web-config-panel .whatsapp-notify-btn.btn-panel.btn-orange {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 0.25rem !important;
-  padding: 0.28rem 0.45rem !important;
-  font-size: 0.72rem !important;
-  line-height: 1.2 !important;
-  min-height: 1.75rem !important;
-  max-height: none !important;
+  gap: 0.15rem !important;
+  padding: 0.1rem 0.35rem !important;
+  font-size: 0.65rem !important;
+  line-height: 1 !important;
+  min-height: 1.2rem !important;
+  max-height: 1.2rem !important;
   min-width: 0 !important;
   width: auto !important;
   border-width: 1px !important;
-  border-radius: 6px !important;
+  border-radius: 4px !important;
   font-weight: 600 !important;
   white-space: nowrap;
+  flex: 0 0 auto;
+  box-shadow: none !important;
 }
 
 .whatsapp-web-config-panel .whatsapp-notify-btn--icon.btn-panel.btn-orange {
@@ -39286,10 +40431,12 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 }
 
 .whatsapp-web-config-panel .whatsapp-phone-field-group .whatsapp-phone-inline-input.form-control {
-  width: auto;
-  flex: 1 1 auto;
-  min-width: 5rem;
-  max-width: 11rem;
+  field-sizing: content;
+  box-sizing: border-box;
+  width: 15.2ch !important;
+  min-width: 15.2ch !important;
+  max-width: 15.2ch !important;
+  flex: 0 0 auto !important;
 }
 .whatsapp-qr-image-wrap {
   min-height: 280px;
@@ -39432,33 +40579,13 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 
 @media (max-width: 576px) {
   .whatsapp-web-config-panel .whatsapp-phone-inline-row {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
   }
 
-  .whatsapp-web-config-panel .whatsapp-phone-inline-row .whatsapp-phone-field-group {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .whatsapp-web-config-panel .whatsapp-phone-field-group .whatsapp-phone-inline-input.form-control {
-    max-width: none;
-  }
-
-  .whatsapp-web-config-panel .whatsapp-phone-inline-row .whatsapp-time-field-group {
-    flex: 0 0 100%;
-    width: 100%;
-    margin-left: 0;
-    margin-top: 0.2rem;
-  }
-
-  .whatsapp-web-config-panel .whatsapp-health-row--top {
-    flex-wrap: wrap;
+  .whatsapp-web-config-panel .whatsapp-health-row--controls {
+    flex-wrap: nowrap;
     justify-content: center;
-  }
-
-  .whatsapp-web-config-panel .whatsapp-health-row--bottom {
-    width: 100%;
   }
 
   .whatsapp-web-config-panel .whatsapp-health-row {
@@ -44408,11 +45535,9 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   .admin-licencias-bloc-header {
   color: #f8fbff !important;
   background: linear-gradient(90deg, #17365f 0%, #20589a 55%, #2563a9 100%) !important;
-  border-top: 1px solid rgba(147, 197, 253, 0.62) !important;
-  border-bottom: 1px solid rgba(3, 19, 43, 0.92) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 1px 2px rgba(2, 6, 23, 0.35) !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
   text-shadow: 0 1px 1px rgba(2, 6, 23, 0.55);
 }
 
@@ -44781,9 +45906,7 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   color: #f8fbff !important;
   background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
   border-color: #8498dc !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 1px 2px rgba(15, 23, 42, 0.28) !important;
+  box-shadow: none !important;
 }
 
 .admin-licencias-page.user-licencias-shell
@@ -44803,8 +45926,8 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   > .admin-licencias-bloc-header {
   color: #f8fbff !important;
   background: linear-gradient(90deg, #183a65 0%, #245b98 62%, #2d70b6 100%) !important;
-  border-top: 1px solid rgba(147, 197, 253, 0.58) !important;
-  border-bottom: 1px solid rgba(3, 19, 43, 0.92) !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.11),
     0 1px 2px rgba(2, 6, 23, 0.32) !important;
@@ -45335,6 +46458,10 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   background: #fee2e2;
   color: #991b1b;
 }
+.admin-proveedores-anadir-fuera-page .mp-api-credentials-form {
+  margin: 0;
+  padding: 0;
+}
 .admin-proveedores-anadir-fuera-page .mp-api-form-row {
   display: flex;
   flex-direction: column;
@@ -45403,6 +46530,34 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 .admin-proveedores-anadir-fuera-page .mp-api-threshold-row .btn-panel i {
   margin-right: 0.28rem;
   font-size: 0.75rem;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-actions > #mpApiSaveBtn.btn-panel.btn-green {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 0.12rem 0.38rem !important;
+  font-size: 0.78rem !important;
+  line-height: 1.1 !important;
+  height: auto !important;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-actions > #mpApiTestBtn.btn-panel.btn-blue {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: 0.12rem 0.4rem !important;
+  font-size: 0.78rem !important;
+  line-height: 1.1 !important;
+  gap: 0.22rem;
+  white-space: nowrap !important;
+}
+.admin-proveedores-anadir-fuera-page .mp-api-actions > #mpApiTestBtn.btn-panel i {
+  margin: 0 !important;
+  font-size: 0.7rem;
 }
 .admin-proveedores-anadir-fuera-page .mp-api-message {
   margin: 0.4rem auto 0.2rem;
@@ -45650,4 +46805,186 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
     font-size: 1.08rem !important;
     min-height: 0 !important;
   }
+}
+
+/* Admin licencias: cabeceras apiladas sin doble línea (días/cambios al ras) */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap
+  #licenseAllDaysContainer
+  .admin-licencias-bloc--day
+  + .admin-licencias-bloc--day
+  > .admin-licencias-bloc-header,
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-changes-products-container
+  .admin-licencias-bloc--changes-product
+  + .admin-licencias-bloc--changes-product
+  > .admin-licencias-bloc-header {
+  border-top: none !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .license-notepads-wrap {
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Solo las tarjetas de productos/servicios llevan separación extra */
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .licencias-container:not(.collapsed)
+  .licenses-grid {
+  gap: 0.55rem 0.42rem !important;
+  row-gap: 0.55rem !important;
+}
+
+.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell)
+  .licencias-container
+  .license-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 6px rgba(2, 6, 23, 0.22) !important;
+}
+
+/* Portal usuario: espacio entre las tarjetas de productos y el listado de días */
+.admin-licencias-page.user-licencias-shell .licencias-container {
+  margin-bottom: 0.7rem !important;
+}
+
+/* Portal usuario: Menú/Notificación en fila; iconos cuadrados fijos (única fuente de medidas) */
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet {
+  align-self: stretch !important;
+  height: auto !important;
+  min-height: calc(1.08rem * 1.25 + 8px) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-licencias-toolbar
+  .admin-store-menus
+  > .user-licencias-toolbar-icon-btn {
+  --user-lic-toolbar-icon-box: calc(1.08rem * 1.25 + 8px);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  flex: 0 0 var(--user-lic-toolbar-icon-box) !important;
+  width: var(--user-lic-toolbar-icon-box) !important;
+  min-width: var(--user-lic-toolbar-icon-box) !important;
+  max-width: var(--user-lic-toolbar-icon-box) !important;
+  height: var(--user-lic-toolbar-icon-box) !important;
+  min-height: var(--user-lic-toolbar-icon-box) !important;
+  max-height: var(--user-lic-toolbar-icon-box) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 8px !important;
+  border-width: 2px !important;
+  border-style: solid !important;
+  align-self: center !important;
+  vertical-align: middle !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-licencias-toolbar
+  .admin-store-menus
+  > .user-licencias-toolbar-icon-btn
+  > i {
+  font-size: 14px !important;
+  width: 14px !important;
+  height: 14px !important;
+  line-height: 14px !important;
+  display: block !important;
+  margin: 0 !important;
+  text-align: center !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .user-licencias-toolbar
+  .admin-store-menus
+  > .user-licencias-toolbar-icon-btn.user-licencias-toolbar-cambios-link
+  > .fa-exchange-alt {
+  font-size: 13px !important;
+  width: 13px !important;
+  height: 13px !important;
+  line-height: 13px !important;
+}
+
+/* Portal usuario: fila pegada a la izquierda, mismo gap entre Menú, iconos y Notificación */
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar {
+  justify-content: flex-start !important;
+  align-items: center !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar > .admin-store-menus {
+  width: auto !important;
+  max-width: 100% !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  align-self: flex-start !important;
+  gap: 0.5rem !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar .admin-store-menus > * {
+  flex: 0 0 auto !important;
+  flex-grow: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet {
+  flex: 0 0 auto !important;
+  flex-grow: 0 !important;
+  margin-left: 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+.admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet {
+  margin-left: 0 !important;
+}
+
+/* Portal usuario: tarjetas de productos/servicios con separación y sin borde oscuro inferior */
+.admin-licencias-page.user-licencias-shell
+  .licencias-container:not(.collapsed)
+  .licenses-grid {
+  gap: 0.55rem 0.42rem !important;
+  row-gap: 0.55rem !important;
+  column-gap: 0.42rem !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .licencias-container
+  .license-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.admin-licencias-page.user-licencias-shell
+  .licencias-container
+  .license-card.active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(96, 165, 250, 0.55) !important;
+}
+
+/* Mis Páginas: panel semitransparente (admin-card); filas blanco sólido */
+.my-pages-list-page .my-pages-list-panel {
+  overflow: visible !important;
+  background-color: var(--card-bg) !important;
+  color: var(--text-color) !important;
+}
+.my-pages-list-page .my-pages-item {
+  background-color: #ffffff !important;
+  border: 1px solid #ccc !important;
+  box-shadow: none !important;
+  outline: none !important;
+  min-height: 3rem;
 }

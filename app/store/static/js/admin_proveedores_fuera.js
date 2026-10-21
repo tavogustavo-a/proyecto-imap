@@ -158,6 +158,14 @@
 
   initCollapsibleCards();
 
+  var credentialsForm = document.getElementById('mpApiCredentialsForm');
+  if (credentialsForm) {
+    credentialsForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (els.saveBtn) els.saveBtn.click();
+    });
+  }
+
   function updateLowBalanceWarn(balance) {
     if (!els.lowBalanceWarn) return;
     var num = Number(balance);

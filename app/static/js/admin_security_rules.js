@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div><strong>Descripción:</strong> ${escapeHTML(rule.description) || '(Sin descripción)'}</div>
                 <div><strong>Patrón Activador:</strong> <code>${escapeHTML(rule.trigger_pattern)}</code></div>
                 <div><strong>Patrón Observador:</strong> <code>${escapeHTML(rule.observer_pattern)}</code></div>
-                <div>
+                <div class="security-rule-actions d-flex flex-wrap justify-content-center align-items-center gap-05 mt-05">
                     ${stateSwitchHtml(!!rule.enabled, 'toggle-security-rule', `data-id="${rule.id}" data-enabled="${rule.enabled ? 'true' : 'false'}"`)}
                     <a href="/admin/edit_security_rule/${rule.id}" class="btn-panel btn-orange btn-sm btn-edit-security-rule row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                     <button class="btn-panel btn-red btn-sm delete-security-rule" data-id="${rule.id}" title="Eliminar">

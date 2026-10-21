@@ -1475,7 +1475,7 @@ def _record_portal_renewal_blocked_activity(
 USER_LIC_CADUCIDAD_VIEW_MAX_DAYS = 5
 
 # Cache bust único: Admin Licencias + portal /licencias (evita CSS/JS mezclados en producción).
-LICENCIAS_STATIC_VERSION = '20261018-row-tight'
+LICENCIAS_STATIC_VERSION = '20261020-lic-search-tighter'
 
 
 def _billing_user_for_store_debt_limit(user_obj):
@@ -1963,6 +1963,8 @@ def create_product():
 def edit_product(prod_id):
     product = Product.query.get_or_404(prod_id)
     if request.method == 'POST':
+        old_price_cop = float(product.price_cop or 0)
+        old_price_usd = float(product.price_usd or 0)
         if not product.is_preset:
             product.name = request.form.get('name')
         price_cop_str = request.form.get('price_cop', '0')
@@ -1982,6 +1984,18 @@ def edit_product(prod_id):
             if product.image_filename == 'none':
                 product.image_filename = None
             try:
+                # Si el admin SUBE el precio, ese mismo aumento se suma a los
+                # precios manuales de los sub-usuarios (y plantillas globales).
+                delta_cop = float(product.price_cop or 0) - old_price_cop
+                delta_usd = float(product.price_usd or 0) - old_price_usd
+                if delta_cop > 0 or delta_usd > 0:
+                    from app.store.subuser_catalog import apply_price_delta_to_subuser_catalogs
+                    bumped = apply_price_delta_to_subuser_catalogs(product.id, delta_cop, delta_usd)
+                    if bumped:
+                        current_app.logger.info(
+                            "Aumento de precio de producto %s propagado a %s catálogo(s) de sub-usuarios.",
+                            product.id, bumped,
+                        )
                 db.session.commit()
                 flash('Producto actualizado.', 'success')
                 return redirect(url_for('store_bp.admin_productos'))
@@ -2756,6 +2770,7 @@ def export_tools_config():
                 "title": html.title,
                 "text": html.text,
                 "enabled": html.enabled,
+                "is_public": bool(getattr(html, 'is_public', False)),
                 "user_usernames": user_usernames
             }
             config_data["htmls"].append(html_dict)
@@ -2776,6 +2791,7 @@ def export_tools_config():
                 "title": listing.title,
                 "content": listing.content if listing.content else None,
                 "enabled": listing.enabled,
+                "is_public": bool(getattr(listing, 'is_public', False)),
                 "user_usernames": user_usernames,
                 "production_links": production_links
             }
@@ -2791,6 +2807,7 @@ def export_tools_config():
                 "api_type": api.api_type,
                 "api_url": api.api_url,
                 "enabled": api.enabled,
+                "is_public": bool(getattr(api, 'is_public', False)),
                 "drive_subtitle_photos": api.drive_subtitle_photos,
                 "drive_subtitle_videos": api.drive_subtitle_videos,
                 "user_usernames": user_usernames
@@ -2897,7 +2914,8 @@ def import_tools_config():
                 new_html = HtmlInfo(
                     title=html_data.get('title'),
                     text=html_data.get('text'),
-                    enabled=html_data.get('enabled', True)
+                    enabled=html_data.get('enabled', True),
+                    is_public=bool(html_data.get('is_public', False)),
                 )
                 db.session.add(new_html)
                 db.session.flush()
@@ -2915,7 +2933,8 @@ def import_tools_config():
                 new_listing = YouTubeListing(
                     title=listing_data.get('title'),
                     content=listing_data.get('content'),
-                    enabled=listing_data.get('enabled', True)
+                    enabled=listing_data.get('enabled', True),
+                    is_public=bool(listing_data.get('is_public', False)),
                 )
                 db.session.add(new_listing)
                 db.session.flush()
@@ -2946,6 +2965,7 @@ def import_tools_config():
                     api_type=api_data.get('api_type'),
                     api_url=api_data.get('api_url'),
                     enabled=api_data.get('enabled', True),
+                    is_public=bool(api_data.get('is_public', False)),
                     drive_subtitle_photos=api_data.get('drive_subtitle_photos'),
                     drive_subtitle_videos=api_data.get('drive_subtitle_videos')
                 )
@@ -3038,8 +3058,12 @@ def create_api():
 @store_bp.route('/admin/api/<int:api_id>/edit', methods=['GET'])
 @admin_required
 def edit_api(api_id):
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
     api = ApiInfo.query.get_or_404(api_id)
-    return render_template('edit_api.html', api=api)
+    public_url = url_for('store_bp.api_public_one', api_id=api.id, _external=True)
+    return render_template('edit_api.html', api=api, public_url=public_url)
 
 @store_bp.route('/admin/api/<int:api_id>/edit', methods=['POST'])
 @admin_required
@@ -3051,7 +3075,8 @@ def update_api(api_id):
 
     if not title or not api_key:
         flash('El título y la clave de API son obligatorios.', 'danger')
-        return render_template('edit_api.html', api=api)
+        public_url = url_for('store_bp.api_public_one', api_id=api.id, _external=True)
+        return render_template('edit_api.html', api=api, public_url=public_url)
 
     if not (api_type or '').strip():
         from app.utils.html_sanitize import sanitize_admin_message_html_str
@@ -3059,7 +3084,8 @@ def update_api(api_id):
 
     api.title = title
     api.api_key = api_key
-    api.api_type = api_type  # Guardar el nuevo campo
+    api.api_type = api_type
+    api.is_public = request.form.get('is_public') in ('1', 'on', 'true', 'yes')
     
     # Guardar el ID de carpeta y subtítulos solo si es Drive
     if api_type == 'Drive':
@@ -3194,6 +3220,9 @@ def delete_youtube_listing(listing_id):
 @store_bp.route('/admin/youtube_listing/<int:listing_id>/edit', methods=['GET', 'POST'])
 @admin_required
 def edit_youtube_listing(listing_id):
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
     listing = YouTubeListing.query.get_or_404(listing_id)
     if request.method == 'POST':
         listing.title = request.form.get('title', listing.title)
@@ -3216,16 +3245,22 @@ def edit_youtube_listing(listing_id):
         user_ids = [int(uid) for uid in user_ids_str if uid.isdigit()]
         
         listing.users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else []
+        listing.is_public = request.form.get('is_public') in ('1', 'on', 'true', 'yes')
 
         try:
             db.session.commit()
             flash('Listado de YouTube actualizado correctamente.', 'success')
-            return redirect(url_for('store_bp.admin_tools'))
+            return redirect(url_for('store_bp.edit_youtube_listing', listing_id=listing.id))
         except Exception as e:
             db.session.rollback()
             flash(f'Error al actualizar el listado: {str(e)}', 'danger')
     
-    return render_template('edit_youtube_listing.html', listing=listing, title="Editar Listado de YouTube")
+    return render_template(
+        'edit_youtube_listing.html',
+        listing=listing,
+        title="Editar Listado de YouTube",
+        public_url=url_for('store_bp.youtube_public_one', listing_id=listing.id, _external=True),
+    )
 
 @store_bp.route('/admin/youtube_listing/<int:listing_id>/links', methods=['GET'])
 @admin_required
@@ -3638,8 +3673,52 @@ def tool_public_one(tool_id):
     if not tool.enabled:
         abort(404)
     if not bool(getattr(tool, 'is_public', False)):
-        return render_template('herramienta_public_inactive.html', tool=tool), 404
+        return _inactive_public_page()
     return render_template('herramienta_public_one.html', tool=tool)
+
+
+def _form_is_public():
+    return request.form.get('is_public') in ('1', 'on', 'true', 'yes')
+
+
+def _inactive_public_page():
+    return render_template('herramienta_public_inactive.html'), 403
+
+
+@store_bp.route('/html-public/<int:html_id>', endpoint='html_public_one')
+def html_public_one(html_id):
+    """Acceso libre a un HTML marcado como público (sin login)."""
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
+    html = HtmlInfo.query.get_or_404(html_id)
+    if not html.enabled or not bool(getattr(html, 'is_public', False)):
+        return _inactive_public_page()
+    return render_template('html_public_one.html', html=html)
+
+
+@store_bp.route('/youtube-public/<int:listing_id>', endpoint='youtube_public_one')
+def youtube_public_one(listing_id):
+    """Acceso libre a un listado de YouTube marcado como público (sin login)."""
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
+    listing = YouTubeListing.query.get_or_404(listing_id)
+    if not listing.enabled or not bool(getattr(listing, 'is_public', False)):
+        return _inactive_public_page()
+    return render_template('youtube_public_one.html', listing=listing)
+
+
+@store_bp.route('/api-public/<int:api_id>', endpoint='api_public_one')
+def api_public_one(api_id):
+    """Acceso libre a una API marcada como pública, sin mostrar claves secretas."""
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
+    api = ApiInfo.query.get_or_404(api_id)
+    if not api.enabled or not bool(getattr(api, 'is_public', False)):
+        return _inactive_public_page()
+    return render_template('api_public_one.html', api=api)
 
 @store_bp.route('/admin/herramientas/<int:tool_id>/usuarios', methods=['GET'], endpoint='get_tool_users')
 @admin_required
@@ -3761,12 +3840,16 @@ def delete_html(html_id):
 @store_bp.route('/admin/html/<int:html_id>/edit', methods=['GET', 'POST'])
 @admin_required
 def edit_html(html_id):
+    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+
+    ensure_tool_info_is_public_column()
     html = HtmlInfo.query.get_or_404(html_id)
     admin_username = current_app.config.get('ADMIN_USER')
 
     if request.method == 'POST':
         html.title = request.form.get('title', html.title)
         html.text = request.form.get('text', html.text)
+        html.is_public = request.form.get('is_public') in ('1', 'on', 'true', 'yes')
         
         user_ids_str = request.form.getlist('user_ids')
         user_ids = [int(uid) for uid in user_ids_str]
@@ -3780,7 +3863,7 @@ def edit_html(html_id):
         
         db.session.commit()
         flash('HTML actualizado y usuarios vinculados.', 'success')
-        return redirect(url_for('store_bp.admin_tools'))
+        return redirect(url_for('store_bp.edit_html', html_id=html.id))
 
     # Lógica para GET
     page = request.args.get('page', 1, type=int)
@@ -3799,7 +3882,8 @@ def edit_html(html_id):
                            users=users,
                            pagination=pagination,
                            search_query=search_query,
-                           per_page=per_page)
+                           per_page=per_page,
+                           public_url=url_for('store_bp.html_public_one', html_id=html.id, _external=True))
 
 @store_bp.route('/admin/html/<int:html_id>/update', methods=['POST'])
 @admin_required
@@ -3900,9 +3984,26 @@ def find_media():
             user = User.query.get(user_id)
 
         if not user:
-            return jsonify({'error': 'No autorizado'}), 401
-
-        api = ApiInfo.query.filter_by(api_type="Búsqueda de Medios", enabled=True).first()
+            api = None
+            public_api_id = None
+            if request.is_json and isinstance(request.json, dict):
+                public_api_id = request.json.get('public_api_id')
+            if public_api_id:
+                from app.store.tool_info_schema import ensure_tool_info_is_public_column
+                ensure_tool_info_is_public_column()
+                try:
+                    api = ApiInfo.query.get(int(public_api_id))
+                except (TypeError, ValueError):
+                    api = None
+            if (
+                not api
+                or not api.enabled
+                or api.api_type != 'Búsqueda de Medios'
+                or not bool(getattr(api, 'is_public', False))
+            ):
+                return jsonify({'error': 'No autorizado'}), 401
+        else:
+            api = ApiInfo.query.filter_by(api_type="Búsqueda de Medios", enabled=True).first()
         if not api:
             return jsonify({'error': 'No hay ninguna API de "Búsqueda de Medios" configurada o habilitada.'}), 500
 
@@ -15124,7 +15225,19 @@ def save_push_subscription():
 @admin_required
 def list_drive_transfers():
     from app.utils.timezone import get_colombia_datetime
+    from app.store.drive_manager import ensure_drive_telegram_columns
+    import json as _json
     server_time = get_colombia_datetime()
+    ensure_drive_telegram_columns()
+
+    def _drive_tg_problems(raw):
+        if not raw:
+            return []
+        try:
+            parsed = _json.loads(raw)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
     
     transfers = DriveTransfer.query.all()
     return jsonify({
@@ -15136,6 +15249,8 @@ def list_drive_transfers():
                     'drive_original_id': t.drive_original_id,
                     'drive_processed_id': t.drive_processed_id,
                     'drive_deleted_id': t.drive_deleted_id,  # Campo opcional
+                    'telegram_group_id': getattr(t, 'telegram_group_id', None) or '',
+                    'telegram_send_problems': _drive_tg_problems(getattr(t, 'telegram_send_problems', None)),
                     'processing_time': t.processing_time if isinstance(t.processing_time, str) else (t.processing_time.strftime('%I:%M %p') if t.processing_time else None),  # Soporta ambos formatos (legacy y nuevo)
                     'is_active': t.is_active,
                     'last_processed': t.last_processed.isoformat() if t.last_processed else None,
@@ -15153,6 +15268,7 @@ def create_drive_transfer():
     drive_original_id = data.get('drive_original_id')
     drive_processed_id = data.get('drive_destination')  # Corregido: el campo se llama 'drive_destination'
     drive_deleted_id = data.get('drive_deleted')  # Campo opcional
+    telegram_group_id = (data.get('drive_telegram_group') or '').strip()
     processing_time_str = data.get('drive_processing_time')
     
     if not all([credentials_json, drive_original_id, drive_processed_id, processing_time_str]):
@@ -15177,8 +15293,14 @@ def create_drive_transfer():
         return jsonify({'success': False, 'error': 'Credenciales JSON inválidas'}), 400
     
     try:
+        from app.store.drive_manager import ensure_drive_telegram_columns, parse_interval
+        ensure_drive_telegram_columns()
+        if telegram_group_id:
+            from app.store.telegram_bot_service import validate_chat_id
+            _, group_err = validate_chat_id(telegram_group_id)
+            if group_err:
+                return jsonify({'success': False, 'error': 'El grupo de Telegram debe ser un ID numérico, por ejemplo -1001234567890.'}), 400
         # Validar formato de intervalo (5h, 10m, 5H, 10M, etc.)
-        from app.store.drive_manager import parse_interval
         interval = parse_interval(processing_time_str)
         if not interval:
             return jsonify({'success': False, 'error': 'Formato de intervalo inválido. Use formato "5h" (horas) o "10m" (minutos). Ejemplos: 1h, 2h, 30m, 60m'}), 400
@@ -15189,6 +15311,7 @@ def create_drive_transfer():
             drive_original_id=drive_original_id,
             drive_processed_id=drive_processed_id,
             drive_deleted_id=drive_deleted_id,  # Campo opcional
+            telegram_group_id=telegram_group_id or None,
             processing_time=processing_time_str.upper(),  # Guardar como string (ej: "5H", "10M")
             activated_at=datetime.utcnow(),  # Establecer activated_at al crear
             consecutive_errors=0,  # Valor por defecto para el campo NOT NULL
@@ -15227,6 +15350,16 @@ def update_drive_transfer(transfer_id):
             transfer.drive_processed_id = data['drive_destination']
         if 'drive_deleted' in data:
             transfer.drive_deleted_id = data['drive_deleted']  # Campo opcional
+        if 'drive_telegram_group' in data:
+            from app.store.drive_manager import ensure_drive_telegram_columns
+            from app.store.telegram_bot_service import validate_chat_id
+            ensure_drive_telegram_columns()
+            group_raw = (data.get('drive_telegram_group') or '').strip()
+            if group_raw:
+                _, group_err = validate_chat_id(group_raw)
+                if group_err:
+                    return jsonify({'success': False, 'error': 'El grupo de Telegram debe ser un ID numérico, por ejemplo -1001234567890.'}), 400
+            transfer.telegram_group_id = group_raw or None
         if 'drive_processing_time' in data:
             from app.store.drive_manager import parse_interval
             processing_time_str = data['drive_processing_time']
@@ -15255,6 +15388,8 @@ def update_drive_transfer(transfer_id):
 def execute_drive_transfer_now(transfer_id):
     """Ejecuta una transferencia de Drive manualmente (para pruebas)"""
     try:
+        from app.store.drive_manager import ensure_drive_telegram_columns
+        ensure_drive_telegram_columns()
         transfer = DriveTransfer.query.get_or_404(transfer_id)
         
         if not transfer.is_active:

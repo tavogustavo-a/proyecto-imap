@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}{{ api.title }}{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <meta name="csrf_token" content="{{ csrf_token() }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261019-publico">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 store-light public-tools-container mx-auto br-8">
+  <h2 class="text-center mt-2 mb-3">{{ api.title }}</h2>
+  <div class="card herramienta-accordion tool-public-one-card">
+    <div class="accordion-body">
+      {% if api.api_type == 'Búsqueda de Medios' %}
+      <div class="media-search-container" data-public-api-id="{{ api.id }}">
+        <form class="media-search-form mb-05" name="mediaSearchForm">
+          <div class="d-flex gap-05 w-100">
+            <label for="media_search_title" class="sr-only">Título a buscar</label>
+            <input type="text" id="media_search_title" class="search-input media-search-input flex-grow-1" placeholder="Escribe un título..." required autocomplete="off">
+            <label for="media_country" class="sr-only">País</label>
+            <select id="media_country" class="form-select media-country-select w-120px" autocomplete="off">
+              <option value="CO">Colombia</option>
+              <option value="US">USA</option>
+              <option value="ES">España</option>
+              <option value="MX">México</option>
+            </select>
+            <button type="submit" class="btn-search media-search-btn">Buscar</button>
+          </div>
+        </form>
+        <div class="media-results-container mt-3"></div>
+      </div>
+      {% elif not api.api_type %}
+      <div class="api-key-html-content">
+        {{ api.api_key | sanitize_message_html }}
+      </div>
+      {% else %}
+      <p class="text-center mb-0">Este enlace está activo, pero la clave de esta API no se muestra públicamente.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if api.api_type == 'Búsqueda de Medios' %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const box = document.querySelector('.media-search-container');
+  const form = box && box.querySelector('.media-search-form');
+  if (!form) return;
+  form.addEventListener('submit', function (event) {
+    event.stopImmediatePropagation();
+    event.preventDefault();
+    const input = box.querySelector('.media-search-input');
+    const country = box.querySelector('.media-country-select');
+    const results = box.querySelector('.media-results-container');
+    const token = document.querySelector('meta[name="csrf_token"]');
+    results.textContent = 'Buscando...';
+    fetch('/tienda/tools/find-media', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': token ? token.getAttribute('content') : ''
+      },
+      body: JSON.stringify({
+        query: input.value,
+        country: country ? country.value : 'CO',
+        public_api_id: box.getAttribute('data-public-api-id')
+      })
+    }).then(function (response) { return response.json(); }).then(function (data) {
+      if (!data.results || !data.results.length) {
+        results.textContent = data.error || 'No se encontraron resultados.';
+        return;
+      }
+      results.innerHTML = '';
+      data.results.forEach(function (item) {
+        const row = document.createElement('p');
+        row.textContent = item.title || item.name || 'Resultado';
+        results.appendChild(row);
+      });
+    }).catch(function () {
+      results.textContent = 'No se pudo completar la búsqueda.';
+    });
+  }, true);
+});
+</script>
+{% endif %}
+{% endblock %}

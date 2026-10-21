@@ -29,8 +29,24 @@
     <hr class="hr-margin-08">
 
     <!-- CREAR SUB-USUARIO -->
-    <h4 class="mt-0">Crear Sub-usuario</h4>
-    <form id="createSubuserForm" class="d-flex gap-05 flex-wrap mt-05">
+    <div class="d-flex align-items-center flex-wrap gap-05 subuser-create-heading-row">
+      <h4 class="mt-0 mb-0">Crear Sub-usuario</h4>
+      {% if parent_has_store_role %}
+      <button type="button" id="btnSubuserCatalogGlobal" class="btn-blue btn-small" data-catalog-url="{{ url_for('subuser_bp.subuser_catalog_global') }}">Plataformas y precios global</button>
+      <button
+        type="button"
+        id="subuserCatalogGlobalInfoBtn"
+        class="btn-panel btn-blue admin-global-api-info-btn"
+        title="Información sobre plataformas y precios global"
+        aria-label="Información sobre plataformas y precios global"
+        aria-controls="subuserCatalogGlobalInfoModal"
+        aria-haspopup="dialog"
+      >
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+      </button>
+      {% endif %}
+    </div>
+    <form id="createSubuserForm" class="d-flex gap-05 flex-wrap mt-05 align-items-center">
       <input
         type="text"
         id="subUsername"
@@ -55,10 +71,7 @@
   <!-- CONTORNO 1.5: Gestión de Correos del Usuario Principal -->
   {% if current_user and not current_user.parent_id and current_user.can_add_own_emails %}
   <div class="admin-card mb-1">
-    <h4 class="mt-0">Gestión de Correos</h4>
-    
-    <!-- Búsqueda y Eliminación de Correos -->
-    <h5 class="mb-05 text-center text-small">Búsqueda y Eliminación de Correos</h5>
+    <h4 class="mt-0 mb-05 text-center">Búsqueda y Eliminación de Correos</h4>
     <form id="searchSubuserEmailsForm" class="mb-05">
       <label for="searchSubuserEmailsInput" class="sr-only">Buscar y eliminar correos</label>
       <div class="search-textarea-wrapper">
@@ -89,7 +102,7 @@
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
         <label for="subuserPerPageSelect" class="text-small"><strong>Lista Correos permitidos:</strong></label>
         <div class="d-flex align-items-center gap-05">
-          <span class="text-small"><strong>Mostrar:</strong></span>
+          <label for="subuserPerPageSelect" class="sr-only">Mostrar cantidad de correos</label>
           <select id="subuserPerPageSelect" class="select-padding-3px select-small" autocomplete="off">
             <option value="10">10</option>
             <option value="20" selected>20</option>
@@ -104,14 +117,14 @@
       <div id="subuserAllowedEmailsTextContainer" class="allowed-emails-display mb-05 allowed-emails-scroll">
         <p class="text-secondary">Cargando correos...</p>
       </div>
-      <div id="subuserAllowedEmailsPagination" class="d-flex justify-content-between align-items-center flex-wrap gap-05 mb-05">
-        <span id="subuserPaginationInfo" class="text-small"></span>
-        <button id="subuserDeleteAllEmailsBtn" class="btn-red" title="Eliminar TODOS los correos permitidos">
-          <i class="fas fa-trash"></i> Eliminar Todos
+      <div id="subuserAllowedEmailsPagination" class="d-flex justify-content-between align-items-center">
+        <button id="subuserDeleteAllEmailsBtn" class="btn-red" title="Eliminar todos los correos permitidos" aria-label="Eliminar todos los correos permitidos">
+          <i class="fas fa-trash" aria-hidden="true"></i> Todo
         </button>
-        <div class="d-flex gap-05">
-          <button id="subuserPrevPageBtn" class="btn-blue" disabled>&lt; Anterior</button>
-          <button id="subuserNextPageBtn" class="btn-blue" disabled>Siguiente &gt;</button>
+        <div class="allowed-emails-page-nav d-flex align-items-center">
+          <button id="subuserPrevPageBtn" class="btn-blue" disabled>Anterior</button>
+          <span id="subuserPaginationInfo"></span>
+          <button id="subuserNextPageBtn" class="btn-blue" disabled>Siguiente</button>
         </div>
       </div>
     </div>
@@ -122,13 +135,18 @@
     <h5 class="mb-05 text-center text-small">Añadir Correos</h5>
     <div id="subuserAddEmailsSection">
       <label for="subuserAddEmailsInput" class="sr-only">Nuevos Correos</label>
-      <textarea 
-        id="subuserAddEmailsInput" 
-        rows="2" 
-        class="d-block w-100 mb-05" 
-        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: nuevo1@ejemplo.com, nuevo2@ejemplo.com..."
-        autocomplete="off"
-      ></textarea>
+      <div class="search-textarea-wrapper subuser-add-emails-textarea-wrap mb-05">
+        <textarea
+          id="subuserAddEmailsInput"
+          rows="2"
+          class="d-block w-100 resize-vertical"
+          placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: nuevo1@ejemplo.com, nuevo2@ejemplo.com..."
+          autocomplete="off"
+        ></textarea>
+        <button type="button" id="clearSubuserAddEmailsBtn" class="search-textarea-clear-btn" aria-label="Limpiar campo">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
       <div class="text-center">
         <button type="button" id="subuserAddEmailsBtn" class="btn-blue">Añadir Correos</button>
       </div>
@@ -141,18 +159,18 @@
 
   <!-- CONTORNO 1.5.5: Añadir Masivamente Correos a Sub-usuarios -->
   {% if current_user and not current_user.parent_id and current_user.can_add_own_emails %}
-  <div class="admin-card mb-1">
+  <div class="admin-card mb-1 bulk-add-subusers-emails-card">
     <h4 class="mb-1 text-center">📧 Añadir Masivamente Correos a Sub-usuarios</h4>
 
     <!-- Búsqueda de Sub-usuarios -->
-    <div class="mb-1">
+    <div class="mb-1 bulk-add-subusers-field-block">
       <label for="bulkAddEmailsToSubusersSearch" class="sr-only">Buscar sub-usuarios</label>
-      <div class="search-input-wrapper">
+      <div class="search-input-wrapper bulk-add-subusers-search-wrap">
         <input
           type="search"
           id="bulkAddEmailsToSubusersSearch"
           placeholder="Buscar sub-usuario o nombre..."
-          class="d-block w-100 mb-05 search-users-input-flex"
+          class="bulk-add-subusers-field-input bulk-add-subusers-search-input"
           autocomplete="off"
         >
       </div>
@@ -165,18 +183,18 @@
     </div>
 
     <!-- Campo para añadir correos -->
-    <div class="mb-1">
+    <div class="mb-1 bulk-add-subusers-field-block">
       <label for="bulkAddEmailsToSubusersInput" class="sr-only">Correos a añadir</label>
       <textarea
         id="bulkAddEmailsToSubusersInput"
         rows="4"
         placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@ejemplo.com, correo2@ejemplo.com..."
-        class="d-block mb-05 w-100"
+        class="bulk-add-subusers-field-input bulk-add-subusers-textarea d-block mb-05"
         autocomplete="off"
       ></textarea>
 
       <div class="d-flex gap-05 justify-content-center">
-        <button type="button" id="bulkAddEmailsToSubusersBtn" class="btn-green">Añadir Correos a Sub-usuarios Seleccionados</button>
+        <button type="button" id="bulkAddEmailsToSubusersBtn" class="btn-green">Añadir Correos a los sub-usuarios</button>
       </div>
 
       <div id="bulkAddEmailsToSubusersMessage" class="mt-05 text-center"></div>
@@ -189,7 +207,7 @@
   <!-- CONTORNO 1.6: Borrado Masivo de Correos -->
   {% if current_user and not current_user.parent_id and current_user.can_bulk_delete_emails %}
   <div class="admin-card mb-1">
-    <h4 class="mb-1 text-center">🗑️ Sacar Masivamente Correos de los Usuarios</h4>
+    <h4 class="mb-1 text-center">🗑️ Sacar Masivamente Correos de los Usuarios (soporte)</h4>
 
     <form id="bulkDeleteEmailsSubuserForm">
       <label for="bulkDeleteEmailsSubuserInput" class="sr-only">Correos a eliminar</label>
@@ -202,7 +220,16 @@
       ></textarea>
 
       <div class="d-flex gap-05 justify-content-center">
-        <button type="submit" id="bulkDeleteEmailsSubuserBtn" class="btn-red">Eliminar Correos de Todos los Usuarios</button>
+        <button
+          type="submit"
+          id="bulkDeleteEmailsSubuserBtn"
+          class="btn-red bulk-delete-all-emails-btn"
+          title="Eliminar correos de todos los usuarios"
+          aria-label="Eliminar correos de todos los usuarios"
+        >
+          <i class="fas fa-trash bulk-delete-all-emails-btn__icon" aria-hidden="true"></i>
+          Correos de Todos los Usuarios
+        </button>
       </div>
 
       <div id="bulkDeleteEmailsSubuserMessage" class="mt-05 text-center"></div>
@@ -252,7 +279,7 @@
           <i class="fas fa-qrcode"></i> QR
         </button>
         <button type="submit" id="subuser-twofa-save-btn" class="btn-green btn-small">Agregar</button>
-        <button type="button" id="subuser-twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
+        <button type="button" id="subuser-twofa-cancel-btn" class="btn-red btn-small d-none">Cancelar</button>
       </div>
       
       <!-- Preview del QR (oculto por defecto) -->
@@ -292,8 +319,8 @@
       <p class="text-center text-secondary">Cargando configuraciones...</p>
     </div>
     
-    <!-- Botones de paginación -->
-    <div class="d-flex justify-content-center mt-2 mb-05 pagination-buttons">
+    <!-- Botones de paginación (solo si hay más filas que «Mostrar») -->
+    <div id="subuserTwofaPagination" class="d-flex justify-content-center mt-2 mb-05 pagination-buttons d-none" hidden>
       <button id="subuser-prevTwofaPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
       <button id="subuser-nextTwofaPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
     </div>
@@ -358,7 +385,7 @@
         
         <div class="text-center">
           <button type="submit" id="subuser-edit-twofa-save-btn" class="btn-green">Actualizar</button>
-          <button type="button" id="subuser-edit-twofa-cancel-btn" class="btn-blue">Cancelar</button>
+          <button type="button" id="subuser-edit-twofa-cancel-btn" class="btn-red">Cancelar</button>
         </div>
         
         <div id="subuser-edit-twofa-message" class="mt-05 text-center"></div>
@@ -369,22 +396,26 @@
 
   <!-- CONTORNO 2: Búsqueda y Listado de Sub-usuarios -->
   <div class="admin-card subusers-list-card">
-    <h4 class="mt-0">Buscar Sub-usuarios</h4>
+    <h4 class="mt-0 mb-05 text-center">Buscar Sub-usuarios</h4>
     <div class="d-flex flex-wrap align-items-center mb-2 gap-1 subusers-list-toolbar">
-      <form id="searchSubusersForm" class="d-flex gap-05 flex-grow-1 mb-0">
-        <label for="searchSubusersInput" class="sr-only">Buscar sub-usuario</label>
-        <input
-          type="search"
-          id="searchSubusersInput"
-          placeholder="Buscar sub-usuario..."
-          class="flex-grow-1"
-          autocomplete="off"
-        >
-        <button type="submit" class="btn-blue">Limpiar</button>
+      <form id="searchSubusersForm" class="flex-grow-1 mb-0 subusers-search-form">
+        <div class="search-textarea-wrapper subusers-search-wrap">
+          <label for="searchSubusersInput" class="sr-only">Buscar sub-usuario</label>
+          <input
+            type="search"
+            id="searchSubusersInput"
+            placeholder="Buscar sub-usuario..."
+            class="subusers-search-input"
+            autocomplete="off"
+          >
+          <button type="button" id="clearSearchSubusersInputBtn" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+            <i class="fas fa-times" aria-hidden="true"></i>
+          </button>
+        </div>
       </form>
-      <div>
+      <div class="subusers-per-page-wrap d-flex align-items-center gap-05">
         <label for="showSubuserCount" class="sr-only">Mostrar cantidad sub-usuarios</label>
-        <select id="showSubuserCount" class="form-select usuarios-per-page-select" autocomplete="off">
+        <select id="showSubuserCount" class="form-select usuarios-per-page-select subusers-per-page-select" autocomplete="off">
           <option value="5">5</option>
           <option value="10">10</option>
           <option value="20">20</option>
@@ -400,11 +431,73 @@
 
 </div>
 
+{% if parent_has_store_role %}
+<div id="subuserCatalogGlobalInfoModal" class="popup-base popup-small popup-hide" role="dialog" aria-modal="true" aria-labelledby="subuserCatalogGlobalInfoTitle" hidden>
+  <div class="popup-modal-header">
+    <h4 id="subuserCatalogGlobalInfoTitle" class="mt-0 mb-0 flex-grow-1 text-center">
+      <i class="fas fa-info-circle" aria-hidden="true"></i> Plataformas y precios global
+    </h4>
+    <button type="button" class="btn-close" id="closeSubuserCatalogGlobalInfoBtn" aria-label="Cerrar información">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="mb-1 text-left text-small subuser-catalog-global-info-body">
+    <p class="mb-05">Se aplica a <strong>todos</strong> tus sub-usuarios, los que ya tenías y los que crees después.</p>
+    <p class="mb-05">Al pulsar <strong>Guardar y aplicar</strong> en el catálogo global, esa configuración se copia a cada sub-usuario. Los sub-usuarios nuevos heredan la misma plantilla automáticamente.</p>
+    <p class="mb-05">Disney no está disponible para sub-usuarios. El recargo «Sumar a todas» se suma al precio de cada plataforma visible. Si cambias un precio a mano en una fila, esa fila queda con el precio manual (puede igualar el precio real, pero nunca ser menor).</p>
+    <p class="mb-0">Si el administrador sube un precio base de la tienda, ese mismo aumento se refleja solo en los precios de venta de tus sub-usuarios, sin tocar el precio real que ves en la tabla.</p>
+  </div>
+  <div class="d-flex justify-content-center">
+    <button type="button" class="popup-button-confirm" id="okSubuserCatalogGlobalInfoBtn">Entendido</button>
+  </div>
+</div>
+
+<div id="subuserCatalogGlobalOverlay" class="popup-overlay" hidden></div>
+<div id="subuserCatalogGlobalModal" class="popup-base subuser-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="subuserCatalogGlobalTitle" hidden>
+  <div class="popup-modal-header subuser-catalog-header">
+    <h4 id="subuserCatalogGlobalTitle" class="mt-0 mb-0">Plataformas y precios global</h4>
+    <button type="button" class="btn-close" id="closeSubuserCatalogGlobalBtn" aria-label="Cerrar">
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
+  </div>
+  <p class="text-small text-secondary mb-05 subuser-catalog-help">
+    Esta configuración se copia a TODOS tus sub-usuarios al guardar, y los sub-usuarios nuevos
+    la heredan. Disney no está disponible para sub-usuarios. El recargo general se suma a todas;
+    si cambias un precio a mano, esa fila queda con el precio manual. Puede igualar el precio real,
+    pero nunca ser menor. Si el admin sube un precio base, ese mismo aumento se suma solo a los
+    precios de los sub-usuarios.
+  </p>
+  <div class="subuser-catalog-markup-row">
+    <label for="subuserCatalogGlobalMarkup">Sumar a todas</label>
+    <input type="number" id="subuserCatalogGlobalMarkup" name="catalog_global_markup" class="flex-grow-1" min="0" step="any" inputmode="decimal" autocomplete="off">
+    <span id="subuserCatalogGlobalCurrency" class="text-secondary"></span>
+  </div>
+  <div class="subuser-catalog-table-wrap">
+    <table class="subuser-catalog-table" aria-label="Plataformas visibles y precios globales">
+      <thead>
+        <tr>
+          <th scope="col">Ver</th>
+          <th scope="col">Plataforma</th>
+          <th scope="col">Precio real</th>
+          <th scope="col">Precio sub-usuario</th>
+        </tr>
+      </thead>
+      <tbody id="subuserCatalogGlobalTableBody"></tbody>
+    </table>
+  </div>
+  <p id="subuserCatalogGlobalStatus" class="text-small mt-05" role="status"></p>
+  <div class="subuser-catalog-actions">
+    <button type="button" class="popup-button-confirm" id="saveSubuserCatalogGlobalBtn">Guardar y aplicar</button>
+    <button type="button" class="popup-button-cancel" id="cancelSubuserCatalogGlobalBtn">Cerrar</button>
+  </div>
+</div>
+{% endif %}
+
 {% endblock content %}
 
 {% block scripts %}
 {# {{ super() }} #} {# Comentado porque base.html no tiene scripts en este bloque #}
-<script src="{{ url_for('static', filename='js/manage_subusers.js') }}?v=20261016-switch"></script>
+<script src="{{ url_for('static', filename='js/manage_subusers.js') }}?v=20261020-delete-all-todo-count"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 {% if session.get('logged_in') and current_user and not is_admin %}
 <div id="anuncioEntryDismissScope" hidden data-user-id="{{ current_user.id }}"></div>

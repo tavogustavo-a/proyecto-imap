@@ -139,6 +139,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function openCustomerRenewalModal(compraRow, openerEl) {
     if (!modal || !modalBody) return;
+    setPurchaseLicenciasModalCentered(false);
     lastLicenciasOpenerBtn =
       openerEl && openerEl.nodeType === 1 ? openerEl : null;
 
@@ -214,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function openModal(compraRow, openerEl) {
     if (!modal || !modalBody) return;
+    setPurchaseLicenciasModalCentered(false);
     if (compraRow && (compraRow.is_customer_account_renewal || compraRow.has_customer_renewal_detail)) {
       openCustomerRenewalModal(compraRow, openerEl);
       return;
@@ -302,8 +304,14 @@ document.addEventListener('DOMContentLoaded', function() {
     return !!(modal && !modal.classList.contains('modal-hidden'));
   }
 
+  function setPurchaseLicenciasModalCentered(on) {
+    if (!modal) return;
+    modal.classList.toggle('purchase-licencias-modal--centered', !!on);
+  }
+
   function closeModal() {
     if (!modal) return;
+    setPurchaseLicenciasModalCentered(false);
     const restore = lastLicenciasOpenerBtn;
     if (restore && document.body.contains(restore) && typeof restore.focus === 'function') {
       try {
@@ -1230,6 +1238,7 @@ document.addEventListener('DOMContentLoaded', function() {
   window.purchaseHistoryOpenProveedorResumenesModal = function (items, periodLabel, options) {
     if (!modal || !modalBody) return;
     options = options || {};
+    setPurchaseLicenciasModalCentered(true);
     lastLicenciasOpenerBtn = null;
     modalTitle.textContent = periodLabel || 'Resúmenes proveedor';
     const canDelete = !!options.canDelete && !!options.deleteUrl;
@@ -1322,6 +1331,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   window.purchaseHistoryOpenProveedorServiciosModal = function (payload, periodLabel) {
     if (!modal || !modalBody) return;
+    setPurchaseLicenciasModalCentered(true);
     lastLicenciasOpenerBtn = null;
     payload = payload || {};
     const servicios = Array.isArray(payload.servicios) ? payload.servicios : [];

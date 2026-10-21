@@ -1,0 +1,22 @@
+<div class="edit-tool-public-block">
+  <div class="text-center">
+    <label class="d-inline-flex align-items-center gap-05 edit-tool-public-label" for="is_public">
+      <input type="checkbox" name="is_public" id="is_public" value="1" form="{{ public_form_id }}" {% if public_enabled %}checked{% endif %} autocomplete="off">
+      <span>Acceso público con link (sin login)</span>
+    </label>
+  </div>
+  <div id="toolPublicLinkBox" class="edit-tool-public-link-box{% if not public_enabled %} d-none{% endif %}" {% if not public_enabled %}hidden{% endif %} data-saved-public="{% if public_enabled %}1{% else %}0{% endif %}">
+    <label class="form-label text-center d-block mb-1" for="toolPublicUrl">Link público</label>
+    <div class="d-flex flex-wrap gap-05 justify-content-center align-items-center">
+      <input type="text" id="toolPublicUrl" class="form-control edit-tool-public-url" readonly value="{{ public_url }}" autocomplete="off">
+      <button type="button" id="btnCopyToolPublicUrl" class="btn-panel btn-blue btn-sm">Copiar</button>
+      <a id="btnOpenToolPublicUrl" href="{{ public_url }}" class="btn-panel btn-green btn-sm{% if not public_enabled %} disabled{% endif %}" target="_blank" rel="noopener"{% if not public_enabled %} aria-disabled="true" tabindex="-1"{% endif %}>Abrir</a>
+    </div>
+    <p id="toolPublicSaveHint" class="text-center mb-0 mt-1 edit-tool-public-hint{% if public_enabled %} d-none{% endif %}" {% if public_enabled %}hidden{% endif %}>
+      Marca el checkbox y pulsa <strong>Guardar</strong> para activar el link. Luego ya puedes abrirlo o copiarlo.
+    </p>
+    <p id="toolPublicActiveHint" class="text-center mb-0 mt-1 edit-tool-public-hint{% if not public_enabled %} d-none{% endif %}" {% if not public_enabled %}hidden{% endif %}>
+      Link activo: cualquiera con esta URL puede verlo (sin login).
+    </p>
+  </div>
+</div>

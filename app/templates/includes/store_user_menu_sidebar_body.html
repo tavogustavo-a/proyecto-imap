@@ -1,4 +1,5 @@
-{# Menú lateral tienda: bloque tienda + herramientas, códigos, soporte y saldo. #}
+{# Menú lateral de usuario. Mismo orden en todas las páginas. #}
+<div class="store-user-sidebar-links">
 {% set current_user_id = session.get('user_id') %}
 {% set user_object = User.query.get(current_user_id) if current_user_id else none %}
 {% if current_user_id and user_object %}
@@ -8,25 +9,37 @@
   {% elif user_object.parent_id %}
     {% if user_object.can_access_store %}
       {% set parent = User.query.get(user_object.parent_id) %}
-      {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+      {% if parent and parent.user_prices and (
+        parent.user_prices.get('tipo_precio') in ['USD', 'COP']
+        or parent.user_prices.get('soporte_licencias')
+      ) %}
         {% set show_store = True %}
       {% endif %}
     {% endif %}
-  {% elif user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
+  {% elif user_object.user_prices and (
+    user_object.user_prices.get('tipo_precio') in ['USD', 'COP']
+    or user_object.user_prices.get('soporte_licencias')
+  ) %}
     {% set show_store = True %}
   {% endif %}
   {% if show_store %}
     <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
     <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
     <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
-    {% include 'includes/store_user_menu_notificaciones_link.html' %}
     {% include 'includes/store_user_menu_recargas_link.html' %}
     {% include 'includes/store_user_menu_chatbot_link.html' %}
   {% endif %}
 {% endif %}
 {% include 'includes/store_user_menu_herramientas_link.html' %}
 {% include 'includes/store_user_menu_api_docs_link.html' %}
+{% if services_in_rows is defined and services_in_rows %}
+<div class="codigos-sidebar-codigos-row">
+  <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn"><i class="fas fa-code"></i> Códigos</a>
+  <button type="button" class="btn-panel btn-blue mobile-menu-btn btn-codigos-editar-vista">Editar vista</button>
+</div>
+{% else %}
 <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
+{% endif %}
 {% if is_user and user_object %}
   {% if user_object.is_support %}
     <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
@@ -46,6 +59,16 @@
 {% if is_admin %}
   <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
 {% endif %}
+{% set _menu_prices = user_object.user_prices if user_object and user_object.user_prices is mapping else {} %}
+{% if user_object and _menu_prices.get('proveedor') %}
+  {% if request.endpoint == 'store_bp.user_licencias' %}
+  <button type="button" id="btnUserProveedorGestionarProductos" class="btn-panel btn-blue mobile-menu-btn mb-04 w-100 user-proveedor-gestionar-productos-btn" title="Reserva gar. de tus productos como proveedor">
+    <i class="fas fa-list" aria-hidden="true"></i> Gestionar productos
+  </button>
+  {% else %}
+  <a href="{{ url_for('store_bp.user_licencias', open='gestionar-productos') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-list" aria-hidden="true"></i> Gestionar productos</a>
+  {% endif %}
+{% endif %}
 {% if is_admin %}
   <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 {% elif is_user %}
@@ -54,3 +77,4 @@
   <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
 {% endif %}
 {% include 'includes/store_user_menu_saldo_block.html' %}
+</div>

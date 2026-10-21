@@ -153,6 +153,14 @@ def create_app(config_class_passed=None):
                     )
                     db.session.commit()
                     app.logger.info("Esquema: columna buzon_folders_json añadida a imap_servers2")
+            if insp.has_table("observer_imap_servers"):
+                observer_cols = {c["name"] for c in insp.get_columns("observer_imap_servers")}
+                if "buzon_folders_json" not in observer_cols:
+                    db.session.execute(
+                        text("ALTER TABLE observer_imap_servers ADD COLUMN buzon_folders_json TEXT")
+                    )
+                    db.session.commit()
+                    app.logger.info("Esquema: columna buzon_folders_json añadida a observer_imap_servers")
         except Exception as schema_err:
             db.session.rollback()
             app.logger.warning(
@@ -882,6 +890,8 @@ def create_app(config_class_passed=None):
         start_whatsapp_health_loop(app)
         from app.store.whatsapp_license_notify_scheduler import start_whatsapp_license_notify_loop
         start_whatsapp_license_notify_loop(app)
+        from app.store.telegram_start_poller import start_telegram_start_poll_loop
+        start_telegram_start_poll_loop(app)
         from app.store.balance_recharge_events import start_balance_recharge_events_redis_listener
         start_balance_recharge_events_redis_listener(app)
 

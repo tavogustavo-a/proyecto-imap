@@ -41,6 +41,8 @@ def ensure_whatsapp_daily_sales_columns():
                 'whatsapp_daily_send_attempts',
                 'ALTER TABLE store_sale_purchase_snapshots ADD COLUMN whatsapp_daily_send_attempts INTEGER NOT NULL DEFAULT 0',
             ),
+            ('digest_wa_sent_at', f'ALTER TABLE store_sale_purchase_snapshots ADD COLUMN digest_wa_sent_at {dt_type}'),
+            ('digest_tg_sent_at', f'ALTER TABLE store_sale_purchase_snapshots ADD COLUMN digest_tg_sent_at {dt_type}'),
         ]
         for col_name, ddl in additions:
             if col_name in cols:
@@ -1602,6 +1604,42 @@ def mark_daily_snapshots_sent(snapshots: list[SalePurchaseSnapshot]) -> None:
     for snap in snapshots:
         snap.whatsapp_daily_sent_at = now
         db.session.add(snap)
+    db.session.commit()
+
+
+def _snapshots_channel_sent(snapshots: list[SalePurchaseSnapshot], field: str) -> bool:
+    return bool(snapshots) and all(getattr(snap, field, None) for snap in snapshots)
+
+
+def _mark_channel_sent(snapshots: list[SalePurchaseSnapshot], field: str) -> None:
+    """Guarda ya el canal enviado, para no reenviarlo si el proceso se corta."""
+    now = datetime.utcnow()
+    for snap in snapshots:
+        setattr(snap, field, now)
+        db.session.add(snap)
+    db.session.commit()
+
+
+def _telegram_chat_delivered_elsewhere(chat_id: str, user_id: int, co_date) -> str:
+    """Usuario que ya recibió por Telegram ese ID en la misma fecha. Vacío si nadie."""
+    from app.models.user import User
+
+    others = User.query.filter(User.telegram_chat_id == chat_id, User.id != int(user_id)).all()
+    if not others:
+        return ''
+    other_ids = [int(u.id) for u in others]
+    sent = (
+        SalePurchaseSnapshot.query.filter(
+            SalePurchaseSnapshot.user_id.in_(other_ids),
+            SalePurchaseSnapshot.whatsapp_daily_co_date == co_date,
+            SalePurchaseSnapshot.digest_tg_sent_at.isnot(None),
+        )
+        .first()
+    )
+    if not sent:
+        return ''
+    owner = next((u for u in others if int(u.id) == int(sent.user_id)), None)
+    return (owner.username if owner else '') or 'otro usuario'
 
 
 def _increment_daily_digest_send_attempts(
@@ -1662,6 +1700,42 @@ def record_daily_digest_connect_failures(
     return touched
 
 
+def _telegram_block_reason(user) -> str:
+    """Motivo si el usuario tiene Telegram marcado pero no se puede enviar. Vacío si no aplica."""
+    from app.store.telegram_bot_service import telegram_digest_ready, validate_chat_id
+    from app.store.whatsapp_user_notify_prefs import user_telegram_notify_enabled_flag
+
+    if not user_telegram_notify_enabled_flag(user):
+        return ''
+    if not telegram_digest_ready():
+        return 'El bot de Telegram no está conectado o Activar Telegram está apagado.'
+    _, err = validate_chat_id(getattr(user, 'telegram_chat_id', None))
+    if not err:
+        return ''
+    if err == 'Falta el ID.':
+        return 'Sin ID de Telegram.'
+    return err
+
+
+def _telegram_digest_state(user, body: str) -> tuple[str, str]:
+    """('sent'|'failed', mensaje de error). Comprueba el ID antes de enviar."""
+    from app.store.telegram_bot_service import probe_telegram_chat, send_telegram_digest_message
+
+    chat_id = (getattr(user, 'telegram_chat_id', None) or '').strip()
+    probe = probe_telegram_chat(chat_id)
+    if not probe.get('connected'):
+        err = str(probe.get('message') or 'El bot no reconoce este ID.')
+        logger.warning('Telegram resumen no enviado user=%s: %s', getattr(user, 'username', ''), err)
+        return 'failed', err
+    result = send_telegram_digest_message(chat_id, body)
+    if result.get('success'):
+        logger.info('Telegram resumen user=%s', getattr(user, 'username', ''))
+        return 'sent', ''
+    err = str(result.get('error') or 'Telegram no pudo enviar el resumen')
+    logger.warning('Telegram resumen falló user=%s: %s', getattr(user, 'username', ''), err)
+    return 'failed', err
+
+
 def send_pending_daily_digests_for_config(
     config: WhatsAppConfig,
     co_now,
@@ -1675,6 +1749,7 @@ def send_pending_daily_digests_for_config(
     pause_between_messages: Callable[[], float] | None = None,
     force: bool = False,
     delivery_details: list | None = None,
+    whatsapp_connected: bool = True,
 ) -> dict[str, Any]:
     """Envía resúmenes diarios listos; devuelve estadísticas."""
     import time
@@ -1685,7 +1760,7 @@ def send_pending_daily_digests_for_config(
         'daily_skipped_no_phone': 0,
         'daily_groups': 0,
     }
-    if not config or not config.is_enabled:
+    if not config:
         return stats
     details = delivery_details if delivery_details is not None else []
 
@@ -1694,7 +1769,14 @@ def send_pending_daily_digests_for_config(
             return max(0.0, float(pause_between_messages()))
         return 3.0
 
-    def _append_detail(*, username: str, phone: str | None, outcome: str, reason: str = '') -> None:
+    def _append_detail(
+        *,
+        username: str,
+        phone: str | None,
+        outcome: str,
+        reason: str = '',
+        channel: str = 'whatsapp',
+    ) -> None:
         if len(details) >= 100:
             return
         details.append(
@@ -1704,20 +1786,35 @@ def send_pending_daily_digests_for_config(
                 'kind': 'resumen',
                 'outcome': outcome,
                 'reason': (reason or '').strip(),
+                'channel': channel,
             }
         )
 
     groups = _group_pending_by_user_and_date(config, co_now, force=force)
     if not groups:
         return stats
+    telegram_chats_sent = set()
 
     for (billing_user_id, co_date), snaps in groups.items():
         billing_user = User.query.get(billing_user_id)
         if not billing_user:
             continue
+        from app.store.telegram_bot_service import digest_chat_id_for_user
         from app.store.whatsapp_user_notify_prefs import user_receives_whatsapp_notifications
 
-        if not user_receives_whatsapp_notifications(billing_user):
+        wa_allowed = user_receives_whatsapp_notifications(billing_user)
+        phone = resolve_phone(billing_user) if wa_allowed else None
+        tg_chat = digest_chat_id_for_user(billing_user)
+        tg_block = '' if tg_chat else _telegram_block_reason(billing_user)
+        if tg_block:
+            _append_detail(
+                username=billing_user.username or '',
+                phone=None,
+                outcome='sin_id' if tg_block == 'Sin ID de Telegram.' else 'error',
+                reason=tg_block,
+                channel='telegram',
+            )
+        if not wa_allowed and not tg_chat:
             try:
                 from app.store.store_event_notify import notify_whatsapp_digest_undelivered
 
@@ -1730,8 +1827,9 @@ def send_pending_daily_digests_for_config(
                 )
             except Exception as nexc:
                 logger.warning('fallback digest WA deshabilitado: %s', nexc)
-            mark_daily_snapshots_sent(snaps)
-            _mark_warranty_digests_sent(billing_user, co_date)
+            if not tg_block:
+                mark_daily_snapshots_sent(snaps)
+                _mark_warranty_digests_sent(billing_user, co_date)
             stats['daily_skipped_no_phone'] += 1
             _append_detail(
                 username=billing_user.username or '',
@@ -1740,8 +1838,7 @@ def send_pending_daily_digests_for_config(
                 reason='WhatsApp desactivado para este usuario',
             )
             continue
-        phone = resolve_phone(billing_user)
-        if not phone:
+        if not phone and not tg_chat:
             try:
                 from app.store.store_event_notify import notify_whatsapp_digest_undelivered
 
@@ -1754,14 +1851,24 @@ def send_pending_daily_digests_for_config(
                 )
             except Exception as nexc:
                 logger.warning('fallback digest WA sin teléfono: %s', nexc)
-            mark_daily_snapshots_sent(snaps)
-            _mark_warranty_digests_sent(billing_user, co_date)
+            if not tg_block:
+                mark_daily_snapshots_sent(snaps)
+                _mark_warranty_digests_sent(billing_user, co_date)
             stats['daily_skipped_no_phone'] += 1
             _append_detail(
                 username=billing_user.username or '',
                 phone=None,
                 outcome='sin_telefono',
                 reason='Sin teléfono en perfil',
+            )
+            continue
+        if wa_allowed and phone and not whatsapp_connected and not tg_chat:
+            stats['daily_errors'] += 1
+            _append_detail(
+                username=billing_user.username or '',
+                phone=phone,
+                outcome='error',
+                reason='WhatsApp desconectado / no disponible',
             )
             continue
 
@@ -1777,60 +1884,67 @@ def send_pending_daily_digests_for_config(
             continue
 
         stats['daily_groups'] += 1
-        try:
-            result = send_text_message(
-                resolve_config_base_url(config),
-                resolve_config_api_key(config),
-                config_evolution_instance(config),
-                phone,
-                body,
-            )
-            if result.get('success'):
-                mark_daily_snapshots_sent(snaps)
-                _mark_warranty_digests_sent(billing_user, co_date)
-                stats['daily_sent'] += 1
+        wa_already = _snapshots_channel_sent(snaps, 'digest_wa_sent_at')
+        tg_already = _snapshots_channel_sent(snaps, 'digest_tg_sent_at')
+        wa_attempts_before = max(
+            (int(getattr(s, 'whatsapp_daily_send_attempts', 0) or 0) for s in snaps),
+            default=0,
+        )
+        attempt_wa = bool(
+            whatsapp_connected and wa_allowed and phone and not wa_already
+            and wa_attempts_before < MAX_DAILY_DIGEST_SEND_ATTEMPTS
+        )
+        wa_ok = bool(wa_already)
+        wa_error = ''
+        if attempt_wa:
+            try:
+                result = send_text_message(
+                    resolve_config_base_url(config),
+                    resolve_config_api_key(config),
+                    config_evolution_instance(config),
+                    phone,
+                    body,
+                )
+                wa_ok = bool(result.get('success'))
+                if wa_ok:
+                    _mark_channel_sent(snaps, 'digest_wa_sent_at')
+                else:
+                    wa_error = str(result.get('error') or 'Envío fallido')
+            except Exception as exc:
+                wa_ok = False
+                wa_error = str(exc)
+        tg_state, tg_error = ('skip', '')
+        duplicate_owner = ''
+        if tg_already:
+            tg_state = 'sent'
+        elif tg_chat and (tg_chat in telegram_chats_sent or _telegram_chat_delivered_elsewhere(tg_chat, billing_user.id, co_date)):
+            duplicate_owner = _telegram_chat_delivered_elsewhere(tg_chat, billing_user.id, co_date) or 'otro usuario'
+            tg_state = 'duplicate'
+        elif tg_chat:
+            tg_state, tg_error = _telegram_digest_state(billing_user, body)
+            if tg_state == 'sent':
+                _mark_channel_sent(snaps, 'digest_tg_sent_at')
+                telegram_chats_sent.add(tg_chat)
+        wa_attempts = max(int(getattr(s, 'whatsapp_daily_send_attempts', 0) or 0) for s in snaps) if snaps else 0
+        wa_pending = bool(attempt_wa and not wa_ok and wa_attempts < MAX_DAILY_DIGEST_SEND_ATTEMPTS)
+        tg_pending = bool(tg_block or tg_state == 'failed')
+        if wa_ok or tg_state == 'sent':
+            stats['daily_sent'] += 1
+            if attempt_wa and wa_ok:
                 logger.info(
                     'WhatsApp resumen diario user=%s fecha=%s compras=%s',
                     billing_user.username,
                     co_date.isoformat(),
                     len(snaps),
                 )
+            if wa_ok or tg_state == 'sent':
                 time.sleep(_next_pause_sec())
-            else:
-                stats['daily_errors'] += 1
-                err_msg = str(result.get('error') or 'Envío fallido')
-                abandoned = _increment_daily_digest_send_attempts(snaps)
-                if abandoned:
-                    try:
-                        from app.store.store_event_notify import notify_whatsapp_digest_undelivered
-
-                        notify_whatsapp_digest_undelivered(
-                            billing_user,
-                            co_date,
-                            snaps,
-                            outcome='error',
-                            reason=err_msg,
-                            digest_body=body,
-                        )
-                        mark_daily_snapshots_sent(snaps)
-                        _mark_warranty_digests_sent(billing_user, co_date)
-                    except Exception as nexc:
-                        logger.warning('fallback digest WA error: %s', nexc)
-                _append_detail(
-                    username=billing_user.username or '',
-                    phone=phone,
-                    outcome='error',
-                    reason=err_msg,
-                )
-                logger.warning(
-                    'WhatsApp resumen diario falló user=%s: %s',
-                    billing_user.username,
-                    result.get('error'),
-                )
-        except Exception as exc:
+        if attempt_wa and not wa_ok:
             stats['daily_errors'] += 1
             abandoned = _increment_daily_digest_send_attempts(snaps)
-            if abandoned:
+            db.session.commit()
+            wa_pending = not abandoned
+            if abandoned and not tg_pending:
                 try:
                     from app.store.store_event_notify import notify_whatsapp_digest_undelivered
 
@@ -1839,19 +1953,42 @@ def send_pending_daily_digests_for_config(
                         co_date,
                         snaps,
                         outcome='error',
-                        reason=str(exc),
+                        reason=wa_error,
                         digest_body=body,
                     )
-                    mark_daily_snapshots_sent(snaps)
-                    _mark_warranty_digests_sent(billing_user, co_date)
                 except Exception as nexc:
-                    logger.warning('fallback digest WA excepción: %s', nexc)
+                    logger.warning('fallback digest WA error: %s', nexc)
             _append_detail(
                 username=billing_user.username or '',
                 phone=phone,
                 outcome='error',
-                reason=str(exc),
+                reason=wa_error,
             )
+            logger.warning(
+                'WhatsApp resumen diario falló user=%s: %s',
+                billing_user.username,
+                wa_error,
+            )
+        if tg_state == 'failed':
+            stats['daily_errors'] += 1
+            _append_detail(
+                username=billing_user.username or '',
+                phone=tg_chat,
+                outcome='error',
+                reason=tg_error or 'Telegram no pudo enviar el resumen',
+                channel='telegram',
+            )
+        if tg_state == 'duplicate':
+            _append_detail(
+                username=billing_user.username or '',
+                phone=tg_chat,
+                outcome='error',
+                reason=f'Este ID ya recibió el resumen en {duplicate_owner}.',
+                channel='telegram',
+            )
+        if not wa_pending and not tg_pending:
+            mark_daily_snapshots_sent(snaps)
+            _mark_warranty_digests_sent(billing_user, co_date)
 
     # Resúmenes solo-movimientos: días con actividad de soporte pero sin ventas
     # pendientes para ese destinatario (admin o usuario soporte).
@@ -1874,12 +2011,18 @@ def send_pending_daily_digests_for_config(
         for recipient, mov_co_date in recipients:
             if (int(recipient.id), mov_co_date) in handled_keys:
                 continue
-            if not user_receives_whatsapp_notifications(recipient):
+            from app.store.telegram_bot_service import digest_chat_id_for_user
+
+            mov_wa = user_receives_whatsapp_notifications(recipient)
+            mov_phone = resolve_phone(recipient) if mov_wa else None
+            mov_tg = digest_chat_id_for_user(recipient)
+            if not mov_wa and not mov_tg:
                 mark_movements_whatsapp_sent(recipient, mov_co_date)
                 continue
-            mov_phone = resolve_phone(recipient)
-            if not mov_phone:
+            if not mov_phone and not mov_tg:
                 mark_movements_whatsapp_sent(recipient, mov_co_date)
+                continue
+            if mov_wa and mov_phone and not whatsapp_connected and not mov_tg:
                 continue
             mov_body = build_daily_sales_whatsapp_message(
                 customer_name=customer_name_fn(recipient),
@@ -1890,36 +2033,61 @@ def send_pending_daily_digests_for_config(
             if not mov_body:
                 mark_movements_whatsapp_sent(recipient, mov_co_date)
                 continue
-            try:
-                result = send_text_message(
-                    resolve_config_base_url(config),
-                    resolve_config_api_key(config),
-                    config_evolution_instance(config),
-                    mov_phone,
-                    mov_body,
+            attempt_mov_wa = bool(whatsapp_connected and mov_wa and mov_phone)
+            mov_wa_ok = False
+            if attempt_mov_wa:
+                try:
+                    result = send_text_message(
+                        resolve_config_base_url(config),
+                        resolve_config_api_key(config),
+                        config_evolution_instance(config),
+                        mov_phone,
+                        mov_body,
+                    )
+                    mov_wa_ok = bool(result.get('success'))
+                    if not mov_wa_ok:
+                        stats['daily_errors'] += 1
+                        logger.warning(
+                            'WhatsApp movimientos soporte falló user=%s: %s',
+                            recipient.username,
+                            result.get('error'),
+                        )
+                except Exception as mexc:
+                    stats['daily_errors'] += 1
+                    logger.warning(
+                        'WhatsApp movimientos soporte excepción user=%s: %s',
+                        recipient.username,
+                        mexc,
+                    )
+            mov_tg_state, mov_tg_error = ('skip', '')
+            if mov_tg:
+                mov_tg_state, mov_tg_error = _telegram_digest_state(recipient, mov_body)
+            elif _telegram_block_reason(recipient):
+                _append_detail(
+                    username=recipient.username or '',
+                    phone=None,
+                    outcome='error',
+                    reason=_telegram_block_reason(recipient),
+                    channel='telegram',
                 )
-                if result.get('success'):
-                    mark_movements_whatsapp_sent(recipient, mov_co_date)
-                    stats['daily_sent'] += 1
+            if mov_wa_ok or mov_tg_state == 'sent':
+                mark_movements_whatsapp_sent(recipient, mov_co_date)
+                stats['daily_sent'] += 1
+                if mov_wa_ok:
                     logger.info(
                         'WhatsApp movimientos soporte user=%s fecha=%s',
                         recipient.username,
                         mov_co_date.isoformat(),
                     )
-                    time.sleep(_next_pause_sec())
-                else:
-                    stats['daily_errors'] += 1
-                    logger.warning(
-                        'WhatsApp movimientos soporte falló user=%s: %s',
-                        recipient.username,
-                        result.get('error'),
-                    )
-            except Exception as mexc:
+                time.sleep(_next_pause_sec())
+            elif mov_tg_state == 'failed':
                 stats['daily_errors'] += 1
-                logger.warning(
-                    'WhatsApp movimientos soporte excepción user=%s: %s',
-                    recipient.username,
-                    mexc,
+                _append_detail(
+                    username=recipient.username or '',
+                    phone=mov_tg if isinstance(mov_tg, str) else None,
+                    outcome='error',
+                    reason=mov_tg_error or 'Telegram no pudo enviar el resumen',
+                    channel='telegram',
                 )
     except Exception as mov_exc:
         logger.exception('resúmenes solo-movimientos: %s', mov_exc)

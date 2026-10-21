@@ -60,54 +60,62 @@ document.addEventListener("DOMContentLoaded", function() {
     
     servers.forEach(s => {
       const div = document.createElement("div");
-      div.className = "imap-item mb-1";
+      div.className = "imap-item mb-1 imap-admin-row";
 
-      // Usuario
-      const strongUser = document.createElement("strong");
-      strongUser.textContent = `Usuario: ${escapeHtml(s.username)}`;
-      div.appendChild(strongUser);
-      
-      // Descripción y ruta
-      if (s.description || s.route_path) {
-        const br = document.createElement("br");
-        div.appendChild(br);
-        
-        const infoText = document.createDocumentFragment();
-        if (s.description) {
-          const descSpan = document.createElement("span");
-          descSpan.textContent = escapeHtml(s.description);
-          infoText.appendChild(descSpan);
-        }
-        if (s.route_path) {
-          if (s.description) {
-            infoText.appendChild(document.createTextNode(" | "));
-          }
-          const routeEm = document.createElement("em");
-          routeEm.textContent = "Ruta: ";
-          infoText.appendChild(routeEm);
-          const routeSpan = document.createElement("span");
-          routeSpan.textContent = escapeHtml(s.route_path);
-          infoText.appendChild(routeSpan);
-        }
-        if (s.custom_domain) {
-          if (s.description || s.route_path) {
-            infoText.appendChild(document.createTextNode(" | "));
-          }
-          const domainEm = document.createElement("em");
-          domainEm.textContent = "Dominio: ";
-          domainEm.className = "imap-domain-label";
-          infoText.appendChild(domainEm);
-          const domainSpan = document.createElement("span");
-          domainSpan.textContent = escapeHtml(s.custom_domain);
-          domainSpan.className = "imap-domain-value";
-          infoText.appendChild(domainSpan);
-        }
-        div.appendChild(infoText);
+      const meta = document.createElement("div");
+      meta.className = "imap-admin-row__meta";
+
+      function appendSep() {
+        const sep = document.createElement("span");
+        sep.className = "imap-admin-row__sep";
+        sep.setAttribute("aria-hidden", "true");
+        sep.textContent = "-";
+        meta.appendChild(sep);
       }
 
-      // Contenedor de acciones
+      const emailSpan = document.createElement("span");
+      emailSpan.className = "imap-admin-row__email";
+      emailSpan.textContent = s.username || "";
+      meta.appendChild(emailSpan);
+
+      const owners = Array.isArray(s.linked_users)
+        ? s.linked_users.map(function (name) { return String(name || "").trim(); }).filter(Boolean)
+        : [];
+      if (owners.length) {
+        appendSep();
+        const ownerSpan = document.createElement("span");
+        ownerSpan.className = "imap-admin-row__owner";
+        ownerSpan.textContent = owners.join(", ");
+        meta.appendChild(ownerSpan);
+      }
+      if (s.route_path) {
+        appendSep();
+        const routeSpan = document.createElement("span");
+        routeSpan.className = "imap-admin-row__route";
+        const routeEm = document.createElement("em");
+        routeEm.textContent = "ruta:";
+        routeSpan.appendChild(routeEm);
+        routeSpan.appendChild(document.createTextNode(s.route_path));
+        meta.appendChild(routeSpan);
+      }
+      if (s.custom_domain) {
+        appendSep();
+        const domainWrap = document.createElement("span");
+        domainWrap.className = "imap-admin-row__domain";
+        const domainEm = document.createElement("em");
+        domainEm.className = "imap-domain-label";
+        domainEm.textContent = "Dominio: ";
+        const domainSpan = document.createElement("span");
+        domainSpan.className = "imap-domain-value";
+        domainSpan.textContent = s.custom_domain;
+        domainWrap.appendChild(domainEm);
+        domainWrap.appendChild(domainSpan);
+        meta.appendChild(domainWrap);
+      }
+      div.appendChild(meta);
+
       const actionsDiv = document.createElement("div");
-      actionsDiv.className = "mt-05";
+      actionsDiv.className = "imap-admin-row__actions";
 
       // Formulario Probar
       const testForm = document.createElement("form");

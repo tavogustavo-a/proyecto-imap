@@ -26,7 +26,7 @@ import re
 from app.models import User, AppSecrets, SecurityRule, TriggerLog, RememberDevice, IMAPServer, ObserverIMAPServer
 from app.models.imap2 import IMAPServer2
 from app.admin.site_settings import get_site_setting, set_site_setting
-from app.imap.advanced_imap import search_emails_for_observer, delete_emails_by_message_id
+from app.imap.advanced_imap import search_emails_for_observer, search_buzon_for_observer, delete_emails_by_message_id
 from app.services.email_service import send_security_alert_email 
 import sqlalchemy
 from app.helpers import safe_regex_search
@@ -104,7 +104,7 @@ def start_scheduler_if_needed():
                 _scheduler.add_job(
                     func=cleanup_trigger_logs_job,
                     trigger='interval',
-                    minutes=10,
+                    minutes=15,
                     id='cleanup_trigger_logs',
                     replace_existing=True,
                     next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1, seconds=30)
@@ -617,6 +617,20 @@ def rotate_imap_keys_job():
             db.session.rollback()
             app.logger.error(f"❌ Error fatal durante rotación de claves IMAP: {e}", exc_info=True)
 
+def _delete_observer_scanned_email(scanned_email_data, servers_for_rule, message_id):
+    """Borra el correo revisado: en el buzón (BD) o en el IMAP observador."""
+    if scanned_email_data.get("source") == "buzon":
+        from app.models.email_buzon import ReceivedEmail
+        email_id = scanned_email_data.get("received_email_id")
+        row = ReceivedEmail.query.get(email_id) if email_id else None
+        if row is None and message_id:
+            row = ReceivedEmail.query.filter_by(message_id=message_id).first()
+        if row is not None:
+            db.session.delete(row)
+        return
+    delete_emails_by_message_id(servers_for_rule, message_id)
+
+
 def check_observer_patterns_job():
     with app.app_context():
         try:
@@ -632,10 +646,14 @@ def check_observer_patterns_job():
 
 
             try:
-                run_frequency_minutes = int(get_site_setting("observer_check_frequency", "5"))
-                if run_frequency_minutes <= 0: run_frequency_minutes = 5
+                run_frequency_minutes = int(get_site_setting("observer_check_frequency", "15"))
+                if run_frequency_minutes <= 0:
+                    run_frequency_minutes = 15
+                elif run_frequency_minutes == 10:
+                    run_frequency_minutes = 15
+                    set_site_setting("observer_check_frequency", "15")
             except ValueError:
-                run_frequency_minutes = 5
+                run_frequency_minutes = 15
 
             last_run_setting_key = "observer_job_last_actual_run_utc"
             last_run_iso = get_site_setting(last_run_setting_key)
@@ -659,8 +677,14 @@ def check_observer_patterns_job():
                     db.session.rollback()
                 return
 
-            servers = ObserverIMAPServer.query.filter_by(enabled=True).all()
-            if not servers:
+            all_observer_servers = ObserverIMAPServer.query.all()
+            servers = [s for s in all_observer_servers if s.enabled]
+            from app.models.email_forwarding import normalize_folder_keys
+            buzon_folder_keys = normalize_folder_keys(
+                get_site_setting("observer_buzon_folders", ""),
+                empty_as_none=True,
+            ) or []
+            if not servers and not buzon_folder_keys:
                 try:
                     set_site_setting(last_run_setting_key, now_utc.isoformat())
                     db.session.commit()
@@ -693,11 +717,19 @@ def check_observer_patterns_job():
                     servers_for_rule = servers
                     if getattr(rule, 'imap_server_id', None):
                         servers_for_rule = [s for s in servers if s.id == rule.imap_server_id]
-                        if not servers_for_rule:
+                        if not servers_for_rule and not buzon_folder_keys:
                             # print(f"[{current_time_str}] [JOB_OBSERVER] Regla {rule.id}: servidor IMAP específico no encontrado o deshabilitado. Omitiendo.")
                             continue
 
-                    found_emails_in_scan = search_emails_for_observer(servers_for_rule, since_date_for_imap_scan, rule.sender)
+                    found_emails_in_scan = []
+                    if servers_for_rule:
+                        found_emails_in_scan.extend(
+                            search_emails_for_observer(servers_for_rule, since_date_for_imap_scan, rule.sender)
+                        )
+                    if buzon_folder_keys:
+                        found_emails_in_scan.extend(
+                            search_buzon_for_observer(buzon_folder_keys, since_date_for_imap_scan, rule.sender)
+                        )
                 except Exception as imap_e:
                     # print(f"[{current_time_str}] [JOB_OBSERVER] Error buscando correos para Regla {rule.id}: {imap_e}")
                     continue 
@@ -738,7 +770,7 @@ def check_observer_patterns_job():
                             if not access_logs:
                                 # print(f"[{current_time_str}] [INFO] Tarea Observador: Regla {rule.id} detectó correo {scanned_email_message_id} (para: {email_destinatarios_str}), pero ningún usuario lo ha consultado. Eliminando correo para evitar detecciones futuras.")
                                 try:
-                                    delete_emails_by_message_id(servers_for_rule, scanned_email_message_id)
+                                    _delete_observer_scanned_email(scanned_email_data, servers_for_rule, scanned_email_message_id)
                                     # print(f"[{current_time_str}] [INFO] Correo {scanned_email_message_id} eliminado exitosamente por falta de logs activadores.")
                                 except Exception as del_mail_err:
                                     # print(f"[JOB_OBSERVER] Error al eliminar correo {scanned_email_message_id}: {del_mail_err}")
@@ -841,7 +873,7 @@ def check_observer_patterns_job():
                                     pass
                                 
                                 try:
-                                    delete_emails_by_message_id(servers_for_rule, scanned_email_message_id)
+                                    _delete_observer_scanned_email(scanned_email_data, servers_for_rule, scanned_email_message_id)
                                 except Exception as del_mail_err:
                                     # print(f"[JOB_OBSERVER] Error al eliminar correo {scanned_email_message_id} tras alertas: {del_mail_err}")
                                     pass
@@ -1160,7 +1192,7 @@ def main():
 
 
         cleanup_job_id = 'cleanup_trigger_logs'
-        scheduler_call_freq_cleanup = 10 
+        scheduler_call_freq_cleanup = 15
         scheduler.add_job(
             func=cleanup_trigger_logs_job,
             trigger='interval',

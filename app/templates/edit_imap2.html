@@ -37,8 +37,8 @@
       <textarea
         id="paragraph"
         name="paragraph"
-        rows="3"
-        class="d-block w-100 resize-vertical mb-05"
+        rows="6"
+        class="d-block w-100 resize-vertical mb-05 imap2-paragraph-textarea"
         autocomplete="off"
       >{{ srv.paragraph if srv.paragraph else '' }}</textarea>
       <div class="d-flex justify-content-center align-items-center gap-1 flex-wrap imap2-paragraph-actions">
@@ -85,9 +85,9 @@
 
   <!-- Servidores: el primero es el IMAP2 principal (editable, no se elimina) -->
   <div class="card mt-2">
-    <div class="imap-item mb-1" id="primaryImapItem" data-imap-id="{{ srv.id }}" data-primary="1" data-host="{{ srv.host|lower }}" data-username="{{ srv.username|lower }}">
-      <strong id="primaryImapHostLabel">Host: {{ srv.host }}</strong> | <strong id="primaryImapUserLabel">Usuario: {{ srv.username }}</strong>
-      <div class="mt-05">
+    <div class="imap-item mb-1 imap-admin-row" id="primaryImapItem" data-imap-id="{{ srv.id }}" data-primary="1" data-host="{{ srv.host|lower }}" data-username="{{ srv.username|lower }}">
+      <strong id="primaryImapUserLabel" class="imap-admin-row__email">{{ srv.username }}</strong>
+      <div class="imap-admin-row__actions">
         <form action="{{ url_for('admin_bp.test_imap2_ajax') }}"
               method="POST"
               class="d-inline test-primary-imap2-form"
@@ -117,9 +117,9 @@
     </div>
     <div id="linkedImapList">
       {% for imap in srv.linked_imap_servers %}
-        <div class="imap-item mb-1" data-imap-id="{{ imap.id }}" data-host="{{ imap.host|lower }}" data-username="{{ imap.username|lower }}">
-          <strong>Host: {{ imap.host }}</strong> | <strong>Usuario: {{ imap.username }}</strong>
-          <div class="mt-05">
+        <div class="imap-item mb-1 imap-admin-row" data-imap-id="{{ imap.id }}" data-host="{{ imap.host|lower }}" data-username="{{ imap.username|lower }}">
+          <strong class="imap-admin-row__email">{{ imap.username }}</strong>
+          <div class="imap-admin-row__actions">
             <form action="{{ url_for('admin_bp.test_imap', server_id=imap.id) }}"
                   method="POST"
                   class="d-inline">
@@ -252,8 +252,18 @@
   </div>
 
   <!-- Card separado para Filtros y Expresiones Regulares -->
-  <div class="card mt-2">
+  <div class="card mt-2 filters-regex-section twofa-section-card">
     <h3 class="text-center mb-05">Filtros y Expresiones Regulares</h3>
+    <div class="d-flex gap-05 align-items-center mb-1 twofa-compact-row twofa-list-toolbar filters-regex-search-toolbar">
+      <label for="searchFiltersRegexInput" class="sr-only">Buscar filtros y expresiones regulares</label>
+      <input
+        type="search"
+        id="searchFiltersRegexInput"
+        class="flex-grow-1 twofa-field-control"
+        placeholder="Buscar..."
+        autocomplete="off"
+      >
+    </div>
     <div class="table-responsive">
       <table class="imap2-filters-regex-table">
         <thead>
@@ -267,7 +277,9 @@
         <tbody id="filtersRegexTableBody">
           {% set max_rows = [all_filters|length, all_regexes|length]|max %}
           {% for i in range(max_rows) %}
-            <tr>
+            {% set filter_row_desc = (all_filters[i].description if i < all_filters|length else '') or '' %}
+            {% set regex_row_desc = (all_regexes[i].description if i < all_regexes|length else '') or '' %}
+            <tr data-search-text="{{ (filter_row_desc ~ ' ' ~ regex_row_desc)|lower }}">
               <!-- Columna Filtros -->
               <td>
                 {% if i < all_filters|length %}
@@ -332,14 +344,19 @@
       <input type="hidden" id="imap2-twofa-server-id" value="{{ srv.id }}">
       
       <label for="imap2-twofa-emails-input" class="sr-only">Correos</label>
-      <textarea
-        id="imap2-twofa-emails-input"
-        rows="2"
-        placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
-        required
-        class="d-block mb-05 w-100"
-        autocomplete="off"
-      ></textarea>
+      <div class="search-textarea-wrapper twofa-emails-textarea-wrap mb-05">
+        <textarea
+          id="imap2-twofa-emails-input"
+          rows="2"
+          placeholder="Correos (separados por coma o espacio): correo1@test.com, correo2@test.com"
+          required
+          class="d-block w-100 twofa-field-textarea"
+          autocomplete="off"
+        ></textarea>
+        <button type="button" id="clearImap2TwofaEmailsBtn" class="search-textarea-clear-btn" aria-label="Limpiar correos">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
       
       <!-- Línea compacta: Código manual | Subir QR | Botón Agregar -->
       <div class="d-flex gap-05 align-items-center mb-05 twofa-compact-row">
@@ -348,7 +365,7 @@
           type="text"
           id="imap2-twofa-secret-input"
           placeholder="Código secreto (puede incluir espacios)"
-          class="flex-grow-1"
+          class="flex-grow-1 twofa-field-control"
           autocomplete="off"
           pattern="[a-zA-Z0-9\s]{8,}"
           title="Código secreto TOTP (al menos 8 letras y números, puede incluir espacios)"
@@ -360,11 +377,13 @@
           accept="image/*"
           class="d-none"
         >
-        <button type="button" id="imap2-twofa-upload-qr-btn" class="btn-blue btn-small">
-          <i class="fas fa-qrcode"></i> QR
-        </button>
-        <button type="submit" id="imap2-twofa-save-btn" class="btn-green btn-small">Agregar</button>
-        <button type="button" id="imap2-twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
+        <div class="twofa-compact-actions">
+          <button type="button" id="imap2-twofa-upload-qr-btn" class="btn-blue btn-small">
+            <i class="fas fa-qrcode"></i> QR
+          </button>
+          <button type="submit" id="imap2-twofa-save-btn" class="btn-green btn-small">Agregar</button>
+          <button type="button" id="imap2-twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
+        </div>
       </div>
       
       <!-- Preview del QR (oculto por defecto) -->
@@ -379,14 +398,12 @@
     </form>
     
     <!-- Búsqueda y Mostrar -->
-    <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
-      <div class="search-container">
-        <label for="searchImap2TwofaInput" class="sr-only">Buscar configuraciones 2FA</label>
-        <input type="search" id="searchImap2TwofaInput" placeholder="Buscar..." autocomplete="off">
-      </div>
-      <div class="d-flex align-items-center">
+    <div class="d-flex gap-05 align-items-center mb-1 twofa-compact-row twofa-list-toolbar">
+      <label for="searchImap2TwofaInput" class="sr-only">Buscar configuraciones 2FA</label>
+      <input type="search" id="searchImap2TwofaInput" class="flex-grow-1 twofa-field-control" placeholder="Buscar..." autocomplete="off">
+      <div class="twofa-compact-actions twofa-compact-actions--select">
         <label for="showImap2TwofaCount" class="sr-only">Mostrar cantidad</label>
-        <select id="showImap2TwofaCount" autocomplete="off">
+        <select id="showImap2TwofaCount" class="twofa-show-select" autocomplete="off">
           <option value="5">5</option>
           <option value="10">10</option>
           <option value="20" selected>20</option>
@@ -548,8 +565,8 @@
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2.js') }}?v=20260906-bg-413" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20261017-twofa-outside" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2_linked.js') }}?v=20261017-primary-row" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2.js') }}?v=20261020-filters-regex-search" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20261020-twofa-clear-search" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2_linked.js') }}?v=20261020-imap-user-only" defer></script>
 {% endblock %}
 

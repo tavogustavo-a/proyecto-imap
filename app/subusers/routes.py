@@ -76,8 +76,19 @@ def manage_subusers():
         current_user = User.query.filter_by(username=username).first()
     elif user_id:
         current_user = User.query.get(user_id)
-    
-    return render_template("manage_subusers.html", current_user=current_user)
+
+    parent_has_store_role = bool(
+        current_user
+        and not current_user.parent_id
+        and isinstance(current_user.user_prices, dict)
+        and current_user.user_prices.get('tipo_precio') in ['USD', 'COP']
+    )
+
+    return render_template(
+        "manage_subusers.html",
+        current_user=current_user,
+        parent_has_store_role=parent_has_store_role,
+    )
 
 
 @subuser_bp.route("/list_subusers_ajax", methods=["GET"])
@@ -1959,6 +1970,47 @@ def subuser_catalog(subuser_id):
     db.session.commit()
     payload = catalog_editor_payload(sub_user, parent_user, products, tipo)
     return jsonify({"status": "ok", "message": "Catálogo guardado.", **payload})
+
+
+@subuser_bp.route("/subuser_catalog_global", methods=["GET", "POST"])
+def subuser_catalog_global():
+    """Plantilla global de plataformas y precios del padre.
+    Al guardar se copia a TODOS sus sub-usuarios (viejos) y los nuevos la heredan."""
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+
+    parent_user = User.query.get(session.get("user_id")) if session.get("user_id") else None
+    if not parent_user or parent_user.parent_id:
+        return jsonify({
+            "status": "error",
+            "message": "Solo el usuario principal puede configurar el catálogo global.",
+        }), 403
+
+    from app.store.routes import catalog_products_for_store_user
+    from app.store.subuser_catalog import (
+        global_catalog_editor_payload,
+        save_global_subuser_catalog,
+    )
+
+    products, tipo = catalog_products_for_store_user(parent_user)
+    tipo = tipo or 'COP'
+    if request.method == "GET":
+        payload = global_catalog_editor_payload(parent_user, products, tipo)
+        return jsonify({"status": "ok", **payload})
+
+    data = request.get_json(silent=True) or {}
+    saved, error, applied = save_global_subuser_catalog(parent_user, data, products, tipo)
+    if error:
+        return jsonify({"status": "error", "message": error}), 400
+    db.session.commit()
+    payload = global_catalog_editor_payload(parent_user, products, tipo)
+    plural = "s" if applied != 1 else ""
+    return jsonify({
+        "status": "ok",
+        "message": f"Catálogo global guardado y aplicado a {applied} sub-usuario{plural}.",
+        "applied": applied,
+        **payload,
+    })
 
 @subuser_bp.route("/update_subuser_coupons_permission", methods=["POST"])
 def update_subuser_coupons_permission():

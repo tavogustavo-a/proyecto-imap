@@ -5,16 +5,17 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260522-my-pages-menu">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261020-my-pages-opacity">
 {% endblock %}
+
+{% macro page_route_display(page) -%}
+  {{- page.route_path or '' -}}
+{%- endmacro %}
 
 {% block content %}
 {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
-<div class="container container-max-width-900 store-light store-front-main px-2 pb-3 my-pages-list-page">
+<div class="container container-max-width-900 px-2 pb-3 my-pages-list-page">
   {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
-    <div class="d-flex align-items-center store-front-header gap-2 espaciado-responsive mb-2">
-      <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet" type="button">&#9776; Menú</button>
-    </div>
     <div id="mobileMenu" class="mobile-menu-store hidden">
       <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
         <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
@@ -33,28 +34,64 @@
     <div id="menuOverlay" class="menu-overlay"></div>
   {% endif %}
 
-  <div class="form-container-medium">
-    <div class="card">
-      <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
-        <h2 class="mb-0">Mis Páginas</h2>
-      </div>
-
-      {% if managed_pages %}
-        <div class="d-flex flex-column gap-1">
-          {% for page in managed_pages %}
-            <div class="my-pages-item d-flex align-items-center justify-content-between">
-              <div>
-                <strong>{{ page.route_path }}</strong>
-              </div>
-              <a href="{{ url_for('user_auth_bp.manage_my_page', server_id=page.id) }}" class="btn-blue text-decoration-none">
-                <i class="fas fa-cog"></i> Gestionar
-              </a>
-            </div>
-          {% endfor %}
+  <div class="form-container-medium my-pages-list-wrap">
+    <div class="admin-card my-pages-list-panel">
+      {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
+        <div class="my-pages-list-head">
+          <button id="menuToggleBtn" class="btn-blue menu-btn-worksheet" type="button">&#9776; Menú</button>
+          <h2 class="my-pages-list-title mb-0">Mis Páginas</h2>
+          <span class="my-pages-list-head-spacer" aria-hidden="true"></span>
         </div>
       {% else %}
-        <p class="text-center text-secondary">No tienes páginas asignadas para gestionar.</p>
+        <h2 class="my-pages-list-title my-pages-list-title--solo mb-2 text-center">Mis Páginas</h2>
       {% endif %}
+
+      <div class="my-pages-list-body">
+        {% if managed_pages %}
+          <h4 class="mt-0 my-pages-search-heading">Buscar páginas</h4>
+          <div class="d-flex flex-wrap align-items-center mb-2 gap-1 subusers-list-toolbar my-pages-list-toolbar">
+            <form id="searchMyPagesForm" class="flex-grow-1 mb-0">
+              <div class="search-textarea-wrapper my-pages-search-wrap">
+                <label for="searchMyPagesInput" class="sr-only">Buscar página</label>
+                <input
+                  type="search"
+                  id="searchMyPagesInput"
+                  placeholder="Buscar página..."
+                  class="flex-grow-1"
+                  autocomplete="off"
+                >
+                <button type="button" id="searchMyPagesClearBtn" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+                  <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+              </div>
+            </form>
+          </div>
+          <div id="myPagesListContainer" class="my-pages-scroll-responsive">
+            <div class="user-list-track" id="myPagesListTrack">
+              {% for page in managed_pages %}
+                <div
+                  class="my-pages-item"
+                  data-route="{{ (page.route_path or '')|lower }}"
+                >
+                  <div class="my-pages-item-row">
+                    <div class="my-pages-route-scroll" title="{{ page_route_display(page) }}">
+                      <strong class="my-pages-route-text">{{ page_route_display(page) }}</strong>
+                    </div>
+                    <a href="{{ url_for('user_auth_bp.manage_my_page', server_id=page.id) }}" class="btn-blue btn-small text-decoration-none my-pages-manage-btn">
+                      <i class="fas fa-cog"></i> Gestionar
+                    </a>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+          <p id="myPagesNoMatchMsg" class="text-center text-secondary my-pages-empty-msg hidden" role="status">
+            No hay páginas que coincidan con la búsqueda.
+          </p>
+        {% else %}
+          <p class="text-center text-secondary my-pages-empty-msg">No tienes páginas asignadas para gestionar.</p>
+        {% endif %}
+      </div>
     </div>
   </div>
 </div>
@@ -63,4 +100,7 @@
 {% block scripts %}
   {{ super() }}
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+  {% if managed_pages %}
+  <script src="{{ url_for('static', filename='js/my_pages_list.js') }}?v=20261020-my-pages-clear-x" defer></script>
+  {% endif %}
 {% endblock %}

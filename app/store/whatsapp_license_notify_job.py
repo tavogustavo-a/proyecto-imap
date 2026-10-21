@@ -174,7 +174,14 @@ def run_whatsapp_license_notify_for_config(
     ensure_whatsapp_daily_sales_columns()
     co_now = get_colombia_datetime()
 
-    if not config.is_enabled:
+    from app.store.telegram_bot_service import recheck_telegram_bot, telegram_digest_ready
+
+    try:
+        recheck_telegram_bot()
+    except Exception:
+        logger.warning('No se pudo refrescar el estado del bot de Telegram')
+    telegram_ready = telegram_digest_ready()
+    if not config.is_enabled and not telegram_ready:
         return {'skipped': True, 'reason': 'whatsapp_desactivado'}
 
     if force:
@@ -200,7 +207,7 @@ def run_whatsapp_license_notify_for_config(
         send_pending_daily_digests_for_config,
     )
 
-    if not resolve_config_api_key(config):
+    if config.is_enabled and not resolve_config_api_key(config) and not telegram_ready:
         result = {'skipped': True, 'reason': 'sin_api_key'}
         return _finalize_notify_run(config, trigger=run_trigger, result=result)
 
@@ -208,16 +215,19 @@ def run_whatsapp_license_notify_for_config(
     if not run_daily:
         return {'skipped': True, 'reason': 'nada_pendiente'}
 
-    health = refresh_config_health(config, send_alerts=False)
-    if health.get('status') != STATUS_CONNECTED:
-        if not force:
+    whatsapp_connected = False
+    if config.is_enabled and resolve_config_api_key(config):
+        health = refresh_config_health(config, send_alerts=False)
+        whatsapp_connected = health.get('status') == STATUS_CONNECTED
+    if not whatsapp_connected and not telegram_ready:
+        if not force and config.is_enabled:
             from app.store.whatsapp_daily_sales import record_daily_digest_connect_failures
 
             record_daily_digest_connect_failures(config, co_now, force=False)
         result = {
             'skipped': True,
             'reason': 'whatsapp_no_conectado',
-            'status': health.get('status'),
+            'status': 'disconnected',
         }
         return _finalize_notify_run(config, trigger=run_trigger, result=result)
 
@@ -244,6 +254,7 @@ def run_whatsapp_license_notify_for_config(
         pause_between_messages=lambda: random_send_pause_sec(config),
         force=force,
         delivery_details=stats['delivery_details'],
+        whatsapp_connected=whatsapp_connected,
     )
     stats['daily_sent'] = daily_stats.get('daily_sent', 0)
     stats['daily_errors'] = daily_stats.get('daily_errors', 0)
@@ -258,8 +269,10 @@ def run_whatsapp_license_notify_pipeline(*, force: bool = False) -> dict[str, An
     ensure_whatsapp_web_columns()
     from app.store.whatsapp_web_service import get_whatsapp_singleton_config
 
+    from app.store.telegram_bot_service import telegram_digest_ready
+
     cfg = get_whatsapp_singleton_config()
-    if not cfg or not cfg.is_enabled:
+    if not cfg or (not cfg.is_enabled and not telegram_digest_ready()):
         return {'ok': True, 'results': [], 'message': 'Sin configuración WhatsApp activa.'}
 
     results: list[dict[str, Any]] = []

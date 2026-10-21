@@ -18,6 +18,37 @@ from app.store.models import DriveTransfer
 
 logger = logging.getLogger(__name__)
 
+
+def ensure_drive_telegram_columns() -> None:
+    """Añade grupo de Telegram y el registro de problemas si la tabla ya existía."""
+    try:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(db.engine)
+        if 'drive_transfers' not in inspector.get_table_names():
+            return
+        cols = {c['name'] for c in inspector.get_columns('drive_transfers')}
+        additions = [
+            ('telegram_group_id', 'ALTER TABLE drive_transfers ADD COLUMN telegram_group_id VARCHAR(32)'),
+            ('telegram_send_problems', 'ALTER TABLE drive_transfers ADD COLUMN telegram_send_problems TEXT'),
+        ]
+        for name, ddl in additions:
+            if name in cols:
+                continue
+            try:
+                db.session.execute(text(ddl))
+                db.session.commit()
+                cols.add(name)
+            except Exception as exc:
+                db.session.rollback()
+                logger.warning('No se pudo añadir drive_transfers.%s: %s', name, exc)
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        logger.warning('ensure_drive_telegram_columns: %s', exc)
+
 # ==================== HELPER FUNCIONES DE ZONA HORARIA ====================
 # Usar módulo centralizado de timezone
 from app.utils.timezone import get_colombia_now as get_colombia_datetime, get_colombia_time, utc_to_colombia
@@ -244,6 +275,19 @@ class DriveTransferService:
         except Exception as e:
             logger.error(f"Error moviendo archivo {file_id}: {str(e)}")
             return False
+
+    def download_file(self, file_id: str, dest_path: str) -> None:
+        """Descarga un archivo de Drive a una ruta local."""
+        from googleapiclient.http import MediaIoBaseDownload
+
+        if not self.service:
+            raise Exception('Servicio no autenticado')
+        request = self.service.files().get_media(fileId=file_id)
+        with open(dest_path, 'wb') as handle:
+            downloader = MediaIoBaseDownload(handle, request, chunksize=1024 * 1024)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
     
     def transfer_files(self, source_folder_id: str, destination_folder_id: str, max_files_per_batch: int = 20) -> Dict[str, Any]:
         """Transfiere archivos de fotos y videos de forma gradual en lotes pequeños
@@ -291,6 +335,7 @@ class DriveTransferService:
             files_moved = 0
             files_failed = 0
             failed_files = []
+            moved_files = []
             
             # Procesar archivos de forma gradual con pausas inteligentes y manejo robusto de errores
             consecutive_errors = 0
@@ -344,6 +389,12 @@ class DriveTransferService:
                         if self.move_file(file_id, source_folder_id, destination_folder_id):
                             files_moved += 1
                             file_moved_successfully = True
+                            moved_files.append({
+                                'id': file_id,
+                                'name': file_name,
+                                'mimeType': file_mime,
+                                'size': file_size_bytes,
+                            })
                             consecutive_errors = 0  # Resetear contador de errores consecutivos
                             break  # Salir del loop de reintentos
                         else:
@@ -403,6 +454,7 @@ class DriveTransferService:
                 'files_moved': files_moved,
                 'files_failed': files_failed,
                 'failed_files': failed_files,
+                'moved_files': moved_files,
                 'transfer_completed': transfer_completed,
                 'remaining_files': remaining_files
             }
@@ -897,6 +949,7 @@ def execute_transfer_simple(transfer, app):
             # Actualizar base de datos dentro del contexto de app
             try:
                 with app.app_context():
+                    ensure_drive_telegram_columns()
                     # Recargar el objeto desde la base de datos para evitar problemas de sesión
                     transfer_obj = DriveTransfer.query.get(transfer_id)
                     if transfer_obj:
@@ -907,6 +960,26 @@ def execute_transfer_simple(transfer, app):
                         # Si se movieron archivos o se completó, actualizar last_processed
                         if files_moved > 0 or transfer_completed:
                             transfer_obj.last_processed = datetime.utcnow()
+
+                        moved_files = result.get('moved_files') or []
+                        if moved_files:
+                            try:
+                                from app.store.drive_telegram_send import send_moved_files_to_telegram
+
+                                tg_report = send_moved_files_to_telegram(
+                                    service, transfer_obj, moved_files
+                                )
+                                result['telegram'] = tg_report
+                            except Exception as tg_exc:
+                                logger.warning('Envío Telegram de Drive: %s', tg_exc)
+                                result['telegram'] = {
+                                    'sent': 0,
+                                    'problems': [{
+                                        'file': '',
+                                        'destino': '',
+                                        'problema': 'No se pudo preparar el envío a Telegram.',
+                                    }],
+                                }
                         
                         # Si la transferencia está completa, resetear errores
                         if transfer_completed:

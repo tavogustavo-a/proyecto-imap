@@ -701,6 +701,27 @@
         });
     }
     
+    const clearTwofaEmailsBtn = document.getElementById('clearImap2TwofaEmailsBtn');
+
+    function syncTwofaEmailsClearBtn() {
+        if (!clearTwofaEmailsBtn || !twofaEmailsInput) return;
+        clearTwofaEmailsBtn.classList.toggle('show', !!String(twofaEmailsInput.value || '').trim());
+    }
+
+    if (twofaEmailsInput) {
+        twofaEmailsInput.addEventListener('input', syncTwofaEmailsClearBtn);
+        syncTwofaEmailsClearBtn();
+    }
+
+    if (clearTwofaEmailsBtn && twofaEmailsInput) {
+        clearTwofaEmailsBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            twofaEmailsInput.value = '';
+            syncTwofaEmailsClearBtn();
+            twofaEmailsInput.focus();
+        });
+    }
+
     // Cargar configuraciones al iniciar
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', loadConfigs);

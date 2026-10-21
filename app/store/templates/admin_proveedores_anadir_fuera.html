@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261014-admin-btns">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261020-mp-probar">
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -61,16 +61,18 @@
           <span id="mpApiStatusChip" class="mp-api-chip mp-api-chip--off">Sin configurar</span>
         </div>
         <div id="mpApiConexionBody" class="mp-api-card-body">
+          <form id="mpApiCredentialsForm" class="mp-api-credentials-form" autocomplete="off" novalidate>
           <div class="mp-api-form-row">
-            <input type="text" id="mpApiUsername" autocomplete="off" placeholder="Usuario vendedor" aria-label="Usuario vendedor">
+            <input type="text" id="mpApiUsername" name="username" autocomplete="username" placeholder="Usuario vendedor" aria-label="Usuario vendedor">
           </div>
           <div class="mp-api-form-row">
-            <input type="password" id="mpApiPassword" autocomplete="new-password" placeholder="Contraseña" aria-label="Contraseña">
+            <input type="password" id="mpApiPassword" name="password" autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña">
           </div>
           <div class="mp-api-actions">
-            <button id="mpApiSaveBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-save"></i> Guardar</button>
-            <button id="mpApiTestBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-satellite-dish"></i> Probar conexión</button>
+            <button id="mpApiSaveBtn" type="button" class="btn-panel btn-green">Guardar</button>
+            <button id="mpApiTestBtn" type="button" class="btn-panel btn-blue"><i class="fas fa-satellite-dish" aria-hidden="true"></i> Probar conexión</button>
           </div>
+          </form>
           <p id="mpApiMessage" class="mp-api-message hidden"></p>
           <div id="mpApiProfileCard" class="mp-api-profile-block hidden">
             <div class="mp-api-card-title"><i class="fas fa-wallet" aria-hidden="true"></i> Cuenta del vendedor</div>
@@ -174,6 +176,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedores_fuera.js') }}?v=20260831-mp-recargas2" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_proveedores_fuera.js') }}?v=20261020-mp-form" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/admin_mp_recargas.js') }}?v=20260831-mp-recargas2" defer></script>
 {% endblock %}

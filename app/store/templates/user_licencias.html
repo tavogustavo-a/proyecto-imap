@@ -46,11 +46,11 @@
     <div class="d-flex gap-05 admin-store-menus flex-shrink-0 align-items-center">
       <button type="button" id="menuToggleBtn" class="btn-blue menu-btn-worksheet user-licencias-toolbar__menu-btn">&#9776; Menú</button>
       {% if soporte_licencias_nav %}
-      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-blue menu-btn-worksheet user-licencias-toolbar-cambios-link user-licencias-toolbar-cambios-link--icon-only text-decoration-none" title="Cambios mes a mes (Admin Licencias)" aria-label="Cambios mes a mes en Admin Licencias">
+      <a href="{{ url_for('store_bp.admin_store') }}" class="btn-blue menu-btn-worksheet user-licencias-toolbar-cambios-link user-licencias-toolbar-cambios-link--icon-only user-licencias-toolbar-icon-btn text-decoration-none" title="Cambios mes a mes (Admin Licencias)" aria-label="Cambios mes a mes en Admin Licencias">
         <i class="fas fa-exchange-alt" aria-hidden="true"></i>
       </a>
       {% endif %}
-      <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
+      <button type="button" id="licensesCollapseBtn" class="btn-blue menu-btn-worksheet licenses-collapse-btn licenses-collapse-btn--toolbar user-licencias-toolbar-icon-btn" title="Contraer o expandir licencias" aria-label="Contraer o expandir licencias">
         <i class="fas fa-chevron-up" id="collapseIcon" aria-hidden="true"></i>
       </button>
       <button type="button" id="btnUserLicVencimientos" class="btn-blue menu-btn-worksheet user-lic-vencimientos-btn" title="Notificación: avisos y cuentas por vencer" aria-label="Notificación: avisos y caducidad" aria-pressed="false">
@@ -66,76 +66,7 @@
     <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
       <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
     </div>
-    {% set user_object = None %}
-    {% set current_user_id = session.get("user_id") %}
-    {% if current_user_id %}
-      {% set user_object = User.query.get(current_user_id) %}
-      {% if user_object %}
-      {% set show_store = False %}
-      {% if is_admin %}
-        {% set show_store = True %}
-      {% elif user_object.parent_id %}
-        {% if user_object.can_access_store %}
-          {% set parent_nav = User.query.get(user_object.parent_id) %}
-          {% if parent_nav and parent_nav.user_prices and (
-            parent_nav.user_prices.get('tipo_precio') in ['USD', 'COP']
-            or parent_nav.user_prices.get('soporte_licencias')
-          ) %}
-            {% set show_store = True %}
-          {% endif %}
-        {% endif %}
-      {% elif user_object.user_prices and (
-        user_object.user_prices.get('tipo_precio') in ['USD', 'COP']
-        or user_object.user_prices.get('soporte_licencias')
-      ) %}
-        {% set show_store = True %}
-      {% endif %}
-      {% if show_store %}
-        <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
-        <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
-          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
-        {% include 'includes/store_user_menu_recargas_link.html' %}
-        {% include 'includes/store_user_menu_chatbot_link.html' %}
-      {% endif %}
-      {% endif %}
-    {% endif %}
-    {% if user_object and user_object.has_public_tools_access() %}
-      <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
-    {% endif %}
-    {% include 'includes/store_user_menu_api_docs_link.html' %}
-    <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-    {% if is_user and current_user %}
-      {% if current_user.is_support %}
-        <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
-      {% elif current_user.can_chat %}
-        <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
-      {% endif %}
-    {% endif %}
-    {% if is_user and user_object and user_object.can_create_subusers %}
-      <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
-    {% endif %}
-    {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
-      <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
-    {% endif %}
-    {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
-      <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
-    {% endif %}
-    {% if is_admin %}
-      <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
-    {% endif %}
-    {% if proveedor_nav and not licencias_view_only|default(false) %}
-      <button type="button" id="btnUserProveedorGestionarProductos" class="btn-panel btn-blue mobile-menu-btn mb-04 w-100 user-proveedor-gestionar-productos-btn" title="Reserva gar. de tus productos como proveedor">
-        <i class="fas fa-list" aria-hidden="true"></i> Gestionar productos
-      </button>
-    {% endif %}
-    {% if is_admin %}
-      <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-    {% elif is_user %}
-      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-    {% else %}
-      <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-    {% endif %}
-    {% include 'includes/store_user_menu_saldo_block.html' %}
+    {% include 'includes/store_user_menu_sidebar_body.html' %}
   </div>
   <div id="menuOverlay" class="menu-overlay"></div>
 

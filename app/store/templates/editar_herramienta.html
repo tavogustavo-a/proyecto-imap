@@ -4,56 +4,28 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260725-tool-public">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261019-porcentaje-ancho">
 {% endblock %}
 {% block content %}
 <div class="store-light maxw-800 mx-auto br-8">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="m-0">Editar Información de Herramienta</h2>
-    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue">Volver</a>
-  </div>
-  <div class="mb-3 text-center">
-    <strong>Estado:</strong>
-    {% if tool.enabled %}
-      <span class="badge bg-success ms-2">Habilitada</span>
-    {% else %}
-      <span class="badge bg-danger ms-2">Deshabilitada</span>
-    {% endif %}
+  <div class="edit-tool-page-head">
+    <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue edit-tool-back">Volver</a>
+    <h2 class="edit-tool-page-title">Editar Información de Herramienta</h2>
   </div>
   <div class="d-flex flex-column align-items-center edit-tool-main-container">
     <form method="POST" class="no-form-styles" id="toolForm">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="mb-3">
-        <label for="title" class="form-label text-center d-block">Título</label>
+        <label for="title" class="sr-only">Título</label>
         <input type="text" name="title" id="title" class="form-control" required value="{{ tool.title }}" autocomplete="off">
       </div>
-      <div class="mb-3">
+      <div class="mb-3 edit-tool-text-row">
         <label for="text" class="form-label text-center d-block">Texto</label>
         <textarea name="text" id="text" class="form-control" required autocomplete="off">{{ tool.text }}</textarea>
       </div>
-      <div class="mb-3">
-        <label for="percent" class="form-label text-center d-block">Porcentaje (%)</label>
+      <div class="mb-3 edit-tool-percent-row">
+        <label for="percent" class="form-label">Porcentaje (%)</label>
         <input type="number" name="percent" id="percent" class="form-control" min="0" step="any" required value="{{ tool.percent }}" autocomplete="off">
-      </div>
-      <div class="mb-3 text-center">
-        <label class="d-inline-flex align-items-center gap-05 edit-tool-public-label" for="is_public">
-          <input type="checkbox" name="is_public" id="is_public" value="1" {% if tool.is_public %}checked{% endif %} autocomplete="off">
-          <span>Acceso público con link (sin login)</span>
-        </label>
-      </div>
-      <div id="toolPublicLinkBox" class="mb-3 edit-tool-public-link-box{% if not tool.is_public %} d-none{% endif %}" {% if not tool.is_public %}hidden{% endif %} data-saved-public="{% if tool.is_public %}1{% else %}0{% endif %}">
-        <label class="form-label text-center d-block mb-1" for="toolPublicUrl">Link público de esta herramienta</label>
-        <div class="d-flex flex-wrap gap-05 justify-content-center align-items-center">
-          <input type="text" id="toolPublicUrl" class="form-control edit-tool-public-url" readonly value="{{ public_url }}" autocomplete="off">
-          <button type="button" id="btnCopyToolPublicUrl" class="btn-panel btn-blue btn-sm">Copiar</button>
-          <a id="btnOpenToolPublicUrl" href="{{ public_url }}" class="btn-panel btn-green btn-sm{% if not tool.is_public %} disabled{% endif %}" target="_blank" rel="noopener"{% if not tool.is_public %} aria-disabled="true" tabindex="-1"{% endif %}>Abrir</a>
-        </div>
-        <p id="toolPublicSaveHint" class="text-center mb-0 mt-1 edit-tool-public-hint{% if tool.is_public %} d-none{% endif %}" {% if tool.is_public %}hidden{% endif %}>
-          Marca el checkbox y pulsa <strong>Guardar</strong> para activar el link. Luego ya puedes abrirlo o copiarlo.
-        </p>
-        <p id="toolPublicActiveHint" class="text-center mb-0 mt-1 edit-tool-public-hint{% if not tool.is_public %} d-none{% endif %}" {% if not tool.is_public %}hidden{% endif %}>
-          Link activo: cualquiera con esta URL puede usar la herramienta (sin login).
-        </p>
       </div>
     </form>
     <div class="mt-3 w-100">
@@ -79,13 +51,12 @@
           <thead>
             <tr>
               <th>Usuario</th>
-              <th>Nombre</th>
               <th class="text-center">Vincular</th>
             </tr>
           </thead>
           <tbody id="users-table-body">
             <tr>
-              <td colspan="3" class="text-center">Cargando usuarios...</td>
+              <td colspan="2" class="text-center">Cargando usuarios...</td>
             </tr>
           </tbody>
         </table>
@@ -93,13 +64,13 @@
       <div class="d-flex justify-content-center mt-2 pagination-buttons">
         <!-- Paginación generada por JavaScript -->
       </div>
-      <div class="d-flex justify-content-center gap-2 mb-4">
-          <button type="button" id="checkAllBtn" class="btn-panel btn-sm btn-blue">Marcar Todos</button>
-          <button type="button" id="uncheckAllBtn" class="btn-panel btn-sm btn-orange">Desmarcar Todos</button>
-      </div>
-      <div class="mt-2 text-center">
-        <button type="submit" form="toolForm" class="btn-panel btn-green">Guardar</button>
-        <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-red">Cancelar</a>
+      {% set public_form_id = 'toolForm' %}
+      {% set public_enabled = tool.is_public %}
+      {% include 'includes/public_link_block.html' %}
+      <div class="edit-tool-actions">
+          <button type="button" id="checkAllBtn" class="btn-panel btn-blue">Marcar Todos</button>
+          <button type="button" id="uncheckAllBtn" class="btn-panel btn-orange">Desmarcar Todos</button>
+          <button type="submit" form="toolForm" class="btn-panel btn-green">Guardar</button>
       </div>
     </div>
   </div>
@@ -107,5 +78,5 @@
 {% endblock %}
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('store_bp.static', filename='js/edit_tool_users.js') }}?v=20260730-csp" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/edit_tool_users.js') }}?v=20261019-usuario" defer></script>
 {% endblock %}

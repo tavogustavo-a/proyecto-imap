@@ -65,26 +65,23 @@ document.addEventListener("DOMContentLoaded", function() {
     
     servers.forEach(s => {
       const div = document.createElement("div");
-      div.className = "imap-item mb-1";
+      div.className = "imap-item mb-1 imap-admin-row";
 
-      // Usuario
-      const strongUser = document.createElement("strong");
-      strongUser.textContent = `Usuario: ${escapeHtml(s.username)}`;
-      div.appendChild(strongUser);
-      
-      const br = document.createElement("br");
-      div.appendChild(br);
-      
-      // Carpetas
-      const emFolders = document.createElement("em");
-      emFolders.textContent = "Carpetas: ";
-      const foldersText = document.createTextNode(escapeHtml(s.folders || "INBOX"));
-      emFolders.appendChild(foldersText);
-      div.appendChild(emFolders);
+      const emailSpan = document.createElement("span");
+      emailSpan.className = "imap-admin-row__email";
+      emailSpan.textContent = s.username || "";
+      div.appendChild(emailSpan);
 
-      // Contenedor de acciones
+      const foldersSpan = document.createElement("span");
+      foldersSpan.className = "imap-admin-row__folders";
+      const foldersEm = document.createElement("em");
+      foldersEm.textContent = "Carpetas: ";
+      foldersSpan.appendChild(foldersEm);
+      foldersSpan.appendChild(document.createTextNode(s.folders || "INBOX"));
+      div.appendChild(foldersSpan);
+
       const actionsDiv = document.createElement("div");
-      actionsDiv.className = "mt-05";
+      actionsDiv.className = "imap-admin-row__actions";
 
       // Formulario Probar
       const testForm = document.createElement("form");

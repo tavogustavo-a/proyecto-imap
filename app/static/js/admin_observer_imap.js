@@ -49,49 +49,23 @@ document.addEventListener("DOMContentLoaded", function() {
     
     servers.forEach(s => {
       const div = document.createElement("div");
-      div.className = "imap-item mb-1";
+      div.className = "imap-item mb-1 imap-admin-row";
 
-      // Usuario
-      const strongUser = document.createElement("strong");
-      strongUser.textContent = `Usuario: ${escapeHtml(s.username)}`;
-      div.appendChild(strongUser);
-      
-      const br = document.createElement("br");
-      div.appendChild(br);
-      
-      // Host
-      const emHost = document.createElement("em");
-      emHost.textContent = "Host: ";
-      div.appendChild(emHost);
-      div.appendChild(document.createTextNode(escapeHtml(s.host || "")));
-      
-      // Puerto
-      div.appendChild(document.createTextNode(" | "));
-      const emPort = document.createElement("em");
-      emPort.textContent = "Puerto: ";
-      div.appendChild(emPort);
-      div.appendChild(document.createTextNode(escapeHtml(s.port || "993")));
-      
-      // Carpetas
-      div.appendChild(document.createTextNode(" | "));
-      const emFolders = document.createElement("em");
-      emFolders.textContent = "Carpetas: ";
-      const foldersText = document.createTextNode(escapeHtml(s.folders || "INBOX"));
-      emFolders.appendChild(foldersText);
-      div.appendChild(emFolders);
-      
-      // Descripción (si existe) al lado de Carpetas
-      if (s.description) {
-        div.appendChild(document.createTextNode(" | "));
-        const emDesc = document.createElement("em");
-        emDesc.textContent = "Descripción: ";
-        div.appendChild(emDesc);
-        div.appendChild(document.createTextNode(escapeHtml(s.description)));
-      }
+      const emailSpan = document.createElement("span");
+      emailSpan.className = "imap-admin-row__email";
+      emailSpan.textContent = s.username || "";
+      div.appendChild(emailSpan);
 
-      // Contenedor de acciones
+      const foldersSpan = document.createElement("span");
+      foldersSpan.className = "imap-admin-row__folders";
+      const foldersEm = document.createElement("em");
+      foldersEm.textContent = "Carpetas: ";
+      foldersSpan.appendChild(foldersEm);
+      foldersSpan.appendChild(document.createTextNode(s.folders || "INBOX"));
+      div.appendChild(foldersSpan);
+
       const actionsDiv = document.createElement("div");
-      actionsDiv.className = "mt-05";
+      actionsDiv.className = "imap-admin-row__actions";
 
       // Formulario Probar
       const testForm = document.createElement("form");
@@ -142,7 +116,7 @@ document.addEventListener("DOMContentLoaded", function() {
       // Botón Eliminar
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
-      deleteBtn.className = "btn-panel btn-red btn-sm delete-observer-imap ml-03";
+      deleteBtn.className = "btn-red delete-observer-imap ml-03 btn-imap-action btn-imap-small";
       deleteBtn.setAttribute("data-id", s.id);
       deleteBtn.title = "Eliminar";
       
@@ -418,6 +392,204 @@ document.addEventListener("DOMContentLoaded", function() {
           hostInput.placeholder = "Host (detectado automáticamente)";
         }
       }
+    });
+  }
+
+  document.addEventListener("click", function(e) {
+    const infoBtn = e.target.closest("#observerBuzonInfoBtn");
+    if (infoBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      showObserverBuzonInfo();
+      return;
+    }
+    const buzonBtn = e.target.closest(".buzon-observer-btn");
+    if (!buzonBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    showObserverBuzonModal(buzonBtn);
+  });
+
+  function showObserverBuzonInfo() {
+    const infoOverlay = document.createElement("div");
+    infoOverlay.className = "modal-overlay imap2-buzon-info-overlay";
+    const infoCard = document.createElement("div");
+    infoCard.className = "admin-card";
+    const infoTitle = document.createElement("h3");
+    infoTitle.className = "text-center mb-1";
+    infoTitle.textContent = "Buzón del observador";
+    const infoText = document.createElement("p");
+    infoText.className = "text-center mb-1";
+    infoText.textContent = "Es aparte de los servidores IMAP. Abre las carpetas del buzón (Recibidos, Papelera, Spam o una etiqueta). Las que marques se revisan con las mismas reglas: si coinciden, se toma la acción y al terminar se elimina el correo. Si no marcas ninguna, el buzón no se consulta. Funciona aunque no haya un servidor IMAP configurado.";
+    const infoActions = document.createElement("div");
+    infoActions.className = "d-flex justify-content-center";
+    const okBtn = document.createElement("button");
+    okBtn.type = "button";
+    okBtn.className = "btn-green";
+    okBtn.textContent = "Entendido";
+    infoActions.appendChild(okBtn);
+    infoCard.appendChild(infoTitle);
+    infoCard.appendChild(infoText);
+    infoCard.appendChild(infoActions);
+    infoOverlay.appendChild(infoCard);
+    document.body.appendChild(infoOverlay);
+    function closeInfo() {
+      infoOverlay.remove();
+    }
+    okBtn.addEventListener("click", closeInfo);
+    infoOverlay.addEventListener("click", function(infoEvent) {
+      if (infoEvent.target === infoOverlay) closeInfo();
+    });
+  }
+
+  function observerBuzonCatalog() {
+    const node = document.getElementById("observerBuzonFolderCatalog");
+    const fallback = [
+      {value: "inbox", label: "Recibidos"},
+      {value: "trash", label: "Papelera"},
+      {value: "spam", label: "Spam"}
+    ];
+    if (!node) return fallback;
+    try {
+      const data = JSON.parse(node.textContent || "[]");
+      return Array.isArray(data) && data.length ? data : fallback;
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function parseObserverBuzonFolders(raw) {
+    if (!raw) return [];
+    try {
+      const data = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function showObserverBuzonModal(button) {
+    const selected = parseObserverBuzonFolders(button.getAttribute("data-buzon-folders"));
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "admin-card";
+    const title = document.createElement("h3");
+    title.className = "text-center mb-1 imap2-buzon-heading";
+    title.appendChild(document.createTextNode("Carpetas del buzón"));
+    const infoBtn = document.createElement("button");
+    infoBtn.type = "button";
+    infoBtn.className = "btn-panel btn-blue admin-global-api-info-btn";
+    infoBtn.title = "Información";
+    infoBtn.setAttribute("aria-label", "Información sobre carpetas del buzón");
+    const infoIcon = document.createElement("i");
+    infoIcon.className = "fas fa-info-circle";
+    infoIcon.setAttribute("aria-hidden", "true");
+    infoBtn.appendChild(infoIcon);
+    title.appendChild(infoBtn);
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "imap2-buzon-folder-search";
+    search.placeholder = "Buscar carpeta...";
+    search.setAttribute("aria-label", "Buscar carpeta");
+    search.autocomplete = "off";
+    const list = document.createElement("div");
+    list.className = "imap2-buzon-folder-list";
+    observerBuzonCatalog().forEach(function(item) {
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = item.value;
+      checkbox.checked = selected.indexOf(item.value) !== -1;
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(" " + item.label));
+      list.appendChild(label);
+    });
+    const actions = document.createElement("div");
+    actions.className = "d-flex justify-content-center mt-1";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn-green";
+    saveBtn.textContent = "Guardar";
+    actions.appendChild(saveBtn);
+    modal.appendChild(title);
+    modal.appendChild(search);
+    modal.appendChild(list);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function closeModal() {
+      overlay.remove();
+    }
+    overlay.addEventListener("click", function(ev) {
+      if (ev.target === overlay) closeModal();
+    });
+    search.addEventListener("input", function() {
+      const query = search.value.trim().toLowerCase();
+      list.querySelectorAll("label").forEach(function(label) {
+        const name = label.textContent.trim().toLowerCase();
+        label.hidden = !!(query && name.indexOf(query) === -1);
+      });
+    });
+    infoBtn.addEventListener("click", function(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const infoOverlay = document.createElement("div");
+      infoOverlay.className = "modal-overlay imap2-buzon-info-overlay";
+      const infoCard = document.createElement("div");
+      infoCard.className = "admin-card";
+      const infoTitle = document.createElement("h3");
+      infoTitle.className = "text-center mb-1";
+      infoTitle.textContent = "Carpetas del buzón";
+      const infoText = document.createElement("p");
+      infoText.className = "text-center mb-1";
+      infoText.textContent = "El buzón es aparte de los servidores IMAP. Marca las carpetas que el observador revisa. Si guardas sin marcar ninguna, no se consulta el buzón. Al terminar la revisión se elimina el correo.";
+      const infoActions = document.createElement("div");
+      infoActions.className = "d-flex justify-content-center";
+      const okBtn = document.createElement("button");
+      okBtn.type = "button";
+      okBtn.className = "btn-green";
+      okBtn.textContent = "Entendido";
+      infoActions.appendChild(okBtn);
+      infoCard.appendChild(infoTitle);
+      infoCard.appendChild(infoText);
+      infoCard.appendChild(infoActions);
+      infoOverlay.appendChild(infoCard);
+      document.body.appendChild(infoOverlay);
+      function closeInfo() {
+        infoOverlay.remove();
+      }
+      okBtn.addEventListener("click", closeInfo);
+      infoOverlay.addEventListener("click", function(infoEvent) {
+        if (infoEvent.target === infoOverlay) closeInfo();
+      });
+    });
+    saveBtn.addEventListener("click", function() {
+      const folders = [...list.querySelectorAll("input:checked")].map(function(input) { return input.value; });
+      saveBtn.disabled = true;
+      fetch("/admin/observer_buzon_folders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken()
+        },
+        body: JSON.stringify({ folders: folders })
+      })
+      .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+      .then(function(result) {
+        if (!result.ok || !result.data || result.data.status !== "ok") {
+          alert((result.data && result.data.message) || "No se pudieron guardar las carpetas.");
+          saveBtn.disabled = false;
+          return;
+        }
+        button.setAttribute("data-buzon-folders", JSON.stringify(result.data.folders || []));
+        closeModal();
+      })
+      .catch(function() {
+        alert("No se pudieron guardar las carpetas.");
+        saveBtn.disabled = false;
+      });
     });
   }
 }); 

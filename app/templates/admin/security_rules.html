@@ -57,12 +57,12 @@
                 <div><strong>Patrón Activador:</strong> <code>{{ rule.trigger_pattern }}</code></div>
                 <div><strong>Patrón Observador:</strong> <code>{{ rule.observer_pattern }}</code></div>
                 <div><strong>Servidor IMAP:</strong> {{ rule.imap_server_id if rule.imap_server_id else '(Todos)' }}{% if rule.imap_folder %} / Carpeta: {{ rule.imap_folder }}{% endif %}</div>
-                <div> 
+                <div class="security-rule-actions d-flex flex-wrap justify-content-center align-items-center gap-05 mt-05">
+                    {% call state_switch(rule.enabled, 'toggle-security-rule') %}data-id="{{ rule.id }}" data-enabled="{{ 'true' if rule.enabled else 'false' }}"{% endcall %}
                     <a href="{{ url_for('admin_bp.edit_security_rule_page', rule_id=rule.id) }}" class="btn-panel btn-orange btn-sm row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                     <button class="btn-panel btn-red btn-sm delete-security-rule" data-id="{{ rule.id }}" title="Eliminar">
                       <i class="fas fa-trash"></i>
                     </button>
-                    {% call state_switch(rule.enabled, 'toggle-security-rule') %}data-id="{{ rule.id }}" data-enabled="{{ 'true' if rule.enabled else 'false' }}"{% endcall %}
                 </div>
             </div>
             {% endfor %}
@@ -74,7 +74,7 @@
     <hr class="hr-margin-1"/>
 
     <!-- Crear Nueva Regla -->
-    <h4>Crear Nueva Regla de Seguridad</h4>
+    <h4 class="text-center w-100 m-0 mb-1">Crear Nueva Regla de Seguridad</h4>
     <form id="createSecurityRuleForm" method="POST" action="{{ url_for('admin_bp.security_rules_page') }}" class="mb-0">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         
@@ -100,7 +100,9 @@
             Si ambos coinciden, se tomarán acciones (futura implementación).
         </small>
 
-        <button type="submit" class="btn btn-green">Crear Regla</button>
+        <div class="d-flex justify-content-center">
+          <button type="submit" class="btn btn-green">Crear Regla</button>
+        </div>
     </form>
 </div>
 
@@ -114,10 +116,10 @@
 
   <div id="observerImapList">
     {% for s in observer_servers %}
-      <div class="imap-item mb-1">
-        <strong>Usuario: {{ s.username }}</strong><br>
-        <em>Host:</em> {{ s.host }} | <em>Puerto:</em> {{ s.port }} | <em>Carpetas:</em> {{ s.folders }}{% if s.description %} | <em>Descripción:</em> {{ s.description }}{% endif %}
-        <div class="mt-05">
+      <div class="imap-item mb-1 imap-admin-row">
+        <span class="imap-admin-row__email">{{ s.username }}</span>
+        <span class="imap-admin-row__folders"><em>Carpetas:</em> {{ s.folders }}</span>
+        <div class="imap-admin-row__actions">
           <form action="{{ url_for('admin_bp.observer_test_imap', server_id=s.id) }}" method="POST" class="d-inline">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-blue row-test-btn" title="Probar" aria-label="Probar">
@@ -126,7 +128,7 @@
           </form>
           {% call state_switch(s.enabled, 'toggle-observer-imap ml-03') %}data-id="{{ s.id }}" data-enabled="{{ 'true' if s.enabled else 'false' }}"{% endcall %}
           <button type="button" class="btn-orange ml-03 edit-observer-imap row-icon-btn" data-url="{{ url_for('admin_bp.observer_edit_imap', server_id=s.id) }}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
-          <button type="button" class="btn-panel btn-red btn-sm delete-observer-imap ml-03" data-id="{{ s.id }}" title="Eliminar">
+          <button type="button" class="btn-red delete-observer-imap ml-03 btn-imap-action btn-imap-small" data-id="{{ s.id }}" title="Eliminar">
             <i class="fas fa-trash"></i>
           </button>
         </div>
@@ -169,6 +171,15 @@
       <button type="submit" class="btn-green">Crear</button>
     </div>
   </form>
+  <div class="d-flex justify-content-center align-items-center gap-05 mt-1">
+    <button type="button" id="observerBuzonBtn" class="btn-blue buzon-observer-btn row-test-btn" data-buzon-folders='{{ observer_buzon_folders|tojson }}' title="Buzón" aria-label="Buzón">
+      <i class="fas fa-inbox" aria-hidden="true"></i>
+      <span>Buzón</span>
+    </button>
+    <button type="button" id="observerBuzonInfoBtn" class="btn-panel btn-blue admin-global-api-info-btn" title="Información" aria-label="Información sobre el buzón del observador">
+      <i class="fas fa-info-circle" aria-hidden="true"></i>
+    </button>
+  </div>
 </div>
 
 </div>
@@ -180,6 +191,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_security_rules.js') }}?v=20261016-switch" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_observer_imap.js') }}?v=20261016-imap-errores" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_security_rules.js') }}?v=20261020-security-rule-actions" defer></script>
+  <script type="application/json" id="observerBuzonFolderCatalog">{{ buzon_folder_catalog|tojson }}</script>
+  <script src="{{ url_for('static', filename='js/admin_observer_imap.js') }}?v=20261020-observer-buzon-bottom" defer></script>
 {% endblock %}

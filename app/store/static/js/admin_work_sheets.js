@@ -8173,11 +8173,11 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
     html += `</tbody></table></div>`;
 
     // Paginación debajo de la tabla
-    html += `<div class="d-flex justify-content-between align-items-center mt-2 mb-2">
+    html += `<div class="d-flex justify-content-between align-items-center mt-2 mb-2 worksheet-table-pagination">
         <div>
-            <button class="btn btn-sm btn-outline-secondary" id="btnPrevPage" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
-            <span class="mx-2">Página ${currentPage} de ${totalPages}</span>
-            <button class="btn btn-sm btn-outline-secondary" id="btnNextPage" ${currentPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary worksheet-pagination-btn" id="btnPrevPage" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
+            <span class="mx-2 worksheet-pagination-label">Página ${currentPage} de ${totalPages}</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary worksheet-pagination-btn" id="btnNextPage" ${currentPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
         </div>
     </div>`;
 
@@ -9555,11 +9555,11 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         html += `</tr>`;
     });
     html += `</tbody></table></div>`;
-    html += `<div class="d-flex justify-content-between align-items-center mt-2 mb-2">
+    html += `<div class="d-flex justify-content-between align-items-center mt-2 mb-2 worksheet-table-pagination">
         <div>
-            <button class="btn btn-sm btn-outline-secondary" id="btnPrevPage" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
-            <span class="mx-2">Página ${currentPage} de ${totalPages}</span>
-            <button class="btn btn-sm btn-outline-secondary" id="btnNextPage" ${currentPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary worksheet-pagination-btn" id="btnPrevPage" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
+            <span class="mx-2 worksheet-pagination-label">Página ${currentPage} de ${totalPages}</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary worksheet-pagination-btn" id="btnNextPage" ${currentPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
         </div>
     </div>`;
     container.innerHTML = html;

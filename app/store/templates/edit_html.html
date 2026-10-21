@@ -4,29 +4,20 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261019-botones2">
 {% endblock %}
 
 {% block content %}
 <div class="store-light maxw-800 mx-auto br-8 edit-html-container">
-    <div class="d-flex justify-content-between align-items-center mb-05">
-      <h2 class="m-0">Editar HTML</h2>
-      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue">Volver</a>
+    <div class="edit-tool-page-head">
+      <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue edit-tool-back">Volver</a>
+      <h2 class="edit-tool-page-title">Editar HTML</h2>
     </div>
     
-    <div class="mb-3 w-100 text-center">
-      <strong>Estado:</strong>
-      {% if html.enabled %}
-        <span class="badge bg-success">Habilitada</span>
-      {% else %}
-        <span class="badge bg-danger">Inactiva</span>
-      {% endif %}
-    </div>
-
     <form id="htmlForm" method="POST" action="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="edit-html-form">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
-            <label for="title" class="form-label text-center d-block">Título</label>
+            <label for="title" class="sr-only">Título</label>
             <input type="text" class="form-control" id="title" name="title" value="{{ html.title }}" required autocomplete="off">
         </div>
         <div class="mb-3">
@@ -59,13 +50,12 @@
                 <thead>
                   <tr>
                     <th>Usuario</th>
-                    <th>Nombre</th>
                     <th class="text-center">Vincular</th>
                   </tr>
                 </thead>
                 <tbody id="users-table-body">
                   <tr>
-                    <td colspan="3" class="text-center">Cargando usuarios...</td>
+                    <td colspan="2" class="text-center">Cargando usuarios...</td>
                   </tr>
                 </tbody>
               </table>
@@ -73,13 +63,13 @@
             <div class="d-flex justify-content-center mt-2 pagination-buttons">
               <!-- Paginación generada por JavaScript -->
             </div>
-            <div class="d-flex justify-content-center gap-2 mb-4">
-              <button type="button" id="checkAllBtn" class="btn-panel btn-sm btn-blue">Marcar Todos</button>
-              <button type="button" id="uncheckAllBtn" class="btn-panel btn-sm btn-orange">Desmarcar Todos</button>
-            </div>
-            <div class="mt-2 text-center">
+            {% set public_form_id = 'htmlForm' %}
+            {% set public_enabled = html.is_public %}
+            {% include 'includes/public_link_block.html' %}
+            <div class="edit-tool-actions">
+              <button type="button" id="checkAllBtn" class="btn-panel btn-blue">Marcar Todos</button>
+              <button type="button" id="uncheckAllBtn" class="btn-panel btn-orange">Desmarcar Todos</button>
               <button type="submit" class="btn-panel btn-green">Guardar</button>
-              <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-red">Cancelar</a>
             </div>
           </div>
         </div>
@@ -89,5 +79,6 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('store_bp.static', filename='js/edit_html_users.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/edit_html_users.js') }}?v=20261019-usuario" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/public_link_toggle.js') }}?v=20261019-publico" defer></script>
 {% endblock %} 

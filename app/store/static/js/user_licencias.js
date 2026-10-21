@@ -8637,6 +8637,18 @@
         wireUserLicCaducidadNotifyBar();
         wireUserLicReportesPanel(outer);
         wireUserLicProveedorGestionarProductos(outer);
+        try {
+            var openParams = new URLSearchParams(window.location.search || '');
+            if ((openParams.get('open') || '').toLowerCase() === 'gestionar-productos' && userLicPortalProveedorEnabled) {
+                var productsUrl =
+                    (outer && outer.getAttribute('data-proveedor-products-url')) ||
+                    '/tienda/api/user/proveedor-products';
+                userLicOpenProveedorGestionarProductosModal(productsUrl);
+                openParams.delete('open');
+                var openQs = openParams.toString();
+                window.history.replaceState({}, '', window.location.pathname + (openQs ? '?' + openQs : '') + (window.location.hash || ''));
+            }
+        } catch (_eOpenGestion) {}
         var credsColResizeTimer = null;
         window.addEventListener('resize', function () {
             if (credsColResizeTimer) clearTimeout(credsColResizeTimer);

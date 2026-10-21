@@ -219,6 +219,18 @@ def admin_mp_recharge_config():
     try:
         data = get_recharge_config()
     except MultiplataformaApiError as exc:
+        # El alta de IP y la falta de credenciales son estados esperados:
+        # la página ya muestra el texto. Responder 200 evita el 502 rojo
+        # en la consola al abrir la pantalla.
+        expected = exc.code in ('ip_not_allowed', 'no_credentials') or (
+            'no está dado de alta' in str(exc)
+        )
+        if expected:
+            return jsonify({
+                'success': False,
+                'error': str(exc),
+                'code': exc.code,
+            })
         return _error_response(exc)
     return jsonify({'success': True, 'data': data})
 

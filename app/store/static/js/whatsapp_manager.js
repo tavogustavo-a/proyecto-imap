@@ -44,26 +44,134 @@ function showWhatsAppStatus(message, type) {
 }
 
 function whatsappHealthUiState(config) {
-    if (!config) {
-        return { css: 'whatsapp-health-status--no-configurado', label: 'No configurado' };
-    }
-    var status = String(config.connection_status || 'unknown').toLowerCase();
+    var status = String((config && config.connection_status) || '').toLowerCase();
     if (status === 'connected') {
         return { css: 'whatsapp-health-status--conectado', label: 'Conectado' };
-    }
-    if (!config.last_health_at) {
-        return { css: 'whatsapp-health-status--no-configurado', label: 'No configurado' };
     }
     return { css: 'whatsapp-health-status--desconectado', label: 'Desconectado' };
 }
 
+function updateTelegramHealthBanner(config) {
+    var statusEl = document.getElementById('telegram-health-status');
+    var valueEl = document.getElementById('telegram-health-value');
+    if (!statusEl || !valueEl) return;
+    var connected = !!(config && (config.connected || String(config.connection_status || '').toLowerCase() === 'connected'));
+    var label = connected ? 'Conectado' : 'Desconectado';
+    var tone = connected ? 'btn-green' : 'btn-red';
+    statusEl.classList.remove('btn-blue', 'btn-green', 'btn-red', 'btn-orange', 'whatsapp-health-status--desconectado', 'whatsapp-health-status--conectado');
+    statusEl.classList.add('btn-panel', 'whatsapp-mini-btn', 'whatsapp-verify-state-btn', 'whatsapp-health-status', tone, connected ? 'whatsapp-health-status--conectado' : 'whatsapp-health-status--desconectado');
+    valueEl.textContent = label;
+    statusEl.setAttribute('aria-label', 'Estado Telegram: ' + label);
+}
+
+function fillTelegramBotForm(config) {
+    var nameInput = document.getElementById('telegram-bot-username');
+    var tokenInput = document.getElementById('telegram-bot-token');
+    if (nameInput) nameInput.value = (config && config.bot_username) || '';
+    if (tokenInput) tokenInput.value = (config && config.bot_token) || '';
+}
+
+function setTelegramBotModalStatus(message, ok) {
+    var el = document.getElementById('telegram-botfather-status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.remove('telegram-botfather-status--ok', 'telegram-botfather-status--bad');
+    if (message) el.classList.add(ok ? 'telegram-botfather-status--ok' : 'telegram-botfather-status--bad');
+}
+
+async function loadTelegramBot() {
+    try {
+        var response = await fetch('/tienda/admin/telegram_bot');
+        var result = await response.json();
+        var config = result.config || null;
+        fillTelegramBotForm(config);
+        updateTelegramHealthBanner(config);
+        var tgEnabled = document.getElementById('telegram-enabled');
+        if (tgEnabled) tgEnabled.checked = !!(config && config.is_enabled);
+        if (config && config.bot_username && config.bot_token) {
+            await refreshTelegramBotHealth(true);
+        }
+    } catch (error) {
+        updateTelegramHealthBanner(null);
+    }
+}
+
+async function refreshTelegramBotHealth(silent) {
+    if (!silent) showWhatsAppStatus('Comprobando Telegram…', 'info');
+    try {
+        var response = await fetch('/tienda/admin/telegram_bot/health', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': whatsappCsrfToken(),
+            },
+        });
+        var result = await response.json();
+        if (result.config) {
+            fillTelegramBotForm(result.config);
+            updateTelegramHealthBanner(result.config);
+        }
+        if (!silent) {
+            showWhatsAppStatus(result.message || result.error || 'Estado actualizado', result.connected ? 'success' : 'error');
+        }
+        return result;
+    } catch (error) {
+        if (!silent) showWhatsAppStatus('No se pudo consultar Telegram', 'error');
+        return null;
+    }
+}
+
+async function saveTelegramBotFromModal() {
+    var nameInput = document.getElementById('telegram-bot-username');
+    var tokenInput = document.getElementById('telegram-bot-token');
+    var saveBtn = document.getElementById('telegram-botfather-save-btn');
+    var username = nameInput ? nameInput.value.trim() : '';
+    var token = tokenInput ? tokenInput.value.trim() : '';
+    if (saveBtn) saveBtn.disabled = true;
+    setTelegramBotModalStatus('Comprobando…', true);
+    try {
+        var response = await fetch('/tienda/admin/telegram_bot', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': whatsappCsrfToken(),
+            },
+            body: JSON.stringify({ bot_username: username, bot_token: token }),
+        });
+        var result = await response.json();
+        if (result.config) {
+            fillTelegramBotForm(result.config);
+            updateTelegramHealthBanner(result.config);
+        }
+        var ok = !!result.connected;
+        setTelegramBotModalStatus(result.message || result.error || 'No se pudo guardar', ok);
+        showWhatsAppStatus(result.message || result.error || 'No se pudo guardar', ok ? 'success' : 'error');
+    } catch (error) {
+        setTelegramBotModalStatus('No se pudo consultar Telegram', false);
+        showWhatsAppStatus('No se pudo consultar Telegram', 'error');
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
 function updateWhatsAppHealthBanner(config) {
-    var statusEl = document.getElementById('whatsapp-health-status');
+    var statusEl = document.getElementById('test-whatsapp-connection');
     var valueEl = document.getElementById('whatsapp-health-value');
     if (!statusEl || !valueEl) return;
 
     var ui = whatsappHealthUiState(config);
-    statusEl.className = 'whatsapp-health-status ' + ui.css;
+    var tone = ui.css === 'whatsapp-health-status--conectado' ? 'btn-green' : 'btn-red';
+
+    statusEl.classList.remove(
+        'btn-blue',
+        'btn-green',
+        'btn-red',
+        'btn-orange',
+        'whatsapp-health-status--no-configurado',
+        'whatsapp-health-status--desconectado',
+        'whatsapp-health-status--conectado'
+    );
+    statusEl.classList.add('btn-panel', 'whatsapp-mini-btn', 'whatsapp-verify-state-btn', 'whatsapp-health-status', tone, ui.css);
     valueEl.textContent = ui.label;
     statusEl.setAttribute('aria-label', 'Estado: ' + ui.label);
 
@@ -77,7 +185,8 @@ function updateWhatsAppHealthBanner(config) {
         }
     }
     if (config && config.last_health_error) parts.push(config.last_health_error);
-    statusEl.title = parts.length ? parts.join(' · ') : '';
+    var baseTitle = 'Comprobar conexión de WhatsApp Web';
+    statusEl.title = parts.length ? baseTitle + ' · ' + parts.join(' · ') : baseTitle;
 }
 
 function populateWhatsAppForm(config) {
@@ -152,6 +261,7 @@ function whatsappDeliveryOutcomeLabel(outcome) {
     if (o === 'ok') return 'Enviado';
     if (o === 'error') return 'Falló el envío';
     if (o === 'sin_telefono') return 'Sin teléfono en perfil';
+    if (o === 'sin_id') return 'Sin ID de Telegram';
     if (o === 'deshabilitado') return 'WhatsApp desactivado para el usuario';
     return outcome || '—';
 }
@@ -159,7 +269,7 @@ function whatsappDeliveryOutcomeLabel(outcome) {
 function whatsappDeliveryOutcomeClass(outcome) {
     var o = String(outcome || '').toLowerCase();
     if (o === 'error') return 'text-danger';
-    if (o === 'sin_telefono') return 'text-warning';
+    if (o === 'sin_telefono' || o === 'sin_id') return 'text-warning';
     if (o === 'deshabilitado') return 'text-warning';
     if (o === 'ok') return 'text-success';
     return 'text-muted';
@@ -174,6 +284,7 @@ function collectWhatsAppDeliveryDetailsForDay(attempts, coDate) {
                 when: when,
                 username: item.username || '—',
                 phone: item.phone || '—',
+                channel: item.channel === 'telegram' ? 'Telegram' : 'WhatsApp',
                 kind: item.kind || '',
                 kind_label: item.kind_label || '',
                 outcome: item.outcome || '',
@@ -525,7 +636,7 @@ function showWhatsAppNotifyAttemptsModal(dayIndex, triggerEl) {
                 '<div class="table-responsive whatsapp-notify-attempts-table-wrap">' +
                 '<table class="table table-sm whatsapp-notify-attempts-table mb-0">' +
                 '<thead><tr>' +
-                '<th>Intento</th><th>Usuario</th><th>Teléfono</th><th>Tipo</th><th>Resultado</th>' +
+                '<th>Intento</th><th>Usuario</th><th>Canal</th><th>Teléfono / ID</th><th>Tipo</th><th>Resultado</th>' +
                 '</tr></thead><tbody>' +
                 clientDetails
                     .map(function (row) {
@@ -536,6 +647,9 @@ function showWhatsAppNotifyAttemptsModal(dayIndex, triggerEl) {
                             '</td>' +
                             '<td class="whatsapp-notify-cell-text">' +
                             row.username +
+                            '</td>' +
+                            '<td class="whatsapp-notify-cell-text">' +
+                            (row.channel || 'WhatsApp') +
                             '</td>' +
                             '<td class="whatsapp-notify-phone-cell whatsapp-notify-cell-text">' +
                             row.phone +
@@ -789,7 +903,8 @@ async function sendWhatsAppTestMessage(configId) {
         return;
     }
     if (sendBtn) sendBtn.disabled = true;
-    showWhatsAppStatus('Enviando mensaje de prueba…', 'info');
+    showWhatsAppStatus('Enviando prueba de mensaje…', 'info');
+    setPruebasModalStatus('Enviando prueba de mensaje…', true);
     try {
         var response = await fetch('/tienda/admin/whatsapp_configs/' + id + '/send-test', {
             method: 'POST',
@@ -802,12 +917,15 @@ async function sendWhatsAppTestMessage(configId) {
         var result = await response.json();
         if (result.success) {
             showWhatsAppStatus(result.message, 'success');
+            setPruebasModalStatus(result.message, true);
             if (numInp) numInp.value = '';
         } else {
             showWhatsAppStatus(result.error || 'Envío fallido', 'error');
+            setPruebasModalStatus(result.error || 'Envío fallido', false);
         }
     } catch (e) {
         showWhatsAppStatus('Error de red', 'error');
+        setPruebasModalStatus('Error de red', false);
     } finally {
         if (sendBtn) sendBtn.disabled = false;
     }
@@ -1100,9 +1218,90 @@ function closeWhatsAppUserPhoneModal() {
     }
 }
 
-function openWhatsAppUserPhoneModal(userId, username, currentPhone, rowEl, triggerEl) {
+function setTelegramUserLinkState(state, message) {
+    var btn = document.getElementById('telegram-user-link-btn');
+    var status = document.getElementById('telegram-user-link-status');
+    if (btn) {
+        btn.classList.remove(
+            'telegram-link-icon--idle',
+            'telegram-link-icon--ok',
+            'telegram-link-icon--bad',
+            'telegram-link-icon--busy'
+        );
+        var cls = 'telegram-link-icon--idle';
+        if (state === 'ok') cls = 'telegram-link-icon--ok';
+        else if (state === 'bad') cls = 'telegram-link-icon--bad';
+        else if (state === 'busy') cls = 'telegram-link-icon--busy';
+        btn.classList.add(cls);
+        btn.disabled = state === 'busy';
+    }
+    if (status) {
+        status.textContent = message || '';
+        status.classList.remove('telegram-user-link-status--ok', 'telegram-user-link-status--bad');
+        if (message && state === 'ok') status.classList.add('telegram-user-link-status--ok');
+        if (message && state === 'bad') status.classList.add('telegram-user-link-status--bad');
+    }
+}
+
+function setPruebasModalStatus(message, ok) {
+    var status = document.getElementById('telegram-prueba-status');
+    if (!status) return;
+    status.textContent = message || '';
+    status.className = 'telegram-user-link-status';
+    if (!message) return;
+    status.classList.add(ok ? 'telegram-user-link-status--ok' : 'telegram-user-link-status--bad');
+}
+
+async function sendTelegramTestMessage() {
+    var input = document.getElementById('telegram-test-number');
+    var chatId = input ? String(input.value || '').trim() : '';
+    setPruebasModalStatus('Enviando prueba de mensaje…', true);
+    try {
+        var response = await fetch('/tienda/admin/telegram_bot/test', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': whatsappCsrfToken(),
+            },
+            body: JSON.stringify({ chat_id: chatId }),
+        });
+        var data = await response.json();
+        var message = (data && (data.message || data.error)) || 'No se pudo consultar Telegram.';
+        var ok = !!(data && data.connected);
+        setPruebasModalStatus(message, ok);
+        showWhatsAppStatus(message, ok ? 'success' : 'error');
+    } catch (error) {
+        setPruebasModalStatus('No se pudo consultar Telegram.', false);
+        showWhatsAppStatus('No se pudo consultar Telegram.', 'error');
+    }
+}
+
+async function checkTelegramUserLink() {
+    var input = document.getElementById('whatsapp-user-telegram-modal-input');
+    var chatId = input ? String(input.value || '').trim() : '';
+    setTelegramUserLinkState('busy', 'Comprobando…');
+    try {
+        var response = await fetch('/tienda/admin/telegram_bot/probe', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': whatsappCsrfToken(),
+            },
+            body: JSON.stringify({ chat_id: chatId }),
+        });
+        var data = await response.json();
+        var message = (data && (data.message || data.error)) || 'No se pudo consultar Telegram.';
+        setTelegramUserLinkState(data && data.connected ? 'ok' : 'bad', message);
+    } catch (error) {
+        setTelegramUserLinkState('bad', 'No se pudo consultar Telegram.');
+    }
+}
+
+function openWhatsAppUserPhoneModal(userId, username, currentPhone, telegramId, rowEl, triggerEl) {
     var modal = document.getElementById('whatsapp-user-phone-modal');
-    var userLabel = document.getElementById('whatsapp-user-phone-modal-user');
+    var title = document.getElementById('whatsappUserPhoneModalTitle');
     var input = document.getElementById('whatsapp-user-phone-modal-input');
     if (!modal || !input || !userId) return;
 
@@ -1111,14 +1310,22 @@ function openWhatsAppUserPhoneModal(userId, username, currentPhone, rowEl, trigg
         userId: userId,
         rowEl: rowEl,
         prevPhone: String(currentPhone || '').trim(),
+        prevTelegram: String(telegramId || '').trim(),
     };
-    if (userLabel) {
-        userLabel.textContent = username ? 'Usuario: ' + username : '';
+    if (title) {
+        title.textContent = username ? 'Editar teléfono/usuario ' + username : 'Editar teléfono';
     }
     input.value = whatsappUserPhoneModalContext.prevPhone;
+    var telegramInput = document.getElementById('whatsapp-user-telegram-modal-input');
+    if (telegramInput) telegramInput.value = whatsappUserPhoneModalContext.prevTelegram;
     modal.classList.remove('d-none');
     modal.removeAttribute('hidden');
     modal.setAttribute('aria-hidden', 'false');
+    if (whatsappUserPhoneModalContext.prevTelegram) {
+        checkTelegramUserLink();
+    } else {
+        setTelegramUserLinkState('idle', '');
+    }
     input.focus();
     input.select();
 }
@@ -1129,8 +1336,10 @@ function saveWhatsAppUserPhoneFromModal() {
     var saveBtn = document.getElementById('whatsapp-user-phone-modal-save-btn');
     if (!ctx || !input) return;
 
+    var telegramInput = document.getElementById('whatsapp-user-telegram-modal-input');
     var next = String(input.value || '').trim();
-    if (next === ctx.prevPhone) {
+    var nextTelegram = telegramInput ? String(telegramInput.value || '').trim() : '';
+    if (next === ctx.prevPhone && nextTelegram === String(ctx.prevTelegram || '')) {
         closeWhatsAppUserPhoneModal();
         return;
     }
@@ -1149,7 +1358,7 @@ function saveWhatsAppUserPhoneFromModal() {
             'Content-Type': 'application/json',
             'X-CSRFToken': whatsappCsrfToken(),
         },
-        body: JSON.stringify({ phone: next }),
+        body: JSON.stringify({ phone: next, telegram_chat_id: nextTelegram }),
     })
         .then(function (resp) {
             return resp.json();
@@ -1163,8 +1372,13 @@ function saveWhatsAppUserPhoneFromModal() {
                 return;
             }
             var saved = data.phone != null ? String(data.phone) : next;
+            var savedTelegram = data.telegram_chat_id != null ? String(data.telegram_chat_id) : nextTelegram;
             whatsappUserPhoneUpdateRowDisplay(ctx.rowEl, saved);
-            showWhatsAppStatus('Teléfono guardado.', 'success');
+            if (whatsappUserPhoneModalTrigger) {
+                whatsappUserPhoneModalTrigger.setAttribute('data-phone', saved);
+                whatsappUserPhoneModalTrigger.setAttribute('data-telegram', savedTelegram);
+            }
+            showWhatsAppStatus('Teléfono e ID guardados.', 'success');
             closeWhatsAppUserPhoneModal();
         })
         .catch(function () {
@@ -1194,7 +1408,8 @@ function wireWhatsAppUserNotifyPhoneEditButtons(root) {
                 username = userCell ? String(userCell.textContent || '').trim() : '';
             }
             var phone = btn.getAttribute('data-phone') || '';
-            openWhatsAppUserPhoneModal(userId, username, phone, row, btn);
+            var telegramId = btn.getAttribute('data-telegram') || '';
+            openWhatsAppUserPhoneModal(userId, username, phone, telegramId, row, btn);
         });
     });
 }
@@ -1204,25 +1419,33 @@ function setupWhatsAppUserPhoneModal() {
     setupWhatsAppUserPhoneModal._wired = true;
 
     var modal = document.getElementById('whatsapp-user-phone-modal');
-    var cancelBtn = document.getElementById('whatsapp-user-phone-modal-cancel-btn');
     var saveBtn = document.getElementById('whatsapp-user-phone-modal-save-btn');
     var input = document.getElementById('whatsapp-user-phone-modal-input');
+    var telegramInput = document.getElementById('whatsapp-user-telegram-modal-input');
 
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', closeWhatsAppUserPhoneModal);
-    }
     if (saveBtn) {
         saveBtn.addEventListener('click', saveWhatsAppUserPhoneFromModal);
     }
-    if (input) {
-        input.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Enter') {
-                ev.preventDefault();
-                saveWhatsAppUserPhoneFromModal();
-            } else if (ev.key === 'Escape') {
-                ev.preventDefault();
-                closeWhatsAppUserPhoneModal();
-            }
+    function onPhoneModalKeydown(ev) {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            saveWhatsAppUserPhoneFromModal();
+        } else if (ev.key === 'Escape') {
+            ev.preventDefault();
+            closeWhatsAppUserPhoneModal();
+        }
+    }
+    if (input) input.addEventListener('keydown', onPhoneModalKeydown);
+    if (telegramInput) {
+        telegramInput.addEventListener('keydown', onPhoneModalKeydown);
+        telegramInput.addEventListener('input', function () {
+            setTelegramUserLinkState('idle', '');
+        });
+    }
+    var telegramLinkBtn = document.getElementById('telegram-user-link-btn');
+    if (telegramLinkBtn) {
+        telegramLinkBtn.addEventListener('click', function () {
+            checkTelegramUserLink();
         });
     }
     if (modal) {
@@ -1236,7 +1459,7 @@ function loadWhatsAppUserNotifyPrefs() {
     var tbody = document.getElementById('whatsapp-user-notify-table-body');
     if (!tbody) return Promise.resolve();
     setupWhatsAppUserNotifyTableControls();
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Cargando usuarios…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Cargando usuarios…</td></tr>';
     return fetch('/tienda/admin/whatsapp/user-notify-prefs', {
         credentials: 'same-origin',
         headers: { 'X-CSRFToken': whatsappCsrfToken() },
@@ -1247,7 +1470,7 @@ function loadWhatsAppUserNotifyPrefs() {
         .then(function (data) {
             if (!data || !data.success) {
                 tbody.innerHTML =
-                    '<tr><td colspan="3" class="text-center text-danger">' +
+                    '<tr><td colspan="4" class="text-center text-danger">' +
                     (data && data.error ? data.error : 'No se pudo cargar usuarios.') +
                     '</td></tr>';
                 return;
@@ -1256,7 +1479,7 @@ function loadWhatsAppUserNotifyPrefs() {
         })
         .catch(function () {
             tbody.innerHTML =
-                '<tr><td colspan="3" class="text-center text-danger">Error de red al cargar usuarios.</td></tr>';
+                '<tr><td colspan="4" class="text-center text-danger">Error de red al cargar usuarios.</td></tr>';
         });
 }
 
@@ -1267,7 +1490,7 @@ function renderWhatsAppUserNotifyTable(users) {
     if (!tbody) return;
     if (!users || !users.length) {
         tbody.innerHTML =
-            '<tr><td colspan="3" class="text-center text-muted">No hay usuarios principales para configurar.</td></tr>';
+            '<tr><td colspan="4" class="text-center text-muted">No hay usuarios principales para configurar.</td></tr>';
         if (prevBtn) prevBtn.disabled = true;
         if (nextBtn) nextBtn.disabled = true;
         return;
@@ -1304,6 +1527,8 @@ function renderWhatsAppUserNotifyTable(users) {
                 u.id +
                 '" data-phone="' +
                 phoneVal +
+                '" data-telegram="' +
+                whatsappEscapeHtmlAttr(String(u.telegram_chat_id || '').trim()) +
                 '" title="Editar teléfono"' +
                 ' aria-label="Editar teléfono de ' +
                 usernameLabel +
@@ -1325,6 +1550,20 @@ function renderWhatsAppUserNotifyTable(users) {
                 (u.username || 'usuario') +
                 '">' +
                 '</td>' +
+                '<td class="text-center whatsapp-user-notify-check-cell">' +
+                '<input type="checkbox" class="form-check-input whatsapp-user-notify-telegram-checkbox"' +
+                ' id="telegram-notify-user-' +
+                u.id +
+                '"' +
+                ' data-user-id="' +
+                u.id +
+                '"' +
+                ' aria-label="Telegram de ' +
+                (u.username || 'usuario') +
+                '"' +
+                (u.telegram_notify_enabled ? ' checked' : '') +
+                '>' +
+                '</td>' +
                 '</tr>'
             );
         })
@@ -1332,7 +1571,12 @@ function renderWhatsAppUserNotifyTable(users) {
 
     tbody.querySelectorAll('.whatsapp-user-notify-checkbox').forEach(function (cb) {
         cb.addEventListener('change', function () {
-            saveWhatsAppUserNotifyPref(cb);
+            saveWhatsAppUserNotifyPref(cb, 'whatsapp');
+        });
+    });
+    tbody.querySelectorAll('.whatsapp-user-notify-telegram-checkbox').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            saveWhatsAppUserNotifyPref(cb, 'telegram');
         });
     });
     wireWhatsAppUserNotifyPhoneEditButtons(tbody);
@@ -1341,11 +1585,14 @@ function renderWhatsAppUserNotifyTable(users) {
     whatsappUserNotifyFilterRows();
 }
 
-function saveWhatsAppUserNotifyPref(checkbox) {
+function saveWhatsAppUserNotifyPref(checkbox, channel) {
     if (!checkbox) return;
     var userId = checkbox.getAttribute('data-user-id');
     if (!userId) return;
     var enabled = !!checkbox.checked;
+    var payload = channel === 'telegram'
+        ? { telegram_notify_enabled: enabled }
+        : { enabled: enabled };
     checkbox.disabled = true;
     fetch('/tienda/admin/whatsapp/user-notify-prefs/' + encodeURIComponent(userId), {
         method: 'PUT',
@@ -1354,7 +1601,7 @@ function saveWhatsAppUserNotifyPref(checkbox) {
             'Content-Type': 'application/json',
             'X-CSRFToken': whatsappCsrfToken(),
         },
-        body: JSON.stringify({ enabled: enabled }),
+        body: JSON.stringify(payload),
     })
         .then(function (resp) {
             return resp.json();
@@ -1386,12 +1633,20 @@ function setupWhatsAppInfoToggle() {
         document.getElementById('whatsappWebInfoBox')
     );
     bindWhatsAppInfoToggle(
-        document.getElementById('whatsappPhoneInfoBtn'),
-        document.getElementById('whatsappPhoneInfoBox')
-    );
-    bindWhatsAppInfoToggle(
         document.getElementById('whatsappUserNotifyInfoBtn'),
         document.getElementById('whatsappUserNotifyInfoBox')
+    );
+    bindWhatsAppInfoToggle(
+        document.getElementById('whatsappPhoneHintBtn'),
+        document.getElementById('whatsappPhoneHintBox')
+    );
+    bindWhatsAppInfoToggle(
+        document.getElementById('telegramLinkHintBtn'),
+        document.getElementById('telegramLinkHintBox')
+    );
+    bindWhatsAppInfoToggle(
+        document.getElementById('telegramGroupExtractInfoBtn'),
+        document.getElementById('telegramGroupExtractInfoBox')
     );
 
     document.addEventListener('click', function (e) {
@@ -1408,6 +1663,30 @@ document.addEventListener('DOMContentLoaded', function () {
     var whatsappForm = document.getElementById('whatsapp-config-form');
     if (!whatsappForm) return;
 
+    var telegramEnabledBox = document.getElementById('telegram-enabled');
+    if (telegramEnabledBox) {
+        telegramEnabledBox.addEventListener('change', async function () {
+            try {
+                var tgResponse = await fetch('/tienda/admin/telegram_bot/enabled', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': whatsappCsrfToken(),
+                    },
+                    body: JSON.stringify({ enabled: !!telegramEnabledBox.checked }),
+                });
+                var tgResult = await tgResponse.json();
+                if (!tgResult.success) {
+                    telegramEnabledBox.checked = !telegramEnabledBox.checked;
+                    showWhatsAppStatus(tgResult.error || 'No se pudo guardar Activar Telegram', 'error');
+                }
+            } catch (err) {
+                telegramEnabledBox.checked = !telegramEnabledBox.checked;
+                showWhatsAppStatus('No se pudo guardar Activar Telegram', 'error');
+            }
+        });
+    }
+
     whatsappForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         var fd = new FormData(whatsappForm);
@@ -1420,10 +1699,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 body: fd,
             });
             var result = await response.json();
+            var tgBox = document.getElementById('telegram-enabled');
+            var tgResponse = await fetch('/tienda/admin/telegram_bot/enabled', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': whatsappCsrfToken(),
+                },
+                body: JSON.stringify({ enabled: !!(tgBox && tgBox.checked) }),
+            });
+            var tgResult = await tgResponse.json();
             if (result.success) {
-                showWhatsAppStatus(result.message, 'success');
+                var msg = result.message || 'Guardado.';
+                if (!tgResult.success) msg += ' No se pudo guardar Activar Telegram.';
+                showWhatsAppStatus(msg, tgResult.success ? 'success' : 'error');
                 if (result.id) whatsappActiveConfigId = result.id;
                 loadWhatsAppConfig();
+                loadTelegramBot();
             } else {
                 showWhatsAppStatus(result.error || 'Error', 'error');
             }
@@ -1431,6 +1723,43 @@ document.addEventListener('DOMContentLoaded', function () {
             showWhatsAppStatus('Error de red', 'error');
         }
     });
+
+    var pruebasOpen = document.getElementById('whatsapp-pruebas-open-btn');
+    var pruebasModal = document.getElementById('whatsapp-pruebas-modal');
+    var pruebasClose = document.getElementById('whatsapp-pruebas-close-btn');
+    function closeWhatsAppPruebasModal() {
+        if (!pruebasModal) return;
+        pruebasModal.classList.add('d-none');
+        pruebasModal.setAttribute('hidden', '');
+        pruebasModal.setAttribute('aria-hidden', 'true');
+        if (pruebasOpen) pruebasOpen.focus({ preventScroll: true });
+    }
+    function openWhatsAppPruebasModal() {
+        if (!pruebasModal) return;
+        pruebasModal.classList.remove('d-none');
+        pruebasModal.removeAttribute('hidden');
+        pruebasModal.setAttribute('aria-hidden', 'false');
+        var pruebaStatus = document.getElementById('telegram-prueba-status');
+        if (pruebaStatus) {
+            pruebaStatus.textContent = '';
+            pruebaStatus.className = 'telegram-user-link-status';
+        }
+        var firstInput = document.getElementById('whatsapp-phone-number');
+        if (firstInput) firstInput.focus();
+    }
+    if (pruebasOpen) pruebasOpen.addEventListener('click', openWhatsAppPruebasModal);
+    if (pruebasClose) pruebasClose.addEventListener('click', closeWhatsAppPruebasModal);
+    if (pruebasModal) {
+        pruebasModal.addEventListener('click', function (e) {
+            if (e.target === pruebasModal) closeWhatsAppPruebasModal();
+        });
+        pruebasModal.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                closeWhatsAppPruebasModal();
+            }
+        });
+    }
 
     var testBtn = document.getElementById('test-whatsapp-connection');
     if (testBtn) testBtn.addEventListener('click', testWhatsAppConnectionFromForm);
@@ -1441,11 +1770,203 @@ document.addEventListener('DOMContentLoaded', function () {
             showWhatsAppQr(whatsappActiveConfigId);
         });
     }
+    var telegramBotOpen = document.getElementById('telegram-botfather-open-btn');
+    var telegramBotModal = document.getElementById('telegram-botfather-modal');
+    var telegramBotClose = document.getElementById('telegram-botfather-close-btn');
+    var telegramBotSave = document.getElementById('telegram-botfather-save-btn');
+    function closeTelegramBotModal() {
+        if (!telegramBotModal) return;
+        telegramBotModal.classList.add('d-none');
+        telegramBotModal.setAttribute('hidden', '');
+        telegramBotModal.setAttribute('aria-hidden', 'true');
+        if (telegramBotOpen) telegramBotOpen.focus({ preventScroll: true });
+    }
+    function setTelegramGroupExtractStatus(message) {
+        var el = document.getElementById('telegram-group-extract-status');
+        if (!el) return;
+        el.textContent = message || '';
+    }
+    function copyTelegramExtractId(id, kind) {
+        var text = String(id || '');
+        function done() {
+            setTelegramGroupExtractStatus(kind === 'tema'
+                ? ('ID del tema copiado: ' + text)
+                : ('ID copiado: ' + text));
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(function () {
+                copyTelegramExtractIdFallback(text, done);
+            });
+            return;
+        }
+        copyTelegramExtractIdFallback(text, done);
+    }
+    function copyTelegramExtractIdFallback(text, done) {
+        var area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        try {
+            document.execCommand('copy');
+        } catch (e) { /* el ID igual queda visible en la fila */ }
+        document.body.removeChild(area);
+        done();
+    }
+    function telegramTopicLabel(index, item) {
+        var title = String((item && item.title) || '').trim();
+        var label = 'tema' + index;
+        if (title) label += '-' + title;
+        return label;
+    }
+    function appendTelegramTopics(body, topics) {
+        var list = (topics || []).slice().sort(function (a, b) {
+            return (Number(a.topic_id) || 0) - (Number(b.topic_id) || 0);
+        });
+        list.forEach(function (topic, index) {
+            appendTelegramExtractRow(body, topic, true, index + 1);
+        });
+    }
+    function memberCountText(item) {
+        if (item.topic_id) return '—';
+        if (item.member_count === null || item.member_count === undefined) return '—';
+        return String(item.member_count);
+    }
+    function appendTelegramCopyButton(idText, kind) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'telegram-group-copy-btn';
+        button.setAttribute('aria-label', 'Copiar ID ' + idText);
+        button.innerHTML = '<i class="fas fa-copy" aria-hidden="true"></i>';
+        button.addEventListener('click', function () {
+            copyTelegramExtractId(idText, kind);
+        });
+        return button;
+    }
+    function appendTelegramExtractRow(body, item, child, topicIndex) {
+        var row = document.createElement('tr');
+        if (child) row.className = 'telegram-group-extract-child';
+        if (topicIndex) row.classList.add('telegram-group-topic-row');
+        var idText = item.topic_id ? item.topic_id : item.chat_id;
+        var nameCell = document.createElement('td');
+        var title = item.title || 'Sin nombre';
+        if (topicIndex) {
+            nameCell.textContent = telegramTopicLabel(topicIndex, item);
+        } else if (item.chat_type === 'channel') {
+            nameCell.textContent = 'Canal: ' + title;
+        } else {
+            nameCell.textContent = title;
+        }
+        var membersCell = document.createElement('td');
+        membersCell.textContent = memberCountText(item);
+        var idCell = document.createElement('td');
+        var idWrap = document.createElement('span');
+        idWrap.className = 'telegram-group-id-cell';
+        var idValue = document.createElement('span');
+        idValue.textContent = idText;
+        idWrap.appendChild(idValue);
+        idWrap.appendChild(appendTelegramCopyButton(idText, item.topic_id ? 'tema' : 'chat'));
+        idCell.appendChild(idWrap);
+        row.appendChild(nameCell);
+        row.appendChild(membersCell);
+        row.appendChild(idCell);
+        body.appendChild(row);
+        return row;
+    }
+    function resetTelegramGroupTable() {
+        var wrap = document.getElementById('telegram-group-extract-table-wrap');
+        var body = document.getElementById('telegram-group-extract-body');
+        if (body) body.innerHTML = '';
+        if (wrap) wrap.hidden = true;
+        setTelegramGroupExtractStatus('');
+    }
+    function renderTelegramGroupCatalog(groups, message) {
+        var wrap = document.getElementById('telegram-group-extract-table-wrap');
+        var body = document.getElementById('telegram-group-extract-body');
+        if (!wrap || !body) return;
+        body.innerHTML = '';
+        if (!groups || !groups.length) {
+            wrap.hidden = true;
+            setTelegramGroupExtractStatus(message || 'Todavía no aparece ninguno. Agregá el bot al grupo o canal. Si ya estaba, escribí un mensaje ahí o volvé a agregarlo.');
+            return;
+        }
+        groups.forEach(function (group) {
+            appendTelegramExtractRow(body, group, false);
+            appendTelegramTopics(body, group.topics);
+            if (group.linked) {
+                appendTelegramExtractRow(body, group.linked, true);
+                appendTelegramTopics(body, group.linked.topics);
+            }
+        });
+        wrap.hidden = false;
+        setTelegramGroupExtractStatus('');
+    }
+    function loadTelegramBotGroups() {
+        var loadBtn = document.getElementById('telegram-group-extract-load-btn');
+        if (loadBtn) loadBtn.disabled = true;
+        resetTelegramGroupTable();
+        fetch('/tienda/admin/telegram_bot/groups', { credentials: 'same-origin' })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                renderTelegramGroupCatalog(
+                    (data && data.groups) || [],
+                    (data && (data.message || data.error)) || ''
+                );
+            })
+            .catch(function () {
+                renderTelegramGroupCatalog([], 'No se pudieron leer los grupos.');
+            })
+            .finally(function () {
+                if (loadBtn) loadBtn.disabled = false;
+            });
+    }
+    function openTelegramBotModal() {
+        if (!telegramBotModal) return;
+        telegramBotModal.classList.remove('d-none');
+        telegramBotModal.removeAttribute('hidden');
+        telegramBotModal.setAttribute('aria-hidden', 'false');
+        setTelegramBotModalStatus('', true);
+        resetTelegramGroupTable();
+        var infoBox = document.getElementById('telegramGroupExtractInfoBox');
+        var infoBtn = document.getElementById('telegramGroupExtractInfoBtn');
+        if (infoBox) infoBox.hidden = true;
+        if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false');
+        var nameInput = document.getElementById('telegram-bot-username');
+        if (nameInput) nameInput.focus();
+    }
+    if (telegramBotOpen) telegramBotOpen.addEventListener('click', openTelegramBotModal);
+    var telegramGroupLoad = document.getElementById('telegram-group-extract-load-btn');
+    if (telegramGroupLoad) telegramGroupLoad.addEventListener('click', loadTelegramBotGroups);
+    if (telegramBotClose) telegramBotClose.addEventListener('click', closeTelegramBotModal);
+    if (telegramBotSave) telegramBotSave.addEventListener('click', saveTelegramBotFromModal);
+    if (telegramBotModal) {
+        telegramBotModal.addEventListener('click', function (e) {
+            if (e.target === telegramBotModal) closeTelegramBotModal();
+        });
+        telegramBotModal.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                closeTelegramBotModal();
+            }
+        });
+    }
+    var telegramHealthBtn = document.getElementById('telegram-health-status');
+    if (telegramHealthBtn) {
+        telegramHealthBtn.addEventListener('click', function () {
+            refreshTelegramBotHealth(false);
+        });
+    }
     var sendBtn = document.getElementById('whatsapp-send-test-btn');
     if (sendBtn) {
         sendBtn.addEventListener('click', function () {
             sendWhatsAppTestMessage(whatsappActiveConfigId);
         });
+    }
+    var telegramTestBtn = document.getElementById('telegram-send-test-btn');
+    if (telegramTestBtn) {
+        telegramTestBtn.addEventListener('click', sendTelegramTestMessage);
     }
     var notifyBtn = document.getElementById('whatsapp-run-notify-btn');
     if (notifyBtn) {
@@ -1484,6 +2005,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setupWhatsAppUserPhoneModal();
 
     loadWhatsAppConfig();
+    loadTelegramBot();
     loadWhatsAppUserNotifyPrefs();
     setupWhatsAppInfoToggle();
     document.addEventListener('visibilitychange', function whatsappHealthVisibility() {

@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 const errorRow = document.createElement('tr');
                 const errorCell = document.createElement('td');
-                errorCell.colSpan = 3;
+                errorCell.colSpan = 2;
                 errorCell.className = 'text-center';
                 errorCell.textContent = 'Error al cargar usuarios.';
                 errorRow.appendChild(errorCell);
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (users.length === 0) {
             const noUsersRow = document.createElement('tr');
             const noUsersCell = document.createElement('td');
-            noUsersCell.colSpan = 3;
+            noUsersCell.colSpan = 2;
             noUsersCell.className = 'text-center';
             noUsersCell.textContent = 'No se encontraron usuarios.';
             noUsersRow.appendChild(noUsersCell);
@@ -89,10 +89,6 @@ document.addEventListener('DOMContentLoaded', function () {
             const usernameCell = document.createElement("td");
             usernameCell.textContent = user.username;
             row.appendChild(usernameCell);
-            
-            const nameCell = document.createElement("td");
-            nameCell.textContent = user.name || '';
-            row.appendChild(nameCell);
             
             const checkboxCell = document.createElement("td");
             checkboxCell.className = 'text-center';

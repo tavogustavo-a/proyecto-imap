@@ -148,6 +148,9 @@ class User(db.Model):
     full_name = db.Column(db.String(120), nullable=True)
     # Campo para teléfono
     phone = db.Column(db.String(30), nullable=True)
+    # ID de chat de Telegram (la persona tiene que haber abierto el bot)
+    telegram_chat_id = db.Column(db.String(32), nullable=True)
+    telegram_notify_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     
     # Campo JSON para almacenar precios por usuario (tipo_precio, precio_original_cop, precio_original_usd, descuento_cop, descuento_usd)
     user_prices = db.Column(JSON, nullable=True)

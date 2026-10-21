@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const originalId = document.getElementById('drive-original-id').value;
         const destinationId = document.getElementById('drive-destination').value;
         const deletedId = document.getElementById('drive-deleted').value || ''; // Campo opcional
+        const telegramGroup = document.getElementById('drive-telegram-group') ? document.getElementById('drive-telegram-group').value || '' : '';
         const processingTime = document.getElementById('drive-processing-time').value;
         
         const data = {
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
             drive_original_id: originalId,
             drive_destination: destinationId,
             drive_deleted: deletedId,
+            drive_telegram_group: telegramGroup,
             drive_processing_time: processingTime
         };
         
@@ -76,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('drive_original_id', data.drive_original_id);
             formData.append('drive_destination', data.drive_destination);
             formData.append('drive_deleted', data.drive_deleted);
+            formData.append('drive_telegram_group', data.drive_telegram_group || '');
             formData.append('drive_processing_time', data.drive_processing_time);
             
             
@@ -304,60 +307,95 @@ async function loadDriveTransfersTable() {
                     td4.appendChild(statusBadge);
                     tr.appendChild(td4);
                     
-                    // Acciones
                     const td5 = document.createElement('td');
-                    
-                    // Botón Toggle (Power)
+                    const actions = document.createElement('div');
+                    actions.className = 'drive-row-actions';
+
                     const toggleBtn = document.createElement('button');
-                    toggleBtn.className = `btn-panel ${transfer.is_active ? 'btn-red' : 'btn-green'} btn-table-action drive-transfer-toggle`;
+                    toggleBtn.type = 'button';
+                    toggleBtn.className = 'user-switch drive-transfer-toggle' + (transfer.is_active ? ' is-on' : '');
                     toggleBtn.dataset.transferId = transfer.id;
-                    toggleBtn.title = transfer.is_active ? 'Desactivar transferencia' : 'Activar transferencia';
-                    toggleBtn.innerHTML = '<i class="fas fa-power-off"></i>';
-                    td5.appendChild(toggleBtn);
-                    
+                    toggleBtn.title = transfer.is_active ? 'Activo. Clic para desactivar' : 'Inactivo. Clic para activar';
+                    toggleBtn.setAttribute('aria-pressed', transfer.is_active ? 'true' : 'false');
+                    toggleBtn.setAttribute('aria-label', toggleBtn.title);
+                    toggleBtn.innerHTML = '<span class="user-switch-track" aria-hidden="true"><span class="user-switch-knob"></span></span>';
+                    actions.appendChild(toggleBtn);
+
                     const testBtn = document.createElement('button');
-                    testBtn.className = 'btn-panel btn-blue btn-table-action drive-transfer-test';
+                    testBtn.type = 'button';
+                    testBtn.className = 'btn-blue row-test-btn drive-transfer-test';
                     testBtn.dataset.transferId = transfer.id;
                     testBtn.title = 'Probar conexión';
-                    testBtn.innerHTML = '<i class="fas fa-plug"></i>';
-                    td5.appendChild(testBtn);
-                    
+                    testBtn.setAttribute('aria-label', 'Probar conexión');
+                    testBtn.innerHTML = '<i class="fas fa-plug" aria-hidden="true"></i>';
+                    actions.appendChild(testBtn);
+
                     const editBtn = document.createElement('button');
+                    editBtn.type = 'button';
                     editBtn.className = 'btn-orange drive-transfer-edit row-icon-btn';
                     editBtn.dataset.transferId = transfer.id;
                     editBtn.title = 'Editar';
                     editBtn.setAttribute('aria-label', 'Editar');
                     editBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
-                    td5.appendChild(editBtn);
-                    
+                    actions.appendChild(editBtn);
+
                     const cleanupBtn = document.createElement('button');
-                    cleanupBtn.className = 'btn-panel btn-purple btn-table-action drive-transfer-cleanup';
+                    cleanupBtn.type = 'button';
+                    cleanupBtn.className = 'drive-row-action drive-row-action--cleanup drive-transfer-cleanup';
                     cleanupBtn.dataset.transferId = transfer.id;
                     cleanupBtn.title = 'Limpiar archivos antiguos';
-                    cleanupBtn.innerHTML = '<i class="fas fa-broom"></i>';
-                    td5.appendChild(cleanupBtn);
-                    
+                    cleanupBtn.setAttribute('aria-label', 'Limpiar archivos antiguos');
+                    cleanupBtn.innerHTML = '<i class="fas fa-broom" aria-hidden="true"></i>';
+                    actions.appendChild(cleanupBtn);
+
                     const deleteBtn = document.createElement('button');
+                    deleteBtn.type = 'button';
                     deleteBtn.className = 'btn-panel btn-red btn-table-action drive-transfer-delete';
                     deleteBtn.dataset.transferId = transfer.id;
                     deleteBtn.title = 'Eliminar';
-                    deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
-                    td5.appendChild(deleteBtn);
-                    
-                    // Botón para ejecutar transferencia manualmente
+                    deleteBtn.setAttribute('aria-label', 'Eliminar');
+                    deleteBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i>';
+                    actions.appendChild(deleteBtn);
+
                     const executeBtn = document.createElement('button');
-                    executeBtn.className = 'btn-panel btn-green btn-table-action drive-transfer-execute';
+                    executeBtn.type = 'button';
+                    executeBtn.className = 'drive-row-action drive-row-action--run drive-transfer-execute';
                     executeBtn.dataset.transferId = transfer.id;
                     executeBtn.title = 'Ejecutar transferencia ahora';
-                    executeBtn.innerHTML = '<i class="fas fa-play"></i>';
-                    td5.appendChild(executeBtn);
-                    
+                    executeBtn.setAttribute('aria-label', 'Ejecutar transferencia ahora');
+                    executeBtn.innerHTML = '<i class="fas fa-play" aria-hidden="true"></i>';
+                    actions.appendChild(executeBtn);
+
+                    td5.appendChild(actions);
                     tr.appendChild(td5);
                     tbody.appendChild(tr);
                 });
                 
                 table.appendChild(tbody);
                 containerDiv.appendChild(table);
+                const problems = [];
+                result.transfers.forEach(function (item) {
+                    (item.telegram_send_problems || []).forEach(function (problem) {
+                        problems.push(problem);
+                    });
+                });
+                if (problems.length) {
+                    const box = document.createElement('div');
+                    box.className = 'drive-telegram-problems';
+                    const title = document.createElement('strong');
+                    title.textContent = 'Problemas a resolver en el envío a Telegram';
+                    box.appendChild(title);
+                    const list = document.createElement('ul');
+                    problems.slice(0, 20).forEach(function (problem) {
+                        const li = document.createElement('li');
+                        const file = problem.file ? problem.file + ' — ' : '';
+                        const dest = problem.destino ? problem.destino + ': ' : '';
+                        li.textContent = file + dest + (problem.problema || '');
+                        list.appendChild(li);
+                    });
+                    box.appendChild(list);
+                    containerDiv.appendChild(box);
+                }
                 tableContainer.innerHTML = '';
                 tableContainer.appendChild(containerDiv);
                 
@@ -561,6 +599,8 @@ window.editDriveTransfer = async function(transferId) {
         document.getElementById('edit-drive-original-id').value = transfer.drive_original_id || '';
         document.getElementById('edit-drive-destination').value = transfer.drive_processed_id || '';
         document.getElementById('edit-drive-deleted').value = transfer.drive_deleted_id || '';
+        const editGroup = document.getElementById('edit-drive-telegram-group');
+        if (editGroup) editGroup.value = transfer.telegram_group_id || '';
         
         // Mostrar intervalo tal como está (ej: "5H", "10M")
         document.getElementById('edit-drive-processing-time').value = transfer.processing_time || '';
@@ -610,6 +650,11 @@ window.executeDriveTransferNow = async function(transferId) {
             if (result.result) {
                 const r = result.result;
                 message += ` | Archivos movidos: ${r.files_moved || 0}, Fallidos: ${r.files_failed || 0}`;
+                const tgProblems = r.telegram && r.telegram.problems ? r.telegram.problems.length : 0;
+                if (r.telegram) {
+                    message += ` | Telegram enviados: ${r.telegram.sent || 0}`;
+                    if (tgProblems) message += `, problemas: ${tgProblems}`;
+                }
             }
             showDriveStatus(message, true);
             // Recargar la tabla para mostrar la última ejecución actualizada
@@ -714,6 +759,7 @@ function setupDriveEditModal() {
             formData.append('drive_original_id', data.drive_original_id);
             formData.append('drive_destination', data.drive_destination);
             formData.append('drive_deleted', data.drive_deleted);
+            formData.append('drive_telegram_group', data.drive_telegram_group || '');
             formData.append('drive_processing_time', data.drive_processing_time);
             
             

@@ -42,8 +42,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // console.log("emailItems encontrados:", emailItems); // Eliminado
 
         // --- Filtro de Búsqueda Masiva ---
+        function syncEmailSearchClearBtn() {
+            if (clearSearchBtn && searchInput) {
+                clearSearchBtn.classList.toggle('show', !!searchInput.value.trim());
+            }
+        }
+
         if (searchInput && emailItems.length > 0) {
             searchInput.addEventListener('input', function() {
+                syncEmailSearchClearBtn();
                 const searchTerms = searchInput.value
                                         .split(/[\s,;\n]+/)
                                         .map(term => term.trim().toLowerCase())
@@ -63,10 +70,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // --- Botón Limpiar Búsqueda ---
         if (clearSearchBtn && searchInput) {
+            syncEmailSearchClearBtn();
             clearSearchBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 searchInput.value = '';
                 searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                searchInput.focus();
             });
         }
 
@@ -483,15 +492,19 @@ document.addEventListener('DOMContentLoaded', function() {
           const parent = Number(p.parent_price || 0);
           const sale = Number(p.sale_price || 0);
           const manual = !!p.manual;
+          const pid = String(p.id);
+          const enabledId = 'subuser_catalog_enabled_' + pid;
+          const saleId = 'subuser_catalog_sale_' + pid;
           return (
             '<tr data-id="' + p.id + '" data-parent-price="' + parent + '" data-manual="' + (manual ? '1' : '0') + '"' +
             (manual ? ' class="is-manual"' : '') + '>' +
-            '<td><input type="checkbox" class="subuser-catalog-enabled"' + (p.enabled ? ' checked' : '') + '></td>' +
+            '<td><input type="checkbox" class="subuser-catalog-enabled" id="' + enabledId + '" name="' + enabledId + '"' +
+            (p.enabled ? ' checked' : '') + '></td>' +
             '<td>' + String(p.name || '').replace(/[&<>"]/g, function (c) {
               return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
             }) + '</td>' +
             '<td>' + formatPrice(parent, currencyLabel) + '</td>' +
-            '<td><input type="number" class="subuser-catalog-sale" min="' + parent + '" step="' +
+            '<td><input type="number" class="subuser-catalog-sale" id="' + saleId + '" name="' + saleId + '" min="' + parent + '" step="' +
             (currencyLabel === 'USD' ? '0.01' : '1') + '" value="' + sale + '"></td>' +
             '</tr>'
           );

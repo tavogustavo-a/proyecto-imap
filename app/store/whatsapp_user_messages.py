@@ -30,6 +30,7 @@ WHATSAPP_DELIVERY_OUTCOME_LABELS: dict[str, str] = {
     'ok': 'Enviado',
     'error': 'Falló el envío',
     'sin_telefono': 'Sin teléfono en perfil',
+    'sin_id': 'Sin ID de Telegram',
     'deshabilitado': 'WhatsApp desactivado para el usuario',
 }
 

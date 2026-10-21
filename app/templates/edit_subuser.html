@@ -8,47 +8,51 @@
 {% endblock head %}
 
 {% block content %}
-<div class="form-container-700">
+<div class="form-container-700 edit-subuser-page">
 
   <!-- TARJETA 1: Cabecera y Contraseña -->
   <section class="admin-card" role="region" aria-labelledby="password-section-title">
-    <div class="d-flex justify-content-between align-items-center mb-1">
+    <div class="d-flex justify-content-between align-items-center mb-1 edit-subuser-head">
       <h3 class="m-0">Editar Sub-usuario: {{ sub_user.username }}</h3>
-      <div class="ml-auto text-right">
-        <button
-          id="btnVolverSubuserLista"
-          type="button"
-          class="btn-blue"
-          data-url="{{ url_for('subuser_bp.manage_subusers') }}"
-          aria-label="Volver a la lista de sub-usuarios"
-        >
-          Volver
-        </button>
-      </div>
+      <button
+        id="btnVolverSubuserLista"
+        type="button"
+        class="btn-blue edit-subuser-volver-btn"
+        data-url="{{ url_for('subuser_bp.manage_subusers') }}"
+        aria-label="Volver a la lista de sub-usuarios"
+      >
+        Volver
+      </button>
     </div>
     <hr class="hr-margin-08">
 
     <!-- Formulario para Cambiar Contraseña -->
     <div class="form-section">
       <h4 id="password-section-title" class="mt-0 mb-05">Cambiar Contraseña</h4>
-      <form action="{{ url_for('subuser_bp.update_subuser_password') }}" method="POST" class="d-flex gap-05">
+      <form action="{{ url_for('subuser_bp.update_subuser_password') }}" method="POST" class="d-flex gap-05 edit-subuser-password-form">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="sub_id" value="{{ sub_user.id }}">
         <label for="newPasswordInput" class="sr-only">Nueva contraseña</label>
         <input type="password" id="newPasswordInput" name="new_pass" placeholder="Nueva contraseña" required class="flex-grow-1" autocomplete="new-password" aria-label="Nueva contraseña para el sub-usuario">
-        <button type="submit" class="btn-blue" aria-label="Actualizar contraseña del sub-usuario">Actualizar Contraseña</button>
+        <button type="submit" class="btn-blue flex-shrink-0" aria-label="Actualizar contraseña del sub-usuario">Actualizar</button>
     </form>
   </div>
   <!-- Permiso de acceso a tienda -->
   {% if parent_has_store_role %}
-    <div class="form-section mt-1">
-      <label class="d-flex align-items-center gap-03 flex-wrap" for="canAccessStoreCheckbox">
-        <input type="checkbox" id="canAccessStoreCheckbox" name="can_access_store" {% if sub_user.can_access_store %}checked{% endif %}>
-        ¿Deseas que el sub-usuario vea la página de tienda?
-        <button type="button" id="btnSubuserCatalog" class="btn-blue btn-small ml-1" data-catalog-url="{{ url_for('subuser_bp.subuser_catalog', subuser_id=sub_user.id) }}">Plataformas y precios</button>
-        <span id="store-permission-status" class="ml-1 text-success"></span>
-      </label>
-      <small class="text-secondary">Si está activado, el sub-usuario verá precios, podrá recargar su propio saldo y comprar las plataformas que marques. Disney no está disponible para sub-usuarios.</small>
+    <div class="form-section mt-1 edit-subuser-store-access">
+      <div class="edit-subuser-store-access-main">
+        <label class="edit-subuser-store-access-label" for="canAccessStoreCheckbox">
+          <input type="checkbox" id="canAccessStoreCheckbox" name="can_access_store" {% if sub_user.can_access_store %}checked{% endif %}>
+          <span class="edit-subuser-store-access-question">
+            <span class="edit-subuser-store-access-lead">¿Deseas que el sub-usuario vea la página de </span><span class="edit-subuser-store-access-tail">tienda?</span>
+          </span>
+        </label>
+        <div class="edit-subuser-store-catalog-row">
+          <button type="button" id="btnSubuserCatalog" class="btn-blue btn-small" data-catalog-url="{{ url_for('subuser_bp.subuser_catalog', subuser_id=sub_user.id) }}">Plataformas y precios</button>
+          <span id="store-permission-status" class="text-success edit-subuser-store-status"></span>
+        </div>
+      </div>
+      <small class="text-secondary">El sub-usuario verá precios, recargar su propio saldo y comprar las plataformas que marques. Disney no está disponible para sub-usuarios.</small>
     </div>
     <div class="form-section mt-1">
       <label class="d-flex align-items-center gap-03" for="canUseCouponsCheckbox">
@@ -87,19 +91,16 @@
          id="email-management-section" 
          data-subuser-id="{{ sub_user.id }}" 
          data-save-url="{{ url_for('subuser_bp.update_subuser_emails_ajax') }}">
-        <h4 id="email-section-title" class="mt-0 mb-05">Gestionar Correos Permitidos</h4>
+        <h4 id="email-section-title" class="mt-0 mb-05">Gestionar Correos Permitidos para desactivar o activar de este sub-usuario</h4>
 
         {% if parent_allowed_emails is defined and parent_allowed_emails %}
-            <p class="text-small text-secondary mb-05">
-                gestiona los correos de los sub-usuarios puedes habilitar y desactivar los correos seleccionados
-            </p>
-
-            <!-- Contenedor de Búsqueda y Limpiar -->
-            <div class="search-container form-search">
+            <div class="search-textarea-wrapper edit-subuser-email-search-wrap">
               <label for="email-search-input" class="sr-only">Buscar correos</label>
-              <input type="search" id="email-search-input" placeholder="Buscar correos (separados por coma, espacio o salto de línea)..." class="email-search-input-style flex-grow-1" autocomplete="off" aria-label="Buscar correos por nombre o dirección">
-              <button type="button" id="email-search-clear-btn" class="btn-grey btn-small" title="Limpiar búsqueda" aria-label="Limpiar búsqueda de correos">Limpiar</button>
-      </div>
+              <input type="search" id="email-search-input" name="email_search" placeholder="Buscar correos (separados por coma, espacio o salto de línea)..." class="email-search-input-style" autocomplete="off" aria-label="Buscar correos por nombre o dirección">
+              <button type="button" id="email-search-clear-btn" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+                <i class="fas fa-times" aria-hidden="true"></i>
+              </button>
+            </div>
       
             <!-- Lista de Correos -->
             <div class="email-checkbox-list" role="group" aria-labelledby="email-section-title">
@@ -124,11 +125,11 @@
       </div>
 
             <!-- Botones de Acción -->
-            <div class="d-flex flex-wrap align-items-center gap-075 mt-05" role="group" aria-label="Acciones para correos">
+            <div class="edit-subuser-actions" role="group" aria-label="Acciones para correos">
                 <button class="btn-green btn-small select-all-emails" aria-label="Activar todos los correos para el sub-usuario">Activar Todos</button>
-                <button class="btn-orange btn-small deselect-all-emails" aria-label="Desactivar todos los correos del sub-usuario">Desactivar</button>
-                <button class="btn-blue btn-small save-subuser-emails" aria-label="Guardar cambios en correos permitidos">Guardar</button>
-                <span class="save-status-msg ml-auto text-small text-success"></span>
+                <button class="btn-red btn-small deselect-all-emails" aria-label="Desactivar todos los correos del sub-usuario">Desactivar todos</button>
+                <button class="btn-green btn-small save-subuser-emails" aria-label="Guardar cambios en correos permitidos">Guardar</button>
+                <span class="save-status-msg text-small text-success"></span>
     </div>
 
         {% else %}
@@ -141,11 +142,8 @@
   <!-- TARJETA 3: Herramientas Públicas Permitidas -->
   <section class="admin-card admin-card + .admin-card" role="region" aria-labelledby="tools-section-title">
     <div class="form-section" id="tools-management-section" data-subuser-id="{{ sub_user.id }}">
-      <h4 id="tools-section-title" class="mt-0 mb-05">Gestionar Herramientas Públicas y Contenidos Permitidos</h4>
+      <h4 id="tools-section-title" class="mt-0 mb-05">Gestionar Herramientas Públicas y Contenidos Permitidos a tus sub-usuarios</h4>
       {% if parent_tools or parent_htmls or parent_youtube_listings or parent_apis %}
-        <p class="text-small text-secondary mb-05">
-          Selecciona las herramientas que quieres que se visualicen con tus sub-usuarios
-        </p>
         <div class="tools-checkbox-list" role="group" aria-labelledby="tools-section-title">
           {% set subuser_tools_ids = subuser_tools | map(attribute='id') | list %}
           {% for tool in parent_tools %}
@@ -226,11 +224,11 @@
             </div>
           {% endfor %}
         </div>
-        <div class="d-flex flex-wrap align-items-center gap-075 mt-05" role="group" aria-label="Acciones para herramientas">
+        <div class="edit-subuser-actions" role="group" aria-label="Acciones para herramientas">
           <button class="btn-green btn-small select-all-tools" type="button" aria-label="Activar todas las herramientas para el sub-usuario">Activar Todas</button>
-          <button class="btn-orange btn-small deselect-all-tools" type="button" aria-label="Desactivar todas las herramientas del sub-usuario">Desactivar</button>
-          <button class="btn-blue btn-small save-subuser-tools" type="button" aria-label="Guardar cambios en herramientas permitidas">Guardar</button>
-          <span class="save-status-msg-tools ml-auto text-small text-success"></span>
+          <button class="btn-red btn-small deselect-all-tools" type="button" aria-label="Desactivar todas las herramientas del sub-usuario">Desactivar todos</button>
+          <button class="btn-green btn-small save-subuser-tools" type="button" aria-label="Guardar cambios en herramientas permitidas">Guardar</button>
+          <span class="save-status-msg-tools text-small text-success"></span>
         </div>
       {% else %}
         <p class="text-italic text-secondary">El usuario padre no tiene herramientas públicas, HTMLs, videos de producción ni extras de búsqueda habilitados. No se pueden asignar permisos a este sub-usuario.</p>
@@ -242,20 +240,20 @@
 
 <div id="subuserCatalogOverlay" class="popup-overlay" hidden></div>
 <div id="subuserCatalogModal" class="popup-base subuser-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="subuserCatalogTitle" hidden>
-  <div class="popup-modal-header">
+  <div class="popup-modal-header subuser-catalog-header">
     <h4 id="subuserCatalogTitle" class="mt-0 mb-0">Plataformas y precios del sub-usuario</h4>
     <button type="button" class="btn-close" id="closeSubuserCatalogBtn" aria-label="Cerrar">
       <i class="fas fa-times" aria-hidden="true"></i>
     </button>
   </div>
-  <p class="text-small text-secondary mb-05">
+  <p class="text-small text-secondary mb-05 subuser-catalog-help">
     Las plataformas chuleadas son las que verá. Disney (Standard, Premium o Básica) no está disponible para sub-usuarios.
     Una plataforma nueva no aparece hasta que la actives aquí. El recargo general se aplica a todas;
     si cambias un precio a mano, esa fila queda con el precio manual. No puede ser menor que el precio real.
   </p>
   <div class="subuser-catalog-markup-row">
     <label for="subuserCatalogMarkup">Sumar a todas</label>
-    <input type="number" id="subuserCatalogMarkup" class="flex-grow-1" min="0" step="any" inputmode="decimal" autocomplete="off">
+    <input type="number" id="subuserCatalogMarkup" name="catalog_markup" class="flex-grow-1" min="0" step="any" inputmode="decimal" autocomplete="off">
     <span id="subuserCatalogCurrency" class="text-secondary"></span>
   </div>
   <div id="subuserCatalogTableWrap" class="subuser-catalog-table-wrap">
@@ -265,14 +263,14 @@
           <th scope="col">Ver</th>
           <th scope="col">Plataforma</th>
           <th scope="col">Precio real</th>
-          <th scope="col">Precio del sub-usuario</th>
+          <th scope="col">Precio sub-usuario</th>
         </tr>
       </thead>
       <tbody id="subuserCatalogTableBody"></tbody>
     </table>
   </div>
   <p id="subuserCatalogStatus" class="text-small mt-05" role="status"></p>
-  <div class="d-flex gap-05 mt-1 justify-content-end">
+  <div class="subuser-catalog-actions">
     <button type="button" class="popup-button-confirm" id="saveSubuserCatalogBtn">Guardar</button>
     <button type="button" class="popup-button-cancel" id="cancelSubuserCatalogBtn">Cerrar</button>
   </div>
@@ -284,5 +282,5 @@
 {# Cargar el script específico DESPUÉS del bloque de contenido principal #}
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/edit_subuser.js') }}?v=20260907-subuser-catalog"></script>
+<script src="{{ url_for('static', filename='js/edit_subuser.js') }}?v=20261020-subuser-form-ids"></script>
 {% endblock scripts %}

@@ -105,4 +105,47 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         });
     }
+
+    const toolsConfigFileInput = document.getElementById('toolsConfigFile');
+    const toolsConfigFileTrigger = document.getElementById('toolsConfigFileTrigger');
+    const toolsConfigFileTriggerText = document.getElementById('toolsConfigFileTriggerText');
+    if (toolsConfigFileInput && toolsConfigFileTrigger && toolsConfigFileTriggerText) {
+        const toolsConfigFileTriggerIcon = toolsConfigFileTrigger.querySelector('.import-export-file-trigger-icon');
+        function setToolsConfigFileTriggerReady(ready) {
+            if (ready) {
+                toolsConfigFileTriggerText.textContent = 'Subido listo';
+                toolsConfigFileTrigger.classList.add('import-export-file-trigger--ready');
+                toolsConfigFileTrigger.setAttribute('title', 'Archivo JSON seleccionado');
+                toolsConfigFileTrigger.setAttribute('aria-label', 'Archivo JSON seleccionado');
+                if (toolsConfigFileTriggerIcon) {
+                    toolsConfigFileTriggerIcon.classList.remove('fa-upload');
+                    toolsConfigFileTriggerIcon.classList.add('fa-check');
+                }
+            } else {
+                toolsConfigFileTriggerText.textContent = 'Subir archivo';
+                toolsConfigFileTrigger.classList.remove('import-export-file-trigger--ready');
+                toolsConfigFileTrigger.setAttribute('title', 'Subir archivo JSON');
+                toolsConfigFileTrigger.setAttribute('aria-label', 'Subir archivo JSON');
+                if (toolsConfigFileTriggerIcon) {
+                    toolsConfigFileTriggerIcon.classList.remove('fa-check');
+                    toolsConfigFileTriggerIcon.classList.add('fa-upload');
+                }
+            }
+        }
+        toolsConfigFileInput.addEventListener('change', function () {
+            setToolsConfigFileTriggerReady(toolsConfigFileInput.files && toolsConfigFileInput.files.length > 0);
+        });
+    }
+
+    const importToolsConfigForm = document.getElementById('importToolsConfigForm');
+    if (importToolsConfigForm) {
+        importToolsConfigForm.addEventListener('submit', function (event) {
+            const confirmation = confirm(
+                '¿Estás seguro? Esto borrará las herramientas, HTML, YouTube, APIs y datos relacionados antes de importar.'
+            );
+            if (!confirmation) {
+                event.preventDefault();
+            }
+        });
+    }
 }); 

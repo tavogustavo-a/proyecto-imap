@@ -91,23 +91,16 @@
 
     servers.forEach(s => {
       const div = document.createElement('div');
-      div.className = 'imap-item mb-1';
+      div.className = 'imap-item mb-1 imap-admin-row';
       div.setAttribute('data-imap-id', s.id);
       div.setAttribute('data-host', (s.host || '').toLowerCase());
       div.setAttribute('data-username', (s.username || '').toLowerCase());
 
-      const strongHost = document.createElement('strong');
-      strongHost.textContent = 'Host: ' + (s.host || '');
-
+      // Solo se muestra el usuario (el host queda en data-host para el buscador)
       const strongUser = document.createElement('strong');
-      strongUser.textContent = 'Usuario: ' + (s.username || '');
-
-      const mainText = document.createDocumentFragment();
-      mainText.appendChild(strongHost);
-      mainText.appendChild(document.createTextNode(' | '));
-      mainText.appendChild(strongUser);
-
-      div.appendChild(mainText);
+      strongUser.className = 'imap-admin-row__email';
+      strongUser.textContent = s.username || '';
+      div.appendChild(strongUser);
 
       const isPrimary = !!s.is_primary;
       if (isPrimary) {
@@ -115,7 +108,7 @@
       }
 
       const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'mt-05';
+      actionsDiv.className = 'imap-admin-row__actions';
 
       // Botón Probar
       const testForm = document.createElement('form');

@@ -241,6 +241,24 @@ def update_whatsapp_user_notify_pref(user_id):
     from app.store.whatsapp_user_notify_prefs import set_user_whatsapp_notify_enabled
 
     data = request.get_json(silent=True) or {}
+    if 'telegram_notify_enabled' in data:
+        from app.store.whatsapp_user_notify_prefs import set_user_telegram_notify_enabled
+
+        enabled_tg = data.get('telegram_notify_enabled')
+        if isinstance(enabled_tg, str):
+            enabled_tg = enabled_tg.strip().lower() in ('1', 'true', 'yes', 'on')
+        else:
+            enabled_tg = bool(enabled_tg)
+        admin_username = current_app.config.get('ADMIN_USER', 'admin')
+        ok, err = set_user_telegram_notify_enabled(user_id, enabled_tg, admin_username)
+        if not ok:
+            return jsonify({'success': False, 'error': err}), 400
+        return jsonify({
+            'success': True,
+            'user_id': int(user_id),
+            'telegram_notify_enabled': bool(enabled_tg),
+        })
+
     enabled = data.get('enabled')
     if enabled is None:
         enabled = data.get('whatsapp_notify_enabled')
@@ -269,10 +287,29 @@ def update_whatsapp_user_phone(user_id):
     if phone is None:
         phone = data.get('telefono')
     admin_username = current_app.config.get('ADMIN_USER', 'admin')
+    data_has_telegram = 'telegram_chat_id' in data
+    if data_has_telegram and str(data.get('telegram_chat_id') or '').strip():
+        from app.store.telegram_bot_service import validate_chat_id
+
+        _, id_err = validate_chat_id(data.get('telegram_chat_id'))
+        if id_err and id_err != 'Falta el ID.':
+            return jsonify({'success': False, 'error': id_err}), 400
     ok, err, saved = set_user_whatsapp_phone(user_id, phone, admin_username)
     if not ok:
         return jsonify({'success': False, 'error': err}), 400
-    return jsonify({'success': True, 'user_id': int(user_id), 'phone': saved})
+    saved_telegram = None
+    if data_has_telegram:
+        from app.store.whatsapp_user_notify_prefs import set_user_telegram_chat_id
+
+        ok_id, err_id, saved_telegram = set_user_telegram_chat_id(
+            user_id, data.get('telegram_chat_id'), admin_username
+        )
+        if not ok_id:
+            return jsonify({'success': False, 'error': err_id, 'phone': saved}), 400
+    body = {'success': True, 'user_id': int(user_id), 'phone': saved}
+    if data_has_telegram:
+        body['telegram_chat_id'] = saved_telegram or ''
+    return jsonify(body)
 
 
 @store_bp.route('/admin/whatsapp_configs/test', methods=['POST'])
@@ -483,10 +520,11 @@ def send_whatsapp_test_message(config_id):
     to_number = (data.get('to_number') or '').strip()
     if not to_number:
         return jsonify({'success': False, 'error': 'Indicá un número para la prueba.'}), 400
-    text = (data.get('text') or 'Prueba WhatsApp Web — IMAP tienda').strip()
+    text = 'prueba de mensaje'
     from app.store.whatsapp_web_service import (
         STATUS_CONNECTED,
         config_evolution_instance,
+        delete_sent_message,
         refresh_config_health,
         resolve_config_api_key,
         resolve_config_base_url,
@@ -509,7 +547,18 @@ def send_whatsapp_test_message(config_id):
     )
     if not result.get('success'):
         return jsonify({'success': False, 'error': result.get('error') or 'Envío fallido', 'detail': result}), 502
-    return jsonify({'success': True, 'message': f'Mensaje de prueba enviado a {to_number}.'})
+    deleted = delete_sent_message(
+        resolve_config_base_url(config),
+        resolve_config_api_key(config),
+        config_evolution_instance(config),
+        result.get('data'),
+        to_number,
+    )
+    if deleted:
+        message = 'Prueba de mensaje enviada y eliminada.'
+    else:
+        message = 'Prueba de mensaje enviada, pero no se pudo eliminar.'
+    return jsonify({'success': True, 'message': message, 'deleted': deleted})
 
 
 @store_bp.route('/admin/whatsapp_configs/<int:config_id>/run-notify', methods=['POST'])
@@ -562,3 +611,126 @@ def whatsapp_evolution_webhook(config_id):
 
         refresh_config_health(config, send_alerts=True)
     return jsonify({'success': True})
+
+
+@store_bp.route('/admin/telegram_bot', methods=['GET'])
+@admin_required
+def get_telegram_bot():
+    from app.store.telegram_bot_service import get_telegram_bot_config, serialize_telegram_bot
+
+    row = get_telegram_bot_config()
+    return jsonify({'success': True, 'config': serialize_telegram_bot(row)})
+
+
+@store_bp.route('/admin/telegram_bot', methods=['POST'])
+@admin_required
+def save_telegram_bot_route():
+    from app.store.telegram_bot_service import save_telegram_bot, serialize_telegram_bot
+
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        row, check = save_telegram_bot(data.get('bot_username'), data.get('bot_token'))
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('No se pudo guardar el bot de Telegram')
+        return jsonify({'success': False, 'error': 'No se pudo guardar el bot.'}), 500
+    connected = bool(check.get('connected'))
+    return jsonify({
+        'success': True,
+        'connected': connected,
+        'message': check.get('message') or ('Conectado.' if connected else 'Desconectado.'),
+        'config': serialize_telegram_bot(row),
+    })
+
+
+@store_bp.route('/admin/telegram_bot/enabled', methods=['POST'])
+@admin_required
+def set_telegram_bot_enabled_route():
+    from app.store.telegram_bot_service import serialize_telegram_bot, set_telegram_bot_enabled
+
+    data = request.get_json(silent=True) or {}
+    enabled = data.get('enabled')
+    if isinstance(enabled, str):
+        enabled = enabled.strip().lower() in ('1', 'true', 'yes', 'on')
+    else:
+        enabled = bool(enabled)
+    try:
+        row = set_telegram_bot_enabled(enabled)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('No se pudo guardar Activar Telegram')
+        return jsonify({'success': False, 'error': 'No se pudo guardar Telegram.'}), 500
+    return jsonify({'success': True, 'config': serialize_telegram_bot(row), 'is_enabled': bool(enabled)})
+
+
+@store_bp.route('/admin/telegram_bot/health', methods=['POST'])
+@admin_required
+def telegram_bot_health():
+    from app.store.telegram_bot_service import recheck_telegram_bot, serialize_telegram_bot
+
+    try:
+        row, check = recheck_telegram_bot()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('No se pudo comprobar el bot de Telegram')
+        return jsonify({'success': False, 'error': 'No se pudo consultar Telegram.'}), 500
+    connected = bool(check.get('connected'))
+    return jsonify({
+        'success': True,
+        'connected': connected,
+        'message': check.get('message') or ('Conectado.' if connected else 'Desconectado.'),
+        'config': serialize_telegram_bot(row),
+    })
+
+
+@store_bp.route('/admin/telegram_bot/groups', methods=['GET'])
+@admin_required
+def telegram_bot_groups():
+    """Lista los grupos y canales que el bot ya conoce."""
+    from app.store.telegram_bot_service import list_bot_group_catalog
+
+    try:
+        payload = list_bot_group_catalog()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('No se pudieron listar los grupos de Telegram')
+        return jsonify({'success': False, 'groups': [], 'error': 'No se pudieron leer los grupos.'}), 500
+    return jsonify(payload)
+
+
+@store_bp.route('/admin/telegram_bot/probe', methods=['POST'])
+@admin_required
+def telegram_bot_probe():
+    """Comprueba si el bot reconoce un ID, sin enviar mensaje."""
+    from app.store.telegram_bot_service import probe_telegram_chat
+
+    data = request.get_json(silent=True) or {}
+    try:
+        result = probe_telegram_chat(data.get('chat_id'))
+    except Exception:
+        current_app.logger.warning('No se pudo comprobar el ID de Telegram')
+        return jsonify({'success': False, 'error': 'No se pudo consultar Telegram.'}), 500
+    return jsonify({
+        'success': True,
+        'connected': bool(result.get('connected')),
+        'message': result.get('message') or '',
+    })
+
+
+@store_bp.route('/admin/telegram_bot/test', methods=['POST'])
+@admin_required
+def telegram_bot_test_message():
+    """Envía un mensaje de prueba al ID indicado."""
+    from app.store.telegram_bot_service import send_telegram_test
+
+    data = request.get_json(silent=True) or {}
+    try:
+        result = send_telegram_test(data.get('chat_id'))
+    except Exception:
+        current_app.logger.warning('No se pudo enviar la prueba de Telegram')
+        return jsonify({'success': False, 'error': 'No se pudo consultar Telegram.'}), 500
+    return jsonify({
+        'success': True,
+        'connected': bool(result.get('connected')),
+        'message': result.get('message') or '',
+    })

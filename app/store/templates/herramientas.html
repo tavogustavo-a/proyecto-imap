@@ -6,11 +6,11 @@
 {% block head %}
   {{ super() }}
   <meta name="csrf_token" content="{{ csrf_token() }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261018-tablas">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261020-herramientas-textarea-border">
 {% endblock %}
 {% block content %}
 
-<div class="container container-max-width-900"
+<div class="container container-max-width-900 herramientas-admin-hub"
      data-clear-trigger-log-url="{{ url_for('admin_bp.clear_trigger_log') }}"
      data-logout-all-cookies-url="{{ url_for('admin_bp.logout_all_and_clear_cookies') }}">
 
@@ -99,17 +99,17 @@
     <h4 class="mb-1">Crear porcentajes/resultados</h4>
     <form method="POST" action="{{ url_for('store_bp.create_tool') }}" class="edit-html-form mb-05">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-3">
-        <label for="title" class="form-label text-center d-block">Título</label>
-        <input type="text" name="title" id="title" class="form-control" required autocomplete="off">
+      <div class="mb-2">
+        <label for="title" class="sr-only">Título</label>
+        <input type="text" name="title" id="title" class="form-control" placeholder="Título" required autocomplete="off">
       </div>
-      <div class="mb-3">
-        <label for="text" class="form-label text-center d-block">Texto</label>
-        <input type="text" name="text" id="text" class="form-control" required autocomplete="off">
+      <div class="mb-2">
+        <label for="text" class="sr-only">Texto</label>
+        <input type="text" name="text" id="text" class="form-control" placeholder="Texto" required autocomplete="off">
       </div>
-      <div class="mb-3">
-        <label for="percent" class="form-label text-center d-block">%</label>
-        <input type="number" name="percent" id="percent" class="form-control" min="0" step="any" required autocomplete="off">
+      <div class="mb-2">
+        <label for="percent" class="sr-only">Porcentaje</label>
+        <input type="number" name="percent" id="percent" class="form-control" placeholder="%" min="0" step="any" required autocomplete="off">
       </div>
       <div class="d-flex justify-content-center">
         <button type="submit" class="btn-panel btn-green mt-1">Añadir información</button>
@@ -183,13 +183,13 @@
     <h4 class="mb-1">Crear HTML</h4>
     <form method="POST" action="{{ url_for('store_bp.add_html') }}" class="edit-html-form mb-05">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-3">
-        <label for="html_title" class="form-label text-center d-block">Título</label>
-        <input type="text" name="title" id="html_title" class="form-control" required autocomplete="off">
+      <div class="mb-2">
+        <label for="html_title" class="sr-only">Título</label>
+        <input type="text" name="title" id="html_title" class="form-control" placeholder="Título" required autocomplete="off">
       </div>
-      <div class="mb-3">
-        <label for="html_text" class="form-label text-center d-block">Contenido HTML</label>
-        <textarea name="text" id="html_text" class="form-control" rows="10" required autocomplete="off"></textarea>
+      <div class="mb-2">
+        <label for="html_text" class="sr-only">Contenido HTML</label>
+        <textarea name="text" id="html_text" class="form-control" rows="10" placeholder="Contenido HTML" required autocomplete="off"></textarea>
       </div>
       <div class="d-flex justify-content-center">
         <button type="submit" class="btn-panel btn-green mt-1">Añadir HTML</button>
@@ -259,13 +259,13 @@
     <h4 class="mb-1">Crear listado YouTube</h4>
     <form method="POST" action="{{ url_for('store_bp.create_youtube_listing') }}" class="edit-html-form mb-05">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-3">
-        <label for="youtube_title" class="form-label text-center d-block">Título</label>
-        <input type="text" name="title" id="youtube_title" class="form-control" required autocomplete="off">
+      <div class="mb-2">
+        <label for="youtube_title" class="sr-only">Título</label>
+        <input type="text" name="title" id="youtube_title" class="form-control" placeholder="Título" required autocomplete="off">
       </div>
-      <div class="mb-3">
-        <label for="youtube_content" class="form-label text-center d-block">Descripcion YouTube</label>
-        <textarea name="youtube_content" id="youtube_content" class="form-control" rows="3" autocomplete="off"></textarea>
+      <div class="mb-2">
+        <label for="youtube_content" class="sr-only">Descripción YouTube</label>
+        <textarea name="youtube_content" id="youtube_content" class="form-control" rows="3" placeholder="Descripción YouTube" autocomplete="off"></textarea>
       </div>
       <div class="d-flex justify-content-center">
         <button type="submit" class="btn-panel btn-green mt-1">Añadir a Listado</button>
@@ -331,27 +331,27 @@
     <h4 class="mb-1">Crear Listado de APIs</h4>
     <form id="apiForm" method="POST" action="{{ url_for('store_bp.create_api') }}" class="edit-html-form mb-05">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div class="mb-3">
-        <label for="api_title" class="form-label text-center d-block">Título</label>
-        <input type="text" name="title" id="api_title" class="form-control" required autocomplete="off">
+      <div class="mb-2">
+        <label for="api_title" class="sr-only">Título</label>
+        <input type="text" name="title" id="api_title" class="form-control" placeholder="Título" required autocomplete="off">
       </div>
-      <div class="mb-3">
-        <label for="api_key" class="form-label text-center d-block">Campo de API</label>
-        <textarea name="api_key" id="api_key" class="form-control" rows="3" required autocomplete="off"></textarea>
+      <div class="mb-2">
+        <label for="api_key" class="sr-only">Campo de API</label>
+        <textarea name="api_key" id="api_key" class="form-control" rows="3" placeholder="Campo de API" required autocomplete="off"></textarea>
       </div>
-      <div class="mb-3">
-        <label for="api_type" class="form-label text-center d-block">Tipo de API</label>
-        <select name="api_type" id="api_type" class="form-control" required autocomplete="off">
-          <option value="">Genérica / Ninguno</option>
+      <div class="mb-2">
+        <label for="api_type" class="sr-only">Tipo de API</label>
+        <select name="api_type" id="api_type" class="form-control" required autocomplete="off" aria-label="Tipo de API">
+          <option value="">Tipo de API — Genérica / Ninguno</option>
           <option value="Drive">Drive</option>
           <option value="Búsqueda de Medios">Búsqueda de Medios</option>
         </select>
       </div>
       <div id="drive-folder-id-field" class="herramientas-drive-field">
-        <label for="api_url" class="form-label text-center d-block">ID de Carpeta de Drive</label>
-        <input type="text" class="form-control" id="api_url" name="api_url" placeholder="Pega aquí el ID de la carpeta de Drive" autocomplete="off">
+        <label for="api_url" class="sr-only">ID de Carpeta de Drive</label>
+        <input type="text" class="form-control mb-2" id="api_url" name="api_url" placeholder="ID de Carpeta de Drive" autocomplete="off">
         <div id="drive-subtitles-fields" class="herramientas-drive-subtitles">
-          <label for="drive_subtitle_photos" class="form-label text-center d-block">Subtítulos para la galería pública</label>
+          <label for="drive_subtitle_photos" class="sr-only">Subtítulos para la galería pública</label>
           <input type="text" class="form-control mb-05" id="drive_subtitle_photos" name="drive_subtitle_photos" placeholder="Subtítulo para fotos (obligatorio si no hay videos)" autocomplete="off">
           <input type="text" class="form-control mb-05" id="drive_subtitle_videos" name="drive_subtitle_videos" placeholder="Subtítulo para videos (obligatorio si no hay fotos)" autocomplete="off">
           <div id="drive-subtitles-warning" class="text-danger mt-1 herramientas-drive-warning"></div>
@@ -365,37 +365,29 @@
 </div>
 
 <div class="store-light maxw-800 mx-auto br-8">
-  <div class="d-flex flex-column align-items-center">
+  <div class="d-flex flex-column align-items-center w-100 herramientas-import-export-block import-export-card">
     <h4 class="mb-1">Importar / Exportar Configuración</h4>
-    
-    <div class="d-flex flex-wrap gap-1 align-items-end mb-1">
-      {# Input para el código de seguridad para exportar #}
-      <div>
-          <label for="exportSecurityCode" class="d-block mb-03">Código secreto para exportar:</label> 
-          <input type="text" name="export_security_code" id="exportSecurityCode" class="form-control" placeholder="Código secreto Exportar" autocomplete="off">
+
+    <div class="import-export-row-line import-export-export-row">
+      <div class="import-export-field">
+        <input type="text" name="export_security_code" id="exportSecurityCode" class="form-control" placeholder="Código secreto para Exportar" autocomplete="off" aria-label="Código secreto para Exportar">
       </div>
-      {# Botón de Exportación #}
-      <div>
-          <button type="button" class="btn-panel btn-blue" id="btnExportToolsConfig">Descargar</button>
-      </div>
+      <button type="button" class="btn-panel btn-blue import-export-action-btn" id="btnExportToolsConfig">Descargar</button>
     </div>
 
-    <hr class="compact-hr">
-
-    {# Formulario de Importación #}
-    <form action="{{ url_for('store_bp.import_tools_config') }}" method="POST" enctype="multipart/form-data" class="d-flex flex-wrap gap-1 align-items-end mb-05" id="importToolsConfigForm">
+    <form action="{{ url_for('store_bp.import_tools_config') }}" method="POST" enctype="multipart/form-data" class="import-export-row-line import-export-import-row" id="importToolsConfigForm">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div>
-        <label for="toolsConfigFile" class="d-block mb-03">Archivo de configuración:</label>
-        <input type="file" name="config_file" id="toolsConfigFile" class="form-control" accept=".json" required autocomplete="off">
+      <div class="import-export-field import-export-file-field">
+        <label for="toolsConfigFile" id="toolsConfigFileTrigger" class="import-export-file-trigger herramientas-import-export-file-trigger" title="Subir archivo JSON" aria-label="Subir archivo JSON">
+          <i class="fas fa-upload import-export-file-trigger-icon" aria-hidden="true"></i>
+          <span class="import-export-file-trigger-text" id="toolsConfigFileTriggerText">Subir archivo</span>
+        </label>
+        <input type="file" name="config_file" id="toolsConfigFile" class="import-export-file-input" accept=".json" required autocomplete="off">
       </div>
-      <div>
-        <label for="toolsSecurityCode" class="d-block mb-03">Código secreto para importar:</label> 
-        <input type="text" name="security_code" id="toolsSecurityCode" class="form-control" required placeholder="Código secreto Importar" autocomplete="off">
+      <div class="import-export-field">
+        <input type="text" name="security_code" id="toolsSecurityCode" class="form-control" required placeholder="Código secreto para Importar" autocomplete="off" aria-label="Código secreto para Importar">
       </div>
-      <div>
-        <button type="submit" class="btn-panel btn-green">Subir</button>
-      </div>
+      <button type="submit" class="btn-panel btn-green import-export-action-btn">Subir</button>
     </form>
   </div>
 </div>
@@ -411,5 +403,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/herramientas.js') }}?v=20261016-switch" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/youtube_listings.js') }}?v=20261016-switch" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/api_list.js') }}?v=20261016-switch" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_herramientas.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_herramientas.js') }}?v=20261020-import-export" defer></script>
 {% endblock %} 

@@ -180,28 +180,40 @@ document.addEventListener("DOMContentLoaded", function() {
   } // Fin if (createForm)
 
   // 2) BUSCAR SUB-USUARIOS
+  const clearSearchSubusersBtn = document.getElementById('clearSearchSubusersInputBtn');
+
+  function syncSubusersSearchClearBtn() {
+    if (clearSearchSubusersBtn && searchInput) {
+      clearSearchSubusersBtn.classList.toggle('show', !!searchInput.value.trim());
+    }
+  }
+
   if(searchForm) { // Verificar que el formulario existe
-      // Búsqueda automática al escribir
       if(searchInput) {
         let searchTimeout = null;
         searchInput.addEventListener('input', function() {
+          syncSubusersSearchClearBtn();
           clearTimeout(searchTimeout);
           searchTimeout = setTimeout(() => fetchSubusers(1), 200);
         });
         searchInput.addEventListener('search', function() {
           fetchSubusers(1);
+          syncSubusersSearchClearBtn();
         });
       }
-      // Botón Limpiar
-      const limpiarBtn = searchForm.querySelector('button[type="submit"]');
-      if(limpiarBtn && searchInput) {
-        limpiarBtn.type = 'button';
-        limpiarBtn.textContent = 'Limpiar';
-        limpiarBtn.addEventListener('click', function(e) {
+      if (clearSearchSubusersBtn && searchInput) {
+        clearSearchSubusersBtn.addEventListener('click', function(e) {
+          e.preventDefault();
           searchInput.value = '';
+          syncSubusersSearchClearBtn();
           fetchSubusers(1);
+          searchInput.focus();
         });
+        syncSubusersSearchClearBtn();
       }
+      searchForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+      });
   } // Fin if (searchForm)
 
   if (showSubuserCount) {
@@ -479,21 +491,27 @@ document.addEventListener("DOMContentLoaded", function() {
     function updateSubuserPaginationControls(pagination) {
       if (!pagination) return;
 
-      if (subuserPaginationInfo) subuserPaginationInfo.textContent = `Página ${pagination.page} de ${pagination.total_pages}.`;
+      if (subuserPaginationInfo) {
+        subuserPaginationInfo.innerHTML =
+          '<i class="fas fa-file-alt" aria-hidden="true"></i> ' +
+          pagination.page + ' / ' + pagination.total_pages;
+      }
 
       if (subuserPrevPageBtn) subuserPrevPageBtn.disabled = !pagination.has_prev;
       if (subuserNextPageBtn) subuserNextPageBtn.disabled = !pagination.has_next;
       
       if (subuserDeleteAllEmailsBtn) {
         const totalItems = pagination.total_items || 0;
-        if (totalItems > 0) {
-          subuserDeleteAllEmailsBtn.textContent = `Eliminar Todos (${totalItems})`;
-          subuserDeleteAllEmailsBtn.disabled = false;
-          subuserDeleteAllEmailsBtn.classList.add('btn-inline-block');
-        } else {
-          subuserDeleteAllEmailsBtn.textContent = 'Eliminar Todos';
-          subuserDeleteAllEmailsBtn.disabled = true;
-        }
+        const label = totalItems > 0
+          ? 'Eliminar todos los correos permitidos (' + totalItems + ')'
+          : 'Eliminar todos los correos permitidos';
+        const countText = totalItems > 0 ? ' (' + totalItems + ')' : '';
+        subuserDeleteAllEmailsBtn.innerHTML =
+          '<i class="fas fa-trash" aria-hidden="true"></i> Todo' + countText;
+        subuserDeleteAllEmailsBtn.title = label;
+        subuserDeleteAllEmailsBtn.setAttribute('aria-label', label);
+        subuserDeleteAllEmailsBtn.disabled = totalItems <= 0;
+        if (totalItems > 0) subuserDeleteAllEmailsBtn.classList.add('btn-inline-block');
       }
       
       if (subuserPerPageSelect) {
@@ -778,6 +796,25 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     }
 
+    const clearSubuserAddEmailsBtn = document.getElementById("clearSubuserAddEmailsBtn");
+
+    function syncSubuserAddEmailsClearBtn() {
+      if (clearSubuserAddEmailsBtn && subuserAddEmailsInput) {
+        clearSubuserAddEmailsBtn.classList.toggle("show", !!subuserAddEmailsInput.value.trim());
+      }
+    }
+
+    if (subuserAddEmailsInput && clearSubuserAddEmailsBtn) {
+      subuserAddEmailsInput.addEventListener("input", syncSubuserAddEmailsClearBtn);
+      clearSubuserAddEmailsBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        subuserAddEmailsInput.value = "";
+        syncSubuserAddEmailsClearBtn();
+        subuserAddEmailsInput.focus();
+      });
+      syncSubuserAddEmailsClearBtn();
+    }
+
     // Añadir correos
     if (subuserAddEmailsBtn && subuserAddEmailsInput && subuserAddEmailsMsg) {
       subuserAddEmailsBtn.addEventListener("click", function() {
@@ -821,6 +858,7 @@ document.addEventListener("DOMContentLoaded", function() {
               subuserAddEmailsMsg.classList.add('text-color-green');
             }
             subuserAddEmailsInput.value = "";
+            syncSubuserAddEmailsClearBtn();
             fetchSubuserAllowedEmails(1, subuserCurrentPerPage);
           } else {
             throw new Error(data.message || 'Error desconocido');
@@ -896,7 +934,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
       // Deshabilitar botón y mostrar estado de carga
       bulkDeleteEmailsSubuserBtn.disabled = true;
-      bulkDeleteEmailsSubuserBtn.textContent = 'Eliminando...';
+      bulkDeleteEmailsSubuserBtn.setAttribute('aria-label', 'Eliminando correos de todos los usuarios');
+      bulkDeleteEmailsSubuserBtn.innerHTML =
+        '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Eliminando...';
       bulkDeleteEmailsSubuserMessage.classList.remove('show-block');
       bulkDeleteEmailsSubuserMessage.classList.add('hide-element');
 
@@ -934,7 +974,10 @@ document.addEventListener("DOMContentLoaded", function() {
       })
       .finally(() => {
         bulkDeleteEmailsSubuserBtn.disabled = false;
-        bulkDeleteEmailsSubuserBtn.textContent = 'Eliminar Correos de Todos los Usuarios';
+        bulkDeleteEmailsSubuserBtn.setAttribute('aria-label', 'Eliminar correos de todos los usuarios');
+        bulkDeleteEmailsSubuserBtn.setAttribute('title', 'Eliminar correos de todos los usuarios');
+        bulkDeleteEmailsSubuserBtn.innerHTML =
+          '<i class="fas fa-trash bulk-delete-all-emails-btn__icon" aria-hidden="true"></i> Correos de Todos los Usuarios';
       });
     });
   }
@@ -1196,10 +1239,11 @@ document.addEventListener("DOMContentLoaded", function() {
     const filteredConfigs = getFilteredSubuserTwofaConfigs();
     const totalConfigs = filteredConfigs.length;
     const showCount = subuserShowTwofaCount ? subuserShowTwofaCount.value : '20';
-    const totalPages = showCount === 'all' ? 1 : Math.ceil(totalConfigs / subuserPerPage);
+    const currentPerPage = showCount === 'all' ? 999999 : (parseInt(showCount, 10) || subuserPerPage);
+    const totalPages = showCount === 'all' ? 1 : Math.ceil(totalConfigs / currentPerPage);
     
-    let start = showCount === 'all' ? 0 : (subuserCurrentTwofaPage - 1) * subuserPerPage;
-    let end = showCount === 'all' ? totalConfigs : start + subuserPerPage;
+    let start = showCount === 'all' ? 0 : (subuserCurrentTwofaPage - 1) * currentPerPage;
+    let end = showCount === 'all' ? totalConfigs : start + currentPerPage;
     
     const allConfigs = Array.from(subuserTwofaConfigsList.querySelectorAll('.regex-item[data-emails]'));
     allConfigs.forEach(item => {
@@ -1209,6 +1253,18 @@ document.addEventListener("DOMContentLoaded", function() {
     filteredConfigs.slice(start, end).forEach(item => {
       item.classList.remove('d-none');
     });
+
+    const twofaPaginationContainer = document.getElementById('subuserTwofaPagination');
+    const showTwofaPagination =
+      showCount !== 'all' && totalConfigs > currentPerPage && totalPages > 1;
+    if (twofaPaginationContainer) {
+      twofaPaginationContainer.classList.toggle('d-none', !showTwofaPagination);
+      if (showTwofaPagination) {
+        twofaPaginationContainer.removeAttribute('hidden');
+      } else {
+        twofaPaginationContainer.setAttribute('hidden', '');
+      }
+    }
     
     if (subuserPrevTwofaPageBtn) {
       subuserPrevTwofaPageBtn.disabled = subuserCurrentTwofaPage <= 1;
@@ -1242,6 +1298,11 @@ document.addEventListener("DOMContentLoaded", function() {
       p.textContent = 'No hay configuraciones 2FA. Agrega una nueva configuración arriba.';
       subuserTwofaConfigsList.innerHTML = '';
       subuserTwofaConfigsList.appendChild(p);
+      const twofaPaginationContainer = document.getElementById('subuserTwofaPagination');
+      if (twofaPaginationContainer) {
+        twofaPaginationContainer.classList.add('d-none');
+        twofaPaginationContainer.setAttribute('hidden', '');
+      }
       return;
     }
     
@@ -1252,19 +1313,22 @@ document.addEventListener("DOMContentLoaded", function() {
       const emailsDisplay = emailsList.length > 0 ? emailsList.join(', ') : config.emails || '';
       
       const itemDiv = document.createElement('div');
-      itemDiv.className = 'regex-item d-flex justify-content-between align-items-center p-2';
+      itemDiv.className = 'regex-item';
       itemDiv.setAttribute('data-emails', emailsDisplay.toLowerCase());
-      
+
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'd-flex justify-content-between align-items-center subuser-twofa-config-row';
+
       const contentDiv = document.createElement('div');
       contentDiv.className = 'flex-grow-1';
       
       const emailDiv = document.createElement('div');
-      emailDiv.className = 'font-weight-bold';
+      emailDiv.className = 'regex-description';
       emailDiv.textContent = emailsDisplay;
       contentDiv.appendChild(emailDiv);
       
       const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'd-flex gap-05 ml-2';
+      actionsDiv.className = 'd-flex gap-05 align-items-center subuser-twofa-config-actions flex-shrink-0';
       
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
@@ -1282,7 +1346,7 @@ document.addEventListener("DOMContentLoaded", function() {
       
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
-      deleteBtn.className = 'btn-red btn-sm delete-subuser-twofa-config btn-imap-action btn-imap-small';
+      deleteBtn.className = 'btn-red btn-small delete-subuser-twofa-config';
       deleteBtn.setAttribute('data-id', config.id);
       deleteBtn.title = 'Eliminar';
       const deleteIcon = document.createElement('i');
@@ -1295,8 +1359,9 @@ document.addEventListener("DOMContentLoaded", function() {
       actionsDiv.appendChild(editBtn);
       actionsDiv.appendChild(deleteBtn);
       
-      itemDiv.appendChild(contentDiv);
-      itemDiv.appendChild(actionsDiv);
+      rowDiv.appendChild(contentDiv);
+      rowDiv.appendChild(actionsDiv);
+      itemDiv.appendChild(rowDiv);
       subuserTwofaConfigsList.appendChild(itemDiv);
     });
     
@@ -1363,29 +1428,70 @@ document.addEventListener("DOMContentLoaded", function() {
     resetSubuserEditTwofaForm();
   }
   
-  // Función para editar configuración
-  function editSubuserTwofaConfig(configId) {
+  // Función para editar configuración (carga el secreto completo desde el servidor)
+  async function editSubuserTwofaConfig(configId) {
     const config = subuserCurrentConfigs.find(c => c.id == configId);
     if (!config) {
       showSubuserTwofaMessage('Configuración no encontrada', 'error');
       return;
     }
-    
+
+    if (subuserEditTwofaConfigId) subuserEditTwofaConfigId.value = config.id;
     if (subuserEditTwofaEmailsInput) {
       const emailsList = config.emails_list || [];
-      subuserEditTwofaEmailsInput.value = emailsList.length > 0 ? emailsList.join(', ') : config.emails || '';
+      subuserEditTwofaEmailsInput.value =
+        emailsList.length > 0 ? emailsList.join(', ') : config.emails || '';
     }
-    if (subuserEditTwofaConfigId) subuserEditTwofaConfigId.value = config.id;
-    subuserCurrentEditSecret = config.secret_key;
-    
+    if (subuserEditTwofaSecretInput) subuserEditTwofaSecretInput.value = '';
+    subuserCurrentEditSecret = null;
     if (subuserEditTwofaSecretDisplay && subuserEditTwofaSecretDisplayValue) {
-      subuserEditTwofaSecretDisplayValue.textContent = subuserCurrentEditSecret;
+      subuserEditTwofaSecretDisplayValue.textContent = 'Cargando…';
       subuserEditTwofaSecretDisplay.classList.remove('d-none');
     }
-    
-    if (subuserEditTwofaSecretInput) subuserEditTwofaSecretInput.value = '';
-    
+
     openSubuserEditTwofaModal();
+
+    try {
+      const response = await fetch(`/subusers/twofa-configs/${configId}`, {
+        method: 'GET',
+        headers: {
+          'X-CSRFToken': getCsrfToken()
+        },
+        credentials: 'same-origin'
+      });
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok || !data.success || !data.config) {
+        showSubuserEditTwofaMessage(
+          (data && (data.error || data.message)) || 'No se pudo cargar el secreto 2FA',
+          'error'
+        );
+        return;
+      }
+
+      const secret = data.config.secret_key || '';
+      subuserCurrentEditSecret = secret;
+      if (subuserEditTwofaSecretInput) {
+        subuserEditTwofaSecretInput.value = secret;
+      }
+      if (subuserEditTwofaSecretDisplay && subuserEditTwofaSecretDisplayValue) {
+        subuserEditTwofaSecretDisplayValue.textContent = secret;
+        subuserEditTwofaSecretDisplay.classList.remove('d-none');
+      }
+
+      const idx = subuserCurrentConfigs.findIndex(c => c.id == configId);
+      if (idx >= 0) {
+        subuserCurrentConfigs[idx] = Object.assign({}, subuserCurrentConfigs[idx], {
+          emails: data.config.emails,
+          emails_list: data.config.emails_list,
+          secret_key: secret
+        });
+      }
+    } catch (err) {
+      showSubuserEditTwofaMessage(
+        'Error al cargar el secreto 2FA: ' + (err && err.message ? err.message : err),
+        'error'
+      );
+    }
   }
   
   // Función para eliminar configuración
@@ -1819,10 +1925,240 @@ document.addEventListener("DOMContentLoaded", function() {
       })
       .finally(() => {
         bulkAddEmailsToSubusersBtn.disabled = false;
-        bulkAddEmailsToSubusersBtn.textContent = "Añadir Correos a Sub-usuarios Seleccionados";
+        bulkAddEmailsToSubusersBtn.textContent = "Añadir Correos a los sub-usuarios";
       });
     });
   }
   // ======= FIN AÑADIR CORREOS MASIVAMENTE A SUB-USUARIOS =======
+
+  // ======= PLATAFORMAS Y PRECIOS GLOBAL (se aplica a todos los sub-usuarios) =======
+  (function initSubuserCatalogGlobalModal() {
+    const openBtn = document.getElementById('btnSubuserCatalogGlobal');
+    const modal = document.getElementById('subuserCatalogGlobalModal');
+    const overlay = document.getElementById('subuserCatalogGlobalOverlay');
+    const tbody = document.getElementById('subuserCatalogGlobalTableBody');
+    const markupInput = document.getElementById('subuserCatalogGlobalMarkup');
+    const currencyEl = document.getElementById('subuserCatalogGlobalCurrency');
+    const statusEl = document.getElementById('subuserCatalogGlobalStatus');
+    const saveBtn = document.getElementById('saveSubuserCatalogGlobalBtn');
+    if (!openBtn || !modal || !tbody || !markupInput) return;
+
+    const catalogUrl = openBtn.getAttribute('data-catalog-url') || '';
+    let currencyLabel = 'COP';
+
+    function formatPrice(n, cur) {
+      const x = Number(n);
+      if (!isFinite(x)) return '—';
+      if ((cur || currencyLabel) === 'USD') {
+        return '$' + (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : x.toFixed(2));
+      }
+      return '$' + Math.round(x).toLocaleString('es-CO');
+    }
+
+    function roundSale(n, cur) {
+      const x = Number(n);
+      if (!isFinite(x) || x < 0) return 0;
+      if ((cur || currencyLabel) === 'USD') return Math.round(x * 100) / 100;
+      return Math.round(x);
+    }
+
+    function setStatus(text, isError) {
+      if (!statusEl) return;
+      statusEl.textContent = text || '';
+      statusEl.style.color = isError ? '#b91c1c' : '#15803d';
+    }
+
+    function showModal(show) {
+      modal.hidden = !show;
+      modal.style.display = show ? 'block' : 'none';
+      if (overlay) {
+        overlay.hidden = !show;
+        overlay.style.display = show ? 'block' : 'none';
+      }
+    }
+
+    function currentMarkup() {
+      const n = Number(String(markupInput.value || '').replace(',', '.'));
+      return isFinite(n) && n >= 0 ? n : 0;
+    }
+
+    function applyMarkupToAutoRows() {
+      const markup = currentMarkup();
+      tbody.querySelectorAll('tr').forEach(function (row) {
+        if (row.getAttribute('data-manual') === '1') return;
+        const parent = Number(row.getAttribute('data-parent-price') || 0);
+        const saleInput = row.querySelector('.subuser-catalog-sale');
+        if (!saleInput) return;
+        saleInput.value = roundSale(parent + markup, currencyLabel);
+      });
+    }
+
+    function renderRows(products) {
+      tbody.innerHTML = (products || []).map(function (p) {
+        const parent = Number(p.parent_price || 0);
+        const sale = Number(p.sale_price || 0);
+        const manual = !!p.manual;
+        const pid = String(p.id);
+        const enabledId = 'subuser_catalog_global_enabled_' + pid;
+        const saleId = 'subuser_catalog_global_sale_' + pid;
+        return (
+          '<tr data-id="' + p.id + '" data-parent-price="' + parent + '" data-manual="' + (manual ? '1' : '0') + '"' +
+          (manual ? ' class="is-manual"' : '') + '>' +
+          '<td><input type="checkbox" class="subuser-catalog-enabled" id="' + enabledId + '" name="' + enabledId + '"' +
+          (p.enabled ? ' checked' : '') + '></td>' +
+          '<td>' + String(p.name || '').replace(/[&<>"]/g, function (c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+          }) + '</td>' +
+          '<td>' + formatPrice(parent, currencyLabel) + '</td>' +
+          '<td><input type="number" class="subuser-catalog-sale" id="' + saleId + '" name="' + saleId + '" min="' + parent + '" step="' +
+          (currencyLabel === 'USD' ? '0.01' : '1') + '" value="' + sale + '"></td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    function loadCatalog() {
+      if (!catalogUrl) return;
+      setStatus('Cargando…', false);
+      fetch(catalogUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || data.status !== 'ok') {
+            throw new Error(data && data.message ? data.message : 'No se pudo cargar el catálogo global.');
+          }
+          currencyLabel = data.currency_label || data.tipo_precio || 'COP';
+          if (currencyEl) currencyEl.textContent = currencyLabel;
+          markupInput.value = data.markup != null ? data.markup : data.default_markup;
+          renderRows(data.products || []);
+          setStatus('', false);
+          showModal(true);
+        })
+        .catch(function (err) {
+          setStatus(err.message || 'Error de red.', true);
+          showModal(true);
+        });
+    }
+
+    tbody.addEventListener('input', function (ev) {
+      const input = ev.target.closest('.subuser-catalog-sale');
+      if (!input) return;
+      const row = input.closest('tr');
+      if (!row) return;
+      row.setAttribute('data-manual', '1');
+      row.classList.add('is-manual');
+    });
+
+    markupInput.addEventListener('input', applyMarkupToAutoRows);
+
+    openBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      loadCatalog();
+    });
+
+    function closeModal() {
+      showModal(false);
+      setStatus('', false);
+    }
+
+    const closeBtn = document.getElementById('closeSubuserCatalogGlobalBtn');
+    const cancelBtn = document.getElementById('cancelSubuserCatalogGlobalBtn');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (overlay) overlay.addEventListener('click', closeModal);
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        const markup = currentMarkup();
+        const products = [];
+        let invalid = '';
+        tbody.querySelectorAll('tr').forEach(function (row) {
+          const parent = Number(row.getAttribute('data-parent-price') || 0);
+          const saleInput = row.querySelector('.subuser-catalog-sale');
+          const enabled = !!(row.querySelector('.subuser-catalog-enabled') || {}).checked;
+          const sale = roundSale(saleInput ? saleInput.value : 0, currencyLabel);
+          if (sale < parent) {
+            invalid = 'Hay un precio menor que el precio real. Corrígelo antes de guardar.';
+          }
+          const isManual = row.getAttribute('data-manual') === '1';
+          products.push({
+            id: parseInt(row.getAttribute('data-id'), 10),
+            enabled: enabled,
+            manual: isManual,
+            manual_price: isManual ? sale : null
+          });
+        });
+        if (invalid) {
+          setStatus(invalid, true);
+          return;
+        }
+        if (!window.confirm('Esto sobrescribe las plataformas y precios de TODOS tus sub-usuarios. ¿Continuar?')) {
+          return;
+        }
+        setStatus('Guardando…', false);
+        saveBtn.disabled = true;
+        fetch(catalogUrl, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+            Accept: 'application/json'
+          },
+          body: JSON.stringify({ markup: markup, products: products })
+        })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+          .then(function (res) {
+            if (!res.ok || !res.data || res.data.status !== 'ok') {
+              throw new Error((res.data && res.data.message) || 'No se pudo guardar.');
+            }
+            setStatus(res.data.message || 'Catálogo global guardado.', false);
+            setTimeout(closeModal, 1200);
+          })
+          .catch(function (err) {
+            setStatus(err.message || 'Error de red.', true);
+          })
+          .finally(function () {
+            saveBtn.disabled = false;
+          });
+      });
+    }
+  })();
+
+  (function initSubuserCatalogGlobalInfoModal() {
+    const infoBtn = document.getElementById('subuserCatalogGlobalInfoBtn');
+    const infoModal = document.getElementById('subuserCatalogGlobalInfoModal');
+    const closeInfoBtn = document.getElementById('closeSubuserCatalogGlobalInfoBtn');
+    const okInfoBtn = document.getElementById('okSubuserCatalogGlobalInfoBtn');
+    if (!infoBtn || !infoModal) return;
+
+    function openInfoModal() {
+      infoModal.removeAttribute('hidden');
+      infoModal.classList.remove('popup-hide');
+      infoModal.classList.add('popup-show');
+    }
+
+    function closeInfoModal() {
+      infoModal.classList.remove('popup-show');
+      infoModal.classList.add('popup-hide');
+      infoModal.setAttribute('hidden', '');
+    }
+
+    infoBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openInfoModal();
+    });
+    if (closeInfoBtn) closeInfoBtn.addEventListener('click', closeInfoModal);
+    if (okInfoBtn) okInfoBtn.addEventListener('click', closeInfoModal);
+
+    document.addEventListener('mousedown', function (e) {
+      if (!infoModal.classList.contains('popup-show')) return;
+      if (infoModal.contains(e.target)) return;
+      if (infoBtn.contains(e.target)) return;
+      closeInfoModal();
+    });
+  })();
+  // ======= FIN PLATAFORMAS Y PRECIOS GLOBAL =======
 
 }); // Fin DOMContentLoaded 

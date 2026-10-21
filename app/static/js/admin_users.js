@@ -921,7 +921,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
       // Deshabilitar botón y mostrar estado de carga
       bulkDeleteEmailsBtn.disabled = true;
-      bulkDeleteEmailsBtn.textContent = 'Eliminando...';
+      bulkDeleteEmailsBtn.setAttribute('aria-label', 'Eliminando correos de todos los usuarios');
+      bulkDeleteEmailsBtn.innerHTML =
+        '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Eliminando...';
       bulkDeleteEmailsMessage.classList.remove('show-block');
       bulkDeleteEmailsMessage.classList.add('hide-element');
 
@@ -959,7 +961,10 @@ document.addEventListener("DOMContentLoaded", function() {
       })
       .finally(() => {
         bulkDeleteEmailsBtn.disabled = false;
-        bulkDeleteEmailsBtn.textContent = 'Eliminar Correos de Todos los Usuarios';
+        bulkDeleteEmailsBtn.setAttribute('aria-label', 'Eliminar correos de todos los usuarios');
+        bulkDeleteEmailsBtn.setAttribute('title', 'Eliminar correos de todos los usuarios');
+        bulkDeleteEmailsBtn.innerHTML =
+          '<i class="fas fa-trash bulk-delete-all-emails-btn__icon" aria-hidden="true"></i> Correos de Todos los Usuarios';
       });
     });
   }

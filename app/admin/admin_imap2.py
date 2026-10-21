@@ -24,6 +24,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import re
 import os
+import unicodedata
 
 # Decorator para excluir rutas del CSRF (para AJAX)
 def csrf_exempt_route(func):
@@ -126,6 +127,50 @@ def validate_custom_domain(domain, server_id=None):
     return True, None
 
 
+# Filtros y regex que se marcan al crear una página nueva (Gestionar mi página / IMAP2).
+DEFAULT_IMAP2_FILTER_DESCRIPTIONS = (
+    "codigo netflix hogar 1",
+    "codigo netflix hogar 2",
+    "codigo netflix viaje 1",
+    "codigo netflix viaje 2",
+    "confirma tu nuevo inicio de sesion de crunchyroll 1",
+    "confirma tu nuevo inicio de sesion de crunchyroll 2",
+    "ingreso sesion netflix 6 digitos",
+)
+DEFAULT_IMAP2_REGEX_DESCRIPTIONS = (
+    "codigo disney hogar",
+    "codigo netflix hogar",
+    "codigo netflix viaje",
+    "codigo viaje y sesion disney",
+    "confirma tu nuevo inicio de sesion en crunchyroll",
+)
+
+
+def _normalize_assoc_description(value):
+    text = unicodedata.normalize("NFD", str(value or "").strip().lower())
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    return " ".join(text.split())
+
+
+def apply_default_imap2_filter_regex(srv):
+    """Asocia a una página nueva los filtros y regex predeterminados por descripción."""
+    if srv is None:
+        return
+    if getattr(srv, "id", None) is None:
+        db.session.flush()
+
+    wanted_filters = {_normalize_assoc_description(name) for name in DEFAULT_IMAP2_FILTER_DESCRIPTIONS}
+    wanted_regexes = {_normalize_assoc_description(name) for name in DEFAULT_IMAP2_REGEX_DESCRIPTIONS}
+
+    for filt in FilterModel.query.all():
+        if _normalize_assoc_description(filt.description) in wanted_filters and filt not in srv.filters:
+            srv.filters.append(filt)
+
+    for regex in RegexModel.query.all():
+        if _normalize_assoc_description(regex.description) in wanted_regexes and regex not in srv.regexes:
+            srv.regexes.append(regex)
+
+
 @admin_bp.route("/manage_imap2", methods=["POST"])
 @admin_required
 def manage_imap2():
@@ -179,6 +224,7 @@ def manage_imap2():
         srv.description = description if description else None
         srv.route_path = route_path
         srv.paragraph = paragraph if paragraph else None
+        apply_default_imap2_filter_regex(srv)
         db.session.commit()
         flash(f"Creado servidor IMAP2 {host}:{port}", "success")
 
@@ -259,6 +305,7 @@ def search_imap2_ajax():
             "description": s.description if s.description else None,
             "custom_domain": s.custom_domain if s.custom_domain else None,
             "buzon_folders": s.buzon_folder_keys(),
+            "linked_users": [u.username for u in s.allowed_users.all()],
         })
     return jsonify({"status": "ok", "servers": data})
 
@@ -300,6 +347,8 @@ def create_imap2_ajax():
             paragraph=None
         )
         db.session.add(srv)
+        db.session.flush()
+        apply_default_imap2_filter_regex(srv)
         db.session.commit()
 
         # Obtener todos los servidores para devolver la lista actualizada
@@ -317,6 +366,7 @@ def create_imap2_ajax():
                 "description": s.description if s.description else None,
                 "custom_domain": s.custom_domain if s.custom_domain else None,
             "buzon_folders": s.buzon_folder_keys(),
+            "linked_users": [u.username for u in s.allowed_users.all()],
             })
 
         return jsonify({
@@ -366,6 +416,7 @@ def delete_imap2_ajax():
                 "description": s.description if s.description else None,
                 "custom_domain": s.custom_domain if s.custom_domain else None,
             "buzon_folders": s.buzon_folder_keys(),
+            "linked_users": [u.username for u in s.allowed_users.all()],
             })
         return jsonify({"status": "ok", "servers": data_out})
     except Exception as e:
@@ -430,7 +481,9 @@ def toggle_imap2_ajax():
                 "enabled": s.enabled,
                 "route_path": s.route_path if s.route_path else None,
                 "description": s.description if s.description else None,
+                "custom_domain": s.custom_domain if s.custom_domain else None,
                 "buzon_folders": s.buzon_folder_keys(),
+                "linked_users": [u.username for u in s.allowed_users.all()],
             })
         return jsonify({"status": "ok", "servers": data_out})
     except Exception as e:

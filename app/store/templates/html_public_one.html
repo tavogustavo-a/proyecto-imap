@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}{{ html.title }}{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261019-publico">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 store-light public-tools-container mx-auto br-8">
+  <h2 class="text-center mt-2 mb-3">{{ html.title }}</h2>
+  <div class="card herramienta-accordion tool-public-one-card">
+    <div class="accordion-body">
+      {{ html.text | rewrite_external_images | safe }}
+    </div>
+  </div>
+</div>
+{% endblock %}

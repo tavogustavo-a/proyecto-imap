@@ -2,7 +2,7 @@
 
 {% block title %}Mi Historial de Compras{% endblock %}
 
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260803-historial-filtro-chip-layout">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261020-historial-modal-centro">{% endblock %}
 {% block content %}
 <div class="purchase-history-page{% if mostrar_usuario_comprador %} purchase-history-admin{% endif %}"
      data-show-user-column="{{ 'true' if mostrar_usuario_comprador else 'false' }}"
@@ -36,63 +36,7 @@
       <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
         <span class="menu-user-name">{{ session.get('username', 'Invitado') }}</span>
       </div>
-      {% set current_user_id = session.get('user_id') %}
-      {% if current_user_id %}
-        {% set user_object = User.query.get(current_user_id) %}
-        {% set show_store = False %}
-        {% if is_admin %}
-          {% set show_store = True %}
-        {% elif user_object.parent_id %}
-          {% if user_object.can_access_store %}
-            {% set parent = User.query.get(user_object.parent_id) %}
-            {% if parent and parent.user_prices and parent.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
-              {% set show_store = True %}
-            {% endif %}
-          {% endif %}
-        {% elif user_object.user_prices and user_object.user_prices.get('tipo_precio') in ['USD', 'COP'] %}
-          {% set show_store = True %}
-        {% endif %}
-        {% if show_store %}
-          <a href="{{ url_for('store_bp.store_front') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-store"></i> Tienda</a>
-          <a href="{{ url_for('store_bp.user_licencias') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-link"></i> Licencias</a>
-          <a href="{{ url_for('store_bp.historial_compras_usuario') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-receipt"></i> Mi Historial de Compras</a>
-          {% include 'includes/store_user_menu_notificaciones_link.html' %}
-          {% include 'includes/store_user_menu_recargas_link.html' %}
-          {% include 'includes/store_user_menu_chatbot_link.html' %}
-        {% endif %}
-      {% endif %}
-      {% if current_user and current_user.has_public_tools_access() %}
-        <a href="{{ url_for('store_bp.tools_public') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-tools"></i> Herramientas</a>
-      {% endif %}
-      {% include 'includes/store_user_menu_api_docs_link.html' %}
-      <a href="{{ url_for('main_bp.home') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-code"></i> Códigos</a>
-      {% if is_user and current_user %}
-        {% if current_user.is_support %}
-          <a href="{{ url_for('store_bp.support_dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte Admin</a>
-        {% elif current_user.can_chat %}
-          <a href="{{ url_for('store_bp.user_chat_soporte') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-headset"></i> Chat de Soporte</a>
-        {% endif %}
-      {% endif %}
-      {% if current_user and current_user.can_create_subusers %}
-        <a href="{{ url_for('subuser_bp.manage_subusers') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-users"></i> Sub-usuarios</a>
-      {% endif %}
-      {% if is_user and not current_user.parent_id and user_has_worksheet_access(current_user) %}
-  <a href="{{ url_for('store_bp.user_work_sheets') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-table"></i> Hojas de Cálculo</a>
-      {% endif %}
-      {% if is_user and current_user and current_user.managed_imap2_pages|length > 0 %}
-        <a href="{{ url_for('user_auth_bp.my_pages_list') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-file-alt"></i> Gestionar mi página</a>
-{% endif %}
-      {% if is_admin %}
-        <a href="{{ url_for('admin_bp.dashboard') }}" class="btn-panel btn-blue mobile-menu-btn mb-04"><i class="fas fa-cogs"></i> Administración</a>
-      {% endif %}
-      {% if is_admin %}
-        <a href="{{ url_for('auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-      {% elif is_user %}
-        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-      {% else %}
-        <a href="{{ url_for('user_auth_bp.logout') }}" class="btn-panel btn-red mobile-menu-btn mb-04"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</a>
-      {% endif %}
-      {% include 'includes/store_user_menu_saldo_block.html' %}
+      {% include 'includes/store_user_menu_sidebar_body.html' %}
     </div>
     {% endif %}
     <div id="menuOverlay" class="menu-overlay"></div>
@@ -135,7 +79,7 @@
             <option value="user" data-label="Solo un usuario" {% if cleanup_settings and cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario (—)</option>
           </select>
         </div>
-        <button type="button" id="phCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn">Eliminar ahora</button>
+        <button type="button" id="phCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn" aria-label="Eliminar ahora" title="Eliminar ahora"><i class="fas fa-trash" aria-hidden="true"></i><span class="purchase-history-cleanup-purge-btn__label">ahora</span></button>
       </div>
       <div class="purchase-history-cleanup-user-wrap" id="phCleanupUserWrap" {% if not cleanup_settings or cleanup_settings.scope != 'user' %}hidden{% endif %}>
         <label for="phCleanupUserSearch" class="form-label">Usuario</label>
@@ -403,7 +347,7 @@
               <option value="user" data-label="Solo un usuario" {% if lic_cleanup_settings and lic_cleanup_settings.scope == 'user' %}selected{% endif %}>Solo un usuario (—)</option>
             </select>
           </div>
-          <button type="button" id="phLicCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn">Eliminar ahora</button>
+          <button type="button" id="phLicCleanupPurgeBtn" class="btn-panel btn-red purchase-history-cleanup-purge-btn" aria-label="Eliminar ahora" title="Eliminar ahora"><i class="fas fa-trash" aria-hidden="true"></i><span class="purchase-history-cleanup-purge-btn__label">ahora</span></button>
         </div>
         <div class="purchase-history-cleanup-user-wrap" id="phLicCleanupUserWrap" {% if not lic_cleanup_settings or lic_cleanup_settings.scope != 'user' %}hidden{% endif %}>
           <label for="phLicCleanupUserSearch" class="form-label">Usuario</label>
@@ -508,9 +452,6 @@
       <div class="purchase-licencias-modal-head">
         <div>
           <h3 id="phComprasFilterModalTitle" class="purchase-licencias-modal-title">Filtro del historial</h3>
-          {% if mostrar_usuario_comprador %}
-          <p class="purchase-licencias-modal-sub">Elige usuario y/o tipo de fila. Solo se muestra lo que coincida.</p>
-          {% endif %}
         </div>
         <button type="button" id="phComprasFilterModalClose" class="purchase-licencias-modal-close" aria-label="Cerrar">&times;</button>
       </div>
@@ -593,5 +534,5 @@
   {% if mostrar_historial_licencias and historial_licencias_es_admin %}
   <script src="{{ url_for('store_bp.static', filename='js/historial_licencias_cleanup.js') }}?v=20260604-scope-count" defer></script>
   {% endif %}
-  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20260803-historial-filtro-proveedor" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/historial_compras.js') }}?v=20261020-historial-modal-centro" defer></script>
 {% endblock %} 

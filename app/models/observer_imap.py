@@ -15,6 +15,19 @@ class ObserverIMAPServer(db.Model):
     password_enc = db.Column(db.String(255), nullable=False)
     enabled = db.Column(db.Boolean, default=True)
     folders = db.Column(db.String(500), nullable=False, server_default="INBOX")
+    buzon_folders_json = db.Column(db.Text, nullable=True)
+
+    def buzon_folder_keys(self):
+        """Carpetas del buzón a revisar. Lista vacía: no se consulta el buzón."""
+        from app.models.email_forwarding import normalize_folder_keys
+        return normalize_folder_keys(self.buzon_folders_json, empty_as_none=True) or []
+
+    def set_buzon_folders(self, raw):
+        import json
+        from app.models.email_forwarding import normalize_folder_keys
+        keys = normalize_folder_keys(raw, empty_as_none=True) or []
+        self.buzon_folders_json = json.dumps(keys)
+        return keys
 
     def to_dict(self):
         """Serializa el objeto ObserverIMAPServer a un diccionario para exportación."""
@@ -26,7 +39,8 @@ class ObserverIMAPServer(db.Model):
             'username': self.username,
             'password_enc': self.password_enc,
             'enabled': self.enabled,
-            'folders': self.folders
+            'folders': self.folders,
+            'buzon_folders_json': self.buzon_folders_json,
         }
 
     def __repr__(self):

@@ -57,6 +57,8 @@ class SalePurchaseSnapshot(db.Model):
     whatsapp_daily_co_date = db.Column(db.Date, nullable=True, index=True)
     whatsapp_daily_sent_at = db.Column(db.DateTime, nullable=True, index=True)
     whatsapp_daily_send_attempts = db.Column(db.Integer, default=0, nullable=False, server_default='0')
+    digest_wa_sent_at = db.Column(db.DateTime, nullable=True)
+    digest_tg_sent_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -224,6 +226,7 @@ class HtmlInfo(db.Model):
     title = db.Column(db.String(255), nullable=False)
     text = db.Column(db.Text, nullable=False)
     enabled = db.Column(db.Boolean, default=True)
+    is_public = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow) 
     
     # Relación con usuarios que pueden ver el HTML
@@ -257,6 +260,7 @@ class YouTubeListing(db.Model):
     title = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=True)
     enabled = db.Column(db.Boolean, default=True)
+    is_public = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     users = db.relationship('User', secondary=youtube_listing_users, lazy='dynamic',
                             backref=db.backref('youtube_listings', lazy=True))
@@ -294,6 +298,7 @@ class ApiInfo(db.Model):
     api_type = db.Column(db.String(50), nullable=True)
     api_url = db.Column(db.String(255), nullable=True)
     enabled = db.Column(db.Boolean, default=True)
+    is_public = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Campos para subtítulos de Drive
     drive_subtitle_photos = db.Column(db.String(100), nullable=True)
@@ -409,6 +414,8 @@ class DriveTransfer(db.Model):
     drive_original_id = db.Column(db.String(128), nullable=False)
     drive_processed_id = db.Column(db.String(128), nullable=False)
     drive_deleted_id = db.Column(db.String(128), nullable=True)  # Carpeta para archivos eliminados
+    telegram_group_id = db.Column(db.String(32), nullable=True)
+    telegram_send_problems = db.Column(db.Text, nullable=True)
     processing_time = db.Column(db.String(20), nullable=False)  # Intervalo: "5h" o "10m" (horas o minutos)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     last_processed = db.Column(db.DateTime, nullable=True)
@@ -452,6 +459,25 @@ class WhatsAppConfig(db.Model):
 
     def __repr__(self):
         return f'<WhatsAppConfig {self.phone_number}>'
+
+
+class TelegramBotConfig(db.Model):
+    """Bot de Telegram (BotFather): nombre y token. Una sola fila."""
+
+    __tablename__ = 'telegram_bot_configs'
+    id = db.Column(db.Integer, primary_key=True)
+    bot_username = db.Column(db.String(64), nullable=False, default='')
+    bot_token = db.Column(db.String(255), nullable=False, default='')
+    is_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    connection_status = db.Column(db.String(40), nullable=True, default='disconnected')
+    update_offset = db.Column(db.BigInteger, nullable=True)
+    last_health_at = db.Column(db.DateTime, nullable=True)
+    last_health_error = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<TelegramBotConfig {self.bot_username}>'
+
 
 # Modelo para Regex específicos de SMS
 class SMSRegex(db.Model):

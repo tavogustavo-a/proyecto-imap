@@ -21,6 +21,18 @@ from sqlalchemy.exc import IntegrityError
 
 TABLE_NAME = "observer_imap_servers"
 
+def _observer_server_payload(server):
+    return {
+        "id": server.id,
+        "host": server.host,
+        "port": server.port,
+        "username": server.username,
+        "folders": server.folders,
+        "enabled": server.enabled,
+        "description": server.description if hasattr(server, "description") else None,
+        "buzon_folders": server.buzon_folder_keys(),
+    }
+
 # ---------- Helpers internos reutilizando funciones del servicio ----------
 
 def _create_server(host, port, username, password, folders, description=None):
@@ -149,19 +161,7 @@ def observer_search_imap_ajax():
             (IMAPModel.host.ilike(f"%{query}%")) | (IMAPModel.username.ilike(f"%{query}%"))
         )
     servers = servers_q.all()
-    data = [
-        {
-            "id": s.id,
-            "host": s.host,
-            "port": s.port,
-            "username": s.username,
-            "folders": s.folders,
-            "enabled": s.enabled,
-            "description": s.description if hasattr(s, 'description') else None,
-        }
-        for s in servers
-    ]
-    return jsonify({"status": "ok", "servers": data})
+    return jsonify({"status": "ok", "servers": [_observer_server_payload(s) for s in servers]})
 
 @admin_bp.route("/observer_delete_imap_ajax", methods=["POST"])
 @admin_required
@@ -183,22 +183,9 @@ def observer_delete_imap_ajax():
         
         # Obtener la lista actualizada de servidores
         servers = IMAPModel.query.all()
-        data_out = [
-            {
-                "id": s.id,
-                "host": s.host,
-                "port": s.port,
-                "username": s.username,
-                "folders": s.folders,
-                "enabled": s.enabled,
-                "description": s.description if hasattr(s, 'description') else None,
-            }
-            for s in servers
-        ]
-        
         return jsonify({
-            "status": "ok", 
-            "servers": data_out
+            "status": "ok",
+            "servers": [_observer_server_payload(s) for s in servers]
         })
         
     except Exception as e:
@@ -241,16 +228,17 @@ def observer_toggle_imap_ajax():
     db.session.commit()
 
     servers = IMAPModel.query.all()
-    data_out = [
-        {
-            "id": s.id,
-            "host": s.host,
-            "port": s.port,
-            "username": s.username,
-            "folders": s.folders,
-            "enabled": s.enabled,
-            "description": s.description if hasattr(s, 'description') else None,
-        }
-        for s in servers
-    ]
-    return jsonify({"status": "ok", "servers": data_out}) 
+    return jsonify({"status": "ok", "servers": [_observer_server_payload(s) for s in servers]})
+
+
+@admin_bp.route("/observer_buzon_folders", methods=["POST"])
+@admin_required
+def update_observer_buzon_folders():
+    """Carpetas del buzón del observador. Independientes de la lista de servidores IMAP."""
+    import json
+    from app.admin.site_settings import set_site_setting
+    from app.models.email_forwarding import normalize_folder_keys
+    data = request.get_json(silent=True) or {}
+    keys = normalize_folder_keys(data.get("folders"), empty_as_none=True) or []
+    set_site_setting("observer_buzon_folders", json.dumps(keys))
+    return jsonify({"status": "ok", "folders": keys}) 

@@ -239,7 +239,16 @@
       ></textarea>
 
       <div class="d-flex gap-05 justify-content-center">
-        <button type="submit" id="bulkDeleteEmailsBtn" class="btn-red">Eliminar Correos de Todos los Usuarios</button>
+        <button
+          type="submit"
+          id="bulkDeleteEmailsBtn"
+          class="btn-red bulk-delete-all-emails-btn"
+          title="Eliminar correos de todos los usuarios"
+          aria-label="Eliminar correos de todos los usuarios"
+        >
+          <i class="fas fa-trash bulk-delete-all-emails-btn__icon" aria-hidden="true"></i>
+          Correos de Todos los Usuarios
+        </button>
       </div>
 
       <div id="bulkDeleteEmailsMessage" class="mt-05 text-center"></div>
@@ -376,7 +385,7 @@
 <!-- Overlay para cerrar el popup al hacer clic fuera -->
 <div id="editUserOverlay" class="popup-overlay popup-overlay-hidden"></div>
 
-<script src="{{ url_for('static', filename='js/admin_users.js') }}?v=20261016-edit-icon"></script>
+<script src="{{ url_for('static', filename='js/admin_users.js') }}?v=20261020-bulk-delete-label"></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

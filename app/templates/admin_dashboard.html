@@ -203,10 +203,10 @@
 
     <div id="imapList">
       {% for s in servers %}
-        <div class="imap-item mb-1">
-          <strong>Usuario: {{ s.username }}</strong><br>
-          <em>Carpetas:</em> {{ s.folders }}
-          <div class="mt-05">
+        <div class="imap-item mb-1 imap-admin-row">
+          <span class="imap-admin-row__email">{{ s.username }}</span>
+          <span class="imap-admin-row__folders"><em>Carpetas:</em> {{ s.folders }}</span>
+          <div class="imap-admin-row__actions">
             <form action="{{ url_for('admin_bp.test_imap', server_id=s.id) }}"
                   method="POST"
                   class="d-inline">
@@ -347,10 +347,24 @@
 
   <div id="imap2List">
     {% for s in servers2 %}
-      <div class="imap-item mb-1">
-        <strong>Usuario: {{ s.username }}</strong><br>
-        {% if s.description %}{{ s.description }}{% endif %}{% if s.route_path %} | <em>Ruta:</em> {{ s.route_path }}{% endif %}
-        <div class="mt-05">
+      <div class="imap-item mb-1 imap-admin-row">
+        <div class="imap-admin-row__meta">
+          <span class="imap-admin-row__email">{{ s.username }}</span>
+          {% set page_users = s.allowed_users.all() %}
+          {% if page_users %}
+            <span class="imap-admin-row__sep" aria-hidden="true">-</span>
+            <span class="imap-admin-row__owner">{{ page_users|map(attribute='username')|join(', ') }}</span>
+          {% endif %}
+          {% if s.route_path %}
+            <span class="imap-admin-row__sep" aria-hidden="true">-</span>
+            <span class="imap-admin-row__route"><em>ruta:</em>{{ s.route_path }}</span>
+          {% endif %}
+          {% if s.custom_domain %}
+            <span class="imap-admin-row__sep" aria-hidden="true">-</span>
+            <span class="imap-admin-row__domain"><em class="imap-domain-label">Dominio:</em> <span class="imap-domain-value">{{ s.custom_domain }}</span></span>
+          {% endif %}
+        </div>
+        <div class="imap-admin-row__actions">
           <form action="{{ url_for('admin_bp.test_imap2', server_id=s.id) }}"
                 method="POST"
                 class="d-inline">
@@ -516,34 +530,27 @@
 <div class="admin-card mt-1 import-export-card">
   <h3 class="import-export-title">Importar / Exportar Configuración</h3>
 
-  <div class="d-flex flex-wrap gap-1 align-items-end import-export-row">
-    {# Input para el código de seguridad para exportar #}
-    <div>
-        <label for="exportSecurityCode" class="d-block mb-03">Código secreto para exportar:</label> 
-        <input type="text" name="export_security_code" id="exportSecurityCode" placeholder="Código secreto Exportar" autocomplete="off">
+  <div class="import-export-row-line import-export-export-row">
+    <div class="import-export-field">
+        <input type="text" name="export_security_code" id="exportSecurityCode" placeholder="Código secreto para Exportar" autocomplete="off" aria-label="Código secreto para Exportar">
     </div>
-    {# Botón de Exportación #}
-    <div>
-        <button type="button" class="btn-blue" id="btnExportConfig">Descargar</button>
-    </div>
+    <button type="button" class="btn-blue import-export-action-btn" id="btnExportConfig">Descargar</button>
   </div>
 
-  <hr class="hr-margin-1">
-
   {# Formulario de Importación #}
-  <form action="{{ url_for('admin_bp.import_config') }}" method="POST" enctype="multipart/form-data" class="d-flex flex-wrap gap-1 align-items-end" id="importConfigForm">
+  <form action="{{ url_for('admin_bp.import_config') }}" method="POST" enctype="multipart/form-data" class="import-export-row-line import-export-import-row" id="importConfigForm">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-    <div>
-      <label for="configFile" class="d-block mb-03">Archivo de configuración:</label>
-      <input type="file" name="config_file" id="configFile" accept=".json" required autocomplete="off">
+    <div class="import-export-field import-export-file-field">
+      <label for="configFile" id="configFileTrigger" class="import-export-file-trigger" title="Subir archivo JSON" aria-label="Subir archivo JSON">
+        <i class="fas fa-upload import-export-file-trigger-icon" aria-hidden="true"></i>
+        <span class="import-export-file-trigger-text" id="configFileTriggerText">Subir archivo</span>
+      </label>
+      <input type="file" name="config_file" id="configFile" class="import-export-file-input" accept=".json" required autocomplete="off">
     </div>
-    <div>
-      <label for="securityCode" class="d-block mb-03">Código secreto para importar:</label> 
-      <input type="text" name="security_code" id="securityCode" required placeholder="Código secreto Importar" autocomplete="off">
+    <div class="import-export-field">
+      <input type="text" name="security_code" id="securityCode" required placeholder="Código secreto para Importar" autocomplete="off" aria-label="Código secreto para Importar">
     </div>
-    <div>
-      <button type="submit" class="btn-green">Subir</button>
-    </div>
+    <button type="submit" class="btn-green import-export-action-btn">Subir</button>
   </form>
 
 </div>
@@ -560,12 +567,12 @@
           </div>
            <div>
               <label for="observerCheckFrequency" class="d-block mb-03">logs patrón observador (m):</label>
-              <input type="number" id="observerCheckFrequency" name="observer_check_frequency" min="1" step="1" value="{{ site_settings.get('observer_check_frequency', 5) }}" class="input-admin-id admin-input-width">
+              <input type="number" id="observerCheckFrequency" name="observer_check_frequency" min="1" step="1" value="{{ site_settings.get('observer_check_frequency', 15) }}" class="input-admin-id admin-input-width">
            </div>
            <div class="d-flex flex-column align-items-center admin-checkbox-container">
-               <label for="observerEnabled" class="d-block mb-03">Observador:</label>
-               <input type="checkbox" id="observerEnabled" name="observer_enabled" value="1" {% if site_settings.get('observer_enabled', '0') == '1' %}checked{% endif %}>
-               <span class="admin-checkbox-text">ON/OFF</span>
+               <span class="d-block mb-03">Observador:</span>
+               <input type="hidden" name="observer_enabled" id="observerEnabledHidden" value="{{ '1' if site_settings.get('observer_enabled', '0') == '1' else '0' }}">
+               {% call state_switch(site_settings.get('observer_enabled', '0') == '1', '') %}id="observerEnabledSwitch" data-enabled="{{ 'true' if site_settings.get('observer_enabled', '0') == '1' else 'false' }}"{% endcall %}
            </div>
       </div>
       <div class="text-center">
@@ -582,10 +589,10 @@
 
 </div> {# Fin contenedor principal .container #}
 
-<script src="{{ url_for('static', filename='js/admin_imap.js') }}?v=20261016-imap-errores" defer></script>
-<script src="{{ url_for('static', filename='js/admin_imap2.js') }}?v=20261018-buzon-search" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}?v=20261020-imap-row-line" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap2.js') }}?v=20261020-imap-row-line" defer></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v=20261016-probar-icon" defer></script>
+<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v=20261020-security-settings-ajax" defer></script>
 {% endblock %}

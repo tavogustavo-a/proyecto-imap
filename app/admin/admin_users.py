@@ -675,6 +675,11 @@ def toggle_user_ajax():
             
         # 2. Commit único para todos los cambios (padre, hijos, tokens, contadores)
         db.session.commit()
+        try:
+            from app.store.drive_telegram_send import sync_store_user_telegram_groups
+            sync_store_user_telegram_groups(user)
+        except Exception:
+            current_app.logger.warning('No se pudo actualizar el grupo de Telegram al cambiar el usuario')
 
         # --- Respuesta con lista actualizada --- 
         # admin_username ya está definido arriba
@@ -713,6 +718,12 @@ def delete_user_ajax():
 
         if user.parent_id is not None:
             return jsonify({"status":"error","message":"No es un usuario principal."}),403
+
+        try:
+            from app.store.drive_telegram_send import remove_chat_from_telegram_groups
+            remove_chat_from_telegram_groups(getattr(user, 'telegram_chat_id', None))
+        except Exception:
+            current_app.logger.warning('No se pudo sacar al usuario del grupo de Telegram')
 
         # 1) Buscamos y eliminamos sub-usuarios primero (se eliminarán en cascada sus RememberDevice, AllowedEmail, etc.)
         # Nota: RememberDevice se elimina automáticamente por CASCADE (ondelete='CASCADE')

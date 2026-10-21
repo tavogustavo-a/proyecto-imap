@@ -30,6 +30,87 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const observerSwitch = document.getElementById('observerEnabledSwitch');
+    const observerEnabledHidden = document.getElementById('observerEnabledHidden');
+    if (observerSwitch && observerEnabledHidden) {
+        observerSwitch.addEventListener('click', function () {
+            const currentlyOn = this.getAttribute('data-enabled') === 'true';
+            const on = !currentlyOn;
+            this.setAttribute('data-enabled', on ? 'true' : 'false');
+            paintStateSwitch(this, on);
+            observerEnabledHidden.value = on ? '1' : '0';
+        });
+    }
+
+    const configFileInput = document.getElementById('configFile');
+    const configFileTrigger = document.getElementById('configFileTrigger');
+    const configFileTriggerText = document.getElementById('configFileTriggerText');
+    if (configFileInput && configFileTrigger && configFileTriggerText) {
+        const configFileTriggerIcon = configFileTrigger.querySelector('.import-export-file-trigger-icon');
+        function setConfigFileTriggerReady(ready) {
+            if (ready) {
+                configFileTriggerText.textContent = 'Subido listo';
+                configFileTrigger.classList.add('import-export-file-trigger--ready');
+                configFileTrigger.setAttribute('title', 'Archivo JSON seleccionado');
+                configFileTrigger.setAttribute('aria-label', 'Archivo JSON seleccionado');
+                if (configFileTriggerIcon) {
+                    configFileTriggerIcon.classList.remove('fa-upload');
+                    configFileTriggerIcon.classList.add('fa-check');
+                }
+            } else {
+                configFileTriggerText.textContent = 'Subir archivo';
+                configFileTrigger.classList.remove('import-export-file-trigger--ready');
+                configFileTrigger.setAttribute('title', 'Subir archivo JSON');
+                configFileTrigger.setAttribute('aria-label', 'Subir archivo JSON');
+                if (configFileTriggerIcon) {
+                    configFileTriggerIcon.classList.remove('fa-check');
+                    configFileTriggerIcon.classList.add('fa-upload');
+                }
+            }
+        }
+        configFileInput.addEventListener('change', function () {
+            setConfigFileTriggerReady(configFileInput.files && configFileInput.files.length > 0);
+        });
+    }
+
+    const securitySettingsForm = document.getElementById('securitySettingsForm');
+    if (securitySettingsForm) {
+        securitySettingsForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const submitBtn = securitySettingsForm.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+
+            fetch(securitySettingsForm.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: new FormData(securitySettingsForm),
+                credentials: 'same-origin'
+            })
+                .then(function (r) {
+                    return r.json().then(function (data) {
+                        return { ok: r.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    const data = result.data || {};
+                    if (result.ok && data.success) {
+                        alert(data.message || 'Tiempos de seguridad guardados.');
+                    } else {
+                        alert(data.message || 'Error al guardar los tiempos.');
+                    }
+                })
+                .catch(function () {
+                    alert('Error de red al guardar los tiempos.');
+                })
+                .finally(function () {
+                    if (submitBtn) submitBtn.disabled = false;
+                });
+        });
+    }
+
     // ======= LÓGICA PARA APIs GLOBALES (ADMIN) =======
     const globalLinkedApisList = document.getElementById("globalLinkedApisList");
     const addGlobalApiBtn = document.getElementById("addGlobalApiBtn");

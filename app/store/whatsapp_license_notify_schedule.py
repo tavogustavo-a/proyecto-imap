@@ -81,7 +81,9 @@ def notify_poll_interval_sec_for_config(config, co_now=None) -> int:
     - Catch-up tras reconexión: cada 10 min
     """
     co_now = co_now or get_colombia_datetime()
-    if not config.is_enabled:
+    from app.store.telegram_bot_service import telegram_digest_ready
+
+    if not config.is_enabled and not telegram_digest_ready():
         return POLL_6H_SEC
 
     if catchup_due(config, co_now):
@@ -108,7 +110,9 @@ def notify_poll_interval_sec_for_config(config, co_now=None) -> int:
 
 def compute_notify_poll_interval_sec(configs, co_now=None) -> int:
     co_now = co_now or get_colombia_datetime()
-    enabled = [c for c in configs if c.is_enabled]
+    from app.store.telegram_bot_service import telegram_digest_ready
+
+    enabled = [c for c in configs if c and (c.is_enabled or telegram_digest_ready())]
     if not enabled:
         return POLL_6H_SEC
     return min(notify_poll_interval_sec_for_config(c, co_now) for c in enabled)
@@ -116,7 +120,9 @@ def compute_notify_poll_interval_sec(configs, co_now=None) -> int:
 
 def should_run_scheduled_notify(config, co_now=None) -> bool:
     """Ejecutar si ya pasó la hora programada y hay resúmenes diarios listos."""
-    if not config.is_enabled:
+    from app.store.telegram_bot_service import telegram_digest_ready
+
+    if not config.is_enabled and not telegram_digest_ready():
         return False
     co_now = co_now or get_colombia_datetime()
     target = config.notification_time

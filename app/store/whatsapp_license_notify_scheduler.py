@@ -42,8 +42,10 @@ def run_whatsapp_license_notify_tick(app):
 
             ensure_whatsapp_web_columns()
             co_now = get_colombia_datetime()
+            from app.store.telegram_bot_service import telegram_digest_ready
+
             cfg = get_whatsapp_singleton_config()
-            if not cfg or not cfg.is_enabled:
+            if not cfg or (not cfg.is_enabled and not telegram_digest_ready()):
                 return
             try:
                 if should_run_catchup_notify(cfg, co_now):
@@ -73,8 +75,10 @@ def _compute_sleep_sec(app) -> int:
             from app.store.whatsapp_web_service import get_whatsapp_singleton_config
             from app.utils.timezone import get_colombia_datetime
 
+            from app.store.telegram_bot_service import telegram_digest_ready
+
             cfg = get_whatsapp_singleton_config()
-            configs = [cfg] if cfg and cfg.is_enabled else []
+            configs = [cfg] if cfg and (cfg.is_enabled or telegram_digest_ready()) else []
             return compute_notify_poll_interval_sec(configs, get_colombia_datetime())
         except Exception:
             return 6 * 3600

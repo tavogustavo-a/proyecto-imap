@@ -382,3 +382,54 @@ def delete_emails_by_message_id(servers, message_id):
                 pass
         except Exception as conn_err:
             pass
+
+
+def search_buzon_for_observer(folder_keys, since_date_utc, optional_sender_from_rule=None):
+    """
+    Correos del buzón (received_emails) en las carpetas marcadas.
+    Mismo shape que search_emails_for_observer, más source='buzon' y received_email_id.
+    """
+    keys = [k for k in (folder_keys or []) if k]
+    if not keys:
+        return []
+
+    from sqlalchemy import func, or_
+    from sqlalchemy.orm import joinedload
+    from app.models.email_buzon import EmailTag, ReceivedEmail
+    from app.services.search_service import _received_email_in_folders
+
+    since = since_date_utc
+    if getattr(since, "tzinfo", None) is not None:
+        since = since.astimezone(timezone.utc).replace(tzinfo=None)
+
+    query = ReceivedEmail.query.options(joinedload(ReceivedEmail.tags)).filter(
+        or_(
+            ReceivedEmail.received_at >= since,
+            ReceivedEmail.received_at.is_(None),
+        )
+    )
+    sender_needle = (optional_sender_from_rule or "").strip().lower()
+    if sender_needle:
+        query = query.filter(func.lower(ReceivedEmail.from_email).contains(sender_needle))
+
+    cap = int(current_app.config.get("OBSERVER_MAX_EMAILS_PER_FOLDER", 50)) * max(1, len(keys))
+    rows = query.order_by(ReceivedEmail.received_at.desc()).limit(cap).all()
+
+    spam_tag = EmailTag.query.filter(func.lower(EmailTag.name) == "spam").first()
+    spam_tag_id = spam_tag.id if spam_tag else None
+    found = []
+    for email in rows:
+        if not _received_email_in_folders(email, keys, spam_tag_id):
+            continue
+        body = ((email.content_text or "") + "\n" + (email.content_html or "")).strip()
+        to_addr = (email.original_to_email or email.to_email or "").strip()
+        found.append({
+            "message_id": email.message_id or f"buzon-db-{email.id}",
+            "from": email.from_email or "",
+            "to": [to_addr] if to_addr else [],
+            "subject": email.subject or "",
+            "body_raw": body,
+            "source": "buzon",
+            "received_email_id": email.id,
+        })
+    return found

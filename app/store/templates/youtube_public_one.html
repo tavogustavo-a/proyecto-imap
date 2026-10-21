@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ listing.title }}{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261019-publico">
+{% endblock %}
+
+{% block content %}
+<div class="container container-max-width-900 store-light public-tools-container mx-auto br-8">
+  <h2 class="text-center mt-2 mb-3">{{ listing.title }}</h2>
+  <div class="card herramienta-accordion tool-public-one-card">
+    <div class="accordion-body">
+      {{ listing.content | default('', true) | rewrite_external_images | safe }}
+      {% if listing.production_links %}
+      <div class="d-flex flex-column gap-2 mt-3">
+        {% for link in listing.production_links %}
+          {% if '/shorts/' in link.url %}
+            {% set video_id = link.url.split('/shorts/')[-1].split('?')[0] %}
+          {% elif '/embed/' in link.url %}
+            {% set video_id = link.url.split('/embed/')[-1].split('?')[0].split('&')[0] %}
+          {% elif 'youtu.be/' in link.url %}
+            {% set video_id = link.url.split('youtu.be/')[-1].split('?')[0].split('&')[0] %}
+          {% elif 'v=' in link.url %}
+            {% set video_id = link.url.split('v=')[-1].split('&')[0] %}
+          {% else %}
+            {% set video_id = '' %}
+          {% endif %}
+          <div class="card herramienta-accordion">
+            <div class="p-2">
+              <strong>{{ link.title or 'Video' }}</strong>
+              {% if video_id %}
+              <div class="video-container mt-2">
+                <iframe src="https://www.youtube.com/embed/{{ video_id }}?rel=0" title="{{ link.title or 'Video' }}" allowfullscreen loading="lazy"></iframe>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
