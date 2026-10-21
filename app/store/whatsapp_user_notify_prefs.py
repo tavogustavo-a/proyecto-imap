@@ -63,12 +63,18 @@ def _ensure_user_telegram_chat_id_column() -> None:
             db.session.commit()
             cols.add('telegram_chat_id')
         if 'telegram_notify_enabled' not in cols:
-            db.session.execute(
-                text(
+            dialect = getattr(db.engine.dialect, 'name', '') or ''
+            if dialect == 'postgresql':
+                notify_sql = (
+                    'ALTER TABLE users ADD COLUMN telegram_notify_enabled '
+                    'BOOLEAN NOT NULL DEFAULT FALSE'
+                )
+            else:
+                notify_sql = (
                     'ALTER TABLE users ADD COLUMN telegram_notify_enabled '
                     'INTEGER NOT NULL DEFAULT 0'
                 )
-            )
+            db.session.execute(text(notify_sql))
             db.session.commit()
     except Exception as exc:
         db.session.rollback()

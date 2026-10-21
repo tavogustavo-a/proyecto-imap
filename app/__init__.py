@@ -542,6 +542,15 @@ def create_app(config_class_passed=None):
             ensure_store_announcements_schema()
             ensure_user_email_notify_enabled_column()
             ensure_tool_info_is_public_column()
+            from app.store.whatsapp_user_notify_prefs import ensure_user_whatsapp_notify_enabled_column
+            from app.store.drive_manager import ensure_drive_telegram_columns
+            from app.store.whatsapp_daily_sales import ensure_whatsapp_daily_sales_columns
+            from app.store.routes import _ensure_coupon_redemptions_table
+
+            ensure_user_whatsapp_notify_enabled_column()
+            ensure_drive_telegram_columns()
+            ensure_whatsapp_daily_sales_columns()
+            _ensure_coupon_redemptions_table()
             if repaired_accum:
                 app.logger.debug(
                     f"Esquema: {repaired_accum} acumulación(es) legacy reparada(s)"
