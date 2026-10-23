@@ -1243,11 +1243,16 @@ form {
   display: none !important;
 }
 
-#smtpFoldersModal .edit-modal-actions {
+#smtpFoldersModal .edit-modal-actions,
+#editForwardingModal .edit-modal-actions {
   justify-content: center;
+  gap: 0.65rem;
 }
 
-#smtpFoldersModal .edit-modal-actions .btn {
+#smtpFoldersModal .edit-modal-actions .btn,
+#editForwardingModal .edit-modal-actions .btn,
+#editForwardingModal .edit-modal-actions .btn:first-child,
+#editForwardingModal .edit-modal-actions .btn:not(:first-child) {
   margin-left: 0;
   margin-right: 0;
 }

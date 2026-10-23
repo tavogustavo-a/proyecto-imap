@@ -224,6 +224,7 @@ def delete_forwarding(forwarding_id):
     try:
         forwarding = EmailForwarding.query.get_or_404(forwarding_id)
         destination_email = forwarding.destination_email
+        forwarding_id_deleted = forwarding.id
 
         removed = cascade_delete_received_emails_for_forwarding(forwarding)
         db.session.delete(forwarding)
@@ -232,13 +233,18 @@ def delete_forwarding(forwarding_id):
         msg = f'Correo de recepción eliminado: {destination_email}.'
         if removed:
             msg += f' Se eliminaron {removed} correo(s) del buzón en cascada.'
-        flash(msg, 'success')
-        
+        return _buzon_form_or_redirect(
+            True,
+            msg,
+            {'forwarding_id': forwarding_id_deleted, 'removed_emails': removed},
+        )
+
     except Exception as e:
         db.session.rollback()
-        flash(f'Error eliminando correo de recepción: {str(e)}', 'error')
-    
-    return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+        return _buzon_form_or_redirect(
+            False,
+            f'Error eliminando correo de recepción: {str(e)}',
+        )
 
 @admin_email_buzon_bp.route('/email-buzon/toggle-forwarding/<int:forwarding_id>', methods=['POST'])
 @admin_required
@@ -1503,16 +1509,21 @@ def delete_cleanup(cleanup_id):
     try:
         cleanup = EmailCleanup.query.get_or_404(cleanup_id)
         cleanup_name = f"{cleanup.time.strftime('%H:%M')} - {cleanup.get_folder_name()}"
-        
+        cleanup_id_deleted = cleanup.id
+
         db.session.delete(cleanup)
         db.session.commit()
-        
-        flash(f'Limpieza automática eliminada: {cleanup_name}', 'success')
-        return redirect(url_for('admin_email_buzon.manage_email_buzon'))
-        
+
+        return _buzon_form_or_redirect(
+            True,
+            f'Limpieza automática eliminada: {cleanup_name}',
+            {'cleanup_id': cleanup_id_deleted},
+        )
+
     except Exception as e:
-        print(f"❌ ERROR eliminando limpieza automática: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        flash(f'Error al eliminar limpieza automática: {str(e)}', 'error')
-        return redirect(url_for('admin_email_buzon.manage_email_buzon'))
+        db.session.rollback()
+        current_app.logger.error('Error eliminando limpieza automática: %s', e, exc_info=True)
+        return _buzon_form_or_redirect(
+            False,
+            f'Error al eliminar limpieza automática: {str(e)}',
+        )

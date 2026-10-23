@@ -1869,14 +1869,65 @@ function showNotification(message, type) {
     if (deleteForm) {
       deleteForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        const label = row.querySelector('.forwarding-info strong');
-        const name = label ? label.textContent : 'esta dirección';
-        if (confirm('¿Estás seguro de que deseas eliminar el reenvío para ' + name + '?')) {
-          deleteForm.submit();
-        }
+        deleteForwardingAjax(deleteForm);
       });
     }
   }
+
+  function ensureEmptyForwardingNote() {
+    const list = document.getElementById('smtpAddressList');
+    if (!list) return;
+    const rows = list.querySelectorAll(':scope > .forwarding-item');
+    let empty = list.querySelector('.no-forwardings');
+    if (rows.length) {
+      if (empty) empty.remove();
+      return;
+    }
+    if (!empty) {
+      empty = document.createElement('p');
+      empty.className = 'no-forwardings';
+      empty.textContent = 'No hay reenvíos configurados.';
+      list.appendChild(empty);
+    }
+  }
+
+  function deleteForwardingAjax(form) {
+    if (!form) return;
+    const row = form.closest('.forwarding-item');
+    const label = row ? row.querySelector('.forwarding-info strong') : null;
+    const name = label ? label.textContent : 'esta dirección';
+    if (!confirm('¿Eliminar el reenvío para ' + name + '?\n\nTambién se borrarán del buzón los correos asociados a esta dirección.')) {
+      return;
+    }
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': buzonCsrfToken(),
+        'Accept': 'application/json'
+      },
+      body: new FormData(form)
+    })
+    .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+    .then(function(result) {
+      if (result.data && result.data.success) {
+        if (row) row.remove();
+        ensureEmptyForwardingNote();
+        if (typeof refreshSmtpAddressList === 'function') refreshSmtpAddressList();
+        showNotification(result.data.message || 'Dirección eliminada.', 'success');
+      } else {
+        showNotification((result.data && result.data.message) || 'No se pudo eliminar.', 'error');
+        if (btn) btn.disabled = false;
+      }
+    })
+    .catch(function() {
+      showNotification('Error de conexión al eliminar.', 'error');
+      if (btn) btn.disabled = false;
+    });
+  }
+  window.deleteForwardingAjax = deleteForwardingAjax;
 
   function refreshSmtpAddressList() {
     const list = document.getElementById('smtpAddressList');
@@ -2036,11 +2087,52 @@ function showNotification(message, type) {
     if (deleteForm) {
       deleteForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        if (confirm('¿Estás seguro de que deseas eliminar esta limpieza automática?')) {
-          deleteForm.submit();
-        }
+        deleteCleanupAjax(deleteForm);
       });
     }
+  }
+
+  function deleteCleanupAjax(form) {
+    if (!form) return;
+    const row = form.closest('.forwarding-item');
+    if (!confirm('¿Eliminar esta limpieza automática?')) return;
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': buzonCsrfToken(),
+        'Accept': 'application/json'
+      },
+      body: new FormData(form)
+    })
+    .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+    .then(function(result) {
+      if (result.data && result.data.success) {
+        if (row) row.remove();
+        const content = document.getElementById('email-cleanup-content');
+        if (content && !content.querySelector('.forwarding-item')) {
+          let empty = content.querySelector('.no-forwardings');
+          if (!empty) {
+            empty = document.createElement('p');
+            empty.className = 'no-forwardings';
+            empty.textContent = 'No hay limpiezas automáticas configuradas.';
+            const formEl = content.querySelector('form.create-server-form');
+            if (formEl) content.insertBefore(empty, formEl);
+            else content.appendChild(empty);
+          }
+        }
+        showNotification(result.data.message || 'Limpieza eliminada.', 'success');
+      } else {
+        showNotification((result.data && result.data.message) || 'No se pudo eliminar.', 'error');
+        if (btn) btn.disabled = false;
+      }
+    })
+    .catch(function() {
+      showNotification('Error de conexión al eliminar.', 'error');
+      if (btn) btn.disabled = false;
+    });
   }
 
   function appendCleanupRow(cleanup) {
@@ -2198,15 +2290,18 @@ function showNotification(message, type) {
     });
   });
 
-  // Event listeners para formularios de eliminación de reenvío
-  const deleteForwardingForms = document.querySelectorAll('.delete-forwarding-form');
-  deleteForwardingForms.forEach(form => {
+  // Eliminar reenvío vía AJAX (sin recargar)
+  document.querySelectorAll('.delete-forwarding-form').forEach(function(form) {
     form.addEventListener('submit', function(e) {
       e.preventDefault();
-      const sourceEmail = this.closest('.forwarding-item').querySelector('.forwarding-info strong').textContent;
-      if (confirm(`¿Estás seguro de que deseas eliminar el reenvío para ${sourceEmail}?`)) {
-        this.submit();
-      }
+      deleteForwardingAjax(form);
+    });
+  });
+
+  document.querySelectorAll('.delete-cleanup-form').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      deleteCleanupAjax(form);
     });
   });
 
@@ -2325,14 +2420,24 @@ function showNotification(message, type) {
 
 // Funciones para el modal de edición de reenvío
 function parseFolderKeys(raw) {
+  function isValidFolderKey(key) {
+    if (!key) return false;
+    if (key === 'inbox' || key === 'trash' || key === 'spam') return true;
+    return /^tag:\d+$/.test(key);
+  }
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw)) {
+    return raw.map(function(item) { return String(item || '').trim(); }).filter(isValidFolderKey);
+  }
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (Array.isArray(parsed)) {
+      return parsed.map(function(item) { return String(item || '').trim(); }).filter(isValidFolderKey);
+    }
   } catch (e) {
-    return String(raw).split(',').map(function(part) { return part.trim(); }).filter(Boolean);
+    /* fallback abajo */
   }
+  return String(raw).split(',').map(function(part) { return part.trim(); }).filter(isValidFolderKey);
 }
 
 function smtpFolderCatalog() {

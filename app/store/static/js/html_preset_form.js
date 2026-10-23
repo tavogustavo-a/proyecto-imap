@@ -67,12 +67,19 @@
     function renderMdpIconPreview(value, container) {
       if (!container) return;
       container.innerHTML = '';
-      if (value && value.indexOf('fa:') === 0) {
+      if (!value || value === 'none') {
+        var noneMark = document.createElement('span');
+        noneMark.className = 'mdp-icon-none';
+        noneMark.textContent = '∅';
+        container.appendChild(noneMark);
+        return;
+      }
+      if (value.indexOf('fa:') === 0) {
         var icon = document.createElement('i');
         icon.className = 'fas fa-' + value.slice(3);
         container.appendChild(icon);
       } else {
-        container.textContent = value || '👑';
+        container.textContent = value;
       }
     }
 
@@ -84,13 +91,48 @@
       var panel = root.querySelector('[data-mdp-icon-panel]');
       var preview = root.querySelector('[data-mdp-icon-preview]');
       if (!input || !trigger || !panel || !preview) return;
+      var backdrop = null;
+      var panelHome = panel.parentNode;
+
+      function removeBackdrop() {
+        if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        backdrop = null;
+      }
+
+      function restorePanel() {
+        if (panelHome && panel.parentNode !== panelHome) {
+          panelHome.appendChild(panel);
+        }
+      }
 
       function closePanel() {
         panel.classList.add('hidden');
         trigger.setAttribute('aria-expanded', 'false');
+        removeBackdrop();
+        restorePanel();
       }
 
       function openPanel() {
+        document.querySelectorAll('[data-mdp-icon-panel]:not(.hidden)').forEach(function(other) {
+          if (other === panel) return;
+          other.classList.add('hidden');
+          var otherRoot = other.closest('[data-mdp-icon-picker]');
+          if (otherRoot && other.parentNode === document.body && otherRoot !== root) {
+            otherRoot.appendChild(other);
+          }
+        });
+        document.querySelectorAll('.mdp-icon-picker-backdrop').forEach(function(el) {
+          if (el.parentNode) el.parentNode.removeChild(el);
+        });
+        backdrop = document.createElement('div');
+        backdrop.className = 'mdp-icon-picker-backdrop';
+        backdrop.setAttribute('aria-hidden', 'true');
+        backdrop.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          closePanel();
+        });
+        document.body.appendChild(backdrop);
+        document.body.appendChild(panel);
         panel.classList.remove('hidden');
         trigger.setAttribute('aria-expanded', 'true');
       }
@@ -111,13 +153,14 @@
       });
 
       panel.addEventListener('click', function(ev) {
+        ev.stopPropagation();
         var option = ev.target.closest('[data-mdp-icon-value]');
         if (!option || !panel.contains(option)) return;
-        setIcon(option.getAttribute('data-mdp-icon-value') || '👑');
+        setIcon(option.getAttribute('data-mdp-icon-value') || 'none');
       });
 
-      document.addEventListener('click', function(ev) {
-        if (!root.contains(ev.target)) closePanel();
+      document.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Escape' && !panel.classList.contains('hidden')) closePanel();
       });
 
       renderMdpIconPreview(input.value || '👑', preview);

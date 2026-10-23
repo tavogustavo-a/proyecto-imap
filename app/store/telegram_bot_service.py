@@ -1459,7 +1459,9 @@ _FA_ICON_MARK = {
 
 
 def _medios_pago_icon_text(icon: str | None) -> str:
-    value = (icon or '').strip() or '👑'
+    value = (icon or '').strip()
+    if not value or value == 'none':
+        return ''
     if value.startswith('fa:'):
         return _FA_ICON_MARK.get(value[3:].strip(), '')
     return value

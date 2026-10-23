@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261021-como-trabajo">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261023-ct-nolabels">
 {% endblock %}
 
 {% block content %}
@@ -140,6 +140,6 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('store_bp.static', filename='js/edit_html_users.js') }}?v=20261019-usuario" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/html_preset_form.js') }}?v=20261021-como-trabajo" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/html_preset_form.js') }}?v=20261023-ct-editor2" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/public_link_toggle.js') }}?v=20261019-publico" defer></script>
 {% endblock %} 

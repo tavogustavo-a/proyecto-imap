@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261018-tag-scroll">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261023-fwd-btns">
 {% endblock %}
 
 {% block content %}
@@ -152,7 +152,7 @@
               data-destination="{{ forwarding.destination_email }}" 
               data-enabled="{{ forwarding.enabled|lower }}"
               data-title="{{ forwarding.title or '' }}"
-              data-folders="{{ forwarding.stored_folder_keys()|tojson if forwarding.stored_folder_keys() else '' }}"
+              data-folders='{{ forwarding.stored_folder_keys()|tojson }}'
               title="Editar"
               aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
       {% call state_switch(forwarding.enabled, 'forwarding-toggle-btn') %}data-forwarding-id="{{ forwarding.id }}" data-enabled="{{ 'true' if forwarding.enabled else 'false' }}"{% endcall %}
@@ -827,7 +827,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261018-address-pages" defer></script>
+  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261023-del-ajax" defer></script>
   <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
