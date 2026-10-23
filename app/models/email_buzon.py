@@ -159,6 +159,13 @@ class ReceivedEmail(db.Model):
     processed = db.Column(db.Boolean, default=False, index=True)
     message_id = db.Column(db.String(255), unique=True)
     buzon_server_id = db.Column(db.Integer, db.ForeignKey('email_buzon_servers.id', ondelete='SET NULL'), nullable=True)
+    # Dirección SMTP configurada que recibió el correo (CASCADE al borrar el reenvío)
+    forwarding_id = db.Column(
+        db.Integer,
+        db.ForeignKey('email_forwarding.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     
     # Campos para papelera
     deleted = db.Column(db.Boolean, default=False, index=True)
@@ -166,6 +173,10 @@ class ReceivedEmail(db.Model):
     
     # Relación con el servidor de buzón
     buzon_server = db.relationship('EmailBuzonServer', backref='received_emails')
+    forwarding = db.relationship(
+        'EmailForwarding',
+        backref=db.backref('received_emails', lazy='dynamic', passive_deletes=True),
+    )
     
     # Relación many-to-many con etiquetas
     tags = db.relationship('EmailTag', secondary=email_tags, backref='emails')

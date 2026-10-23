@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261023-fwd-btns">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261023-linkify">
 {% endblock %}
 
 {% block content %}
@@ -827,7 +827,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261023-del-ajax" defer></script>
+  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261023-linkify" defer></script>
   <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

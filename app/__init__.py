@@ -122,6 +122,110 @@ def create_app(config_class_passed=None):
                     app.logger.info(
                         "Esquema: columna original_to_email añadida a received_emails"
                     )
+                    col_names = {c["name"] for c in insp.get_columns("received_emails")}
+                if "forwarding_id" not in col_names:
+                    db.session.execute(
+                        text(
+                            "ALTER TABLE received_emails ADD COLUMN forwarding_id INTEGER"
+                        )
+                    )
+                    db.session.commit()
+                    app.logger.info(
+                        "Esquema: columna forwarding_id añadida a received_emails"
+                    )
+                    col_names = {c["name"] for c in insp.get_columns("received_emails")}
+                if "forwarding_id" in col_names and insp.has_table("email_forwarding"):
+                    dialect = (getattr(db.engine.dialect, "name", "") or "").lower()
+                    try:
+                        if dialect in ("postgresql", "postgres"):
+                            db.session.execute(
+                                text(
+                                    """
+                                    UPDATE received_emails AS re
+                                    SET forwarding_id = ef.id
+                                    FROM email_forwarding AS ef
+                                    WHERE re.forwarding_id IS NULL
+                                      AND ef.source_email IS NOT NULL
+                                      AND (
+                                        lower(trim(re.to_email)) = lower(trim(ef.source_email))
+                                        OR (
+                                          re.original_to_email IS NOT NULL
+                                          AND lower(trim(re.original_to_email))
+                                            = lower(trim(ef.source_email))
+                                        )
+                                      )
+                                    """
+                                )
+                            )
+                        else:
+                            db.session.execute(
+                                text(
+                                    """
+                                    UPDATE received_emails
+                                    SET forwarding_id = (
+                                      SELECT ef.id FROM email_forwarding ef
+                                      WHERE ef.source_email IS NOT NULL
+                                        AND (
+                                          lower(trim(received_emails.to_email))
+                                            = lower(trim(ef.source_email))
+                                          OR (
+                                            received_emails.original_to_email IS NOT NULL
+                                            AND lower(trim(received_emails.original_to_email))
+                                              = lower(trim(ef.source_email))
+                                          )
+                                        )
+                                      LIMIT 1
+                                    )
+                                    WHERE forwarding_id IS NULL
+                                    """
+                                )
+                            )
+                        db.session.commit()
+                    except Exception as backfill_err:
+                        db.session.rollback()
+                        app.logger.warning(
+                            "Backfill forwarding_id en received_emails: %s", backfill_err
+                        )
+                    try:
+                        insp = inspect(db.engine)
+                        fks = insp.get_foreign_keys("received_emails")
+                        has_fwd_fk = any(
+                            (fk.get("referred_table") == "email_forwarding")
+                            and ("forwarding_id" in (fk.get("constrained_columns") or []))
+                            for fk in fks
+                        )
+                        if not has_fwd_fk and dialect in ("postgresql", "postgres"):
+                            db.session.execute(
+                                text(
+                                    "ALTER TABLE received_emails "
+                                    "ADD CONSTRAINT fk_received_emails_forwarding_id "
+                                    "FOREIGN KEY (forwarding_id) "
+                                    "REFERENCES email_forwarding(id) ON DELETE CASCADE"
+                                )
+                            )
+                            db.session.commit()
+                            app.logger.info(
+                                "Esquema: FK CASCADE received_emails.forwarding_id → email_forwarding"
+                            )
+                        idxs = {
+                            ix.get("name")
+                            for ix in insp.get_indexes("received_emails")
+                            if ix.get("name")
+                        }
+                        if "ix_received_emails_forwarding_id" not in idxs:
+                            db.session.execute(
+                                text(
+                                    "CREATE INDEX IF NOT EXISTS "
+                                    "ix_received_emails_forwarding_id "
+                                    "ON received_emails (forwarding_id)"
+                                )
+                            )
+                            db.session.commit()
+                    except Exception as fk_err:
+                        db.session.rollback()
+                        app.logger.warning(
+                            "FK/index forwarding_id en received_emails: %s", fk_err
+                        )
             if insp.has_table("email_forwarding"):
                 fwd_cols = {c["name"] for c in insp.get_columns("email_forwarding")}
                 if "title" not in fwd_cols:

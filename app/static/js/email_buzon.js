@@ -74,7 +74,7 @@ function viewEmail(emailId) {
         const textContent = (email.content_text && email.content_text.trim())
           ? email.content_text
           : 'Sin contenido de texto';
-        textEl.textContent = textContent;
+        textEl.innerHTML = linkifyEmailPlainText(textContent);
 
         const hasHtml = email.content_html && String(email.content_html).trim();
 
@@ -598,6 +598,47 @@ function contextDelete() {
 }
 
 // Función para escapar HTML
+/** Convierte URLs http(s) del texto plano en enlaces (incl. confirmación Gmail /mail/vf-...). */
+function linkifyEmailPlainText(text) {
+  const raw = String(text || '');
+  if (!raw) return '';
+  // Permite %XX y caracteres típicos de vf- de Gmail; corta puntuación final suelta.
+  const urlRe = /https?:\/\/[^\s<>"']+/gi;
+  let out = '';
+  let last = 0;
+  let match;
+  while ((match = urlRe.exec(raw)) !== null) {
+    out += escapeHtml(raw.slice(last, match.index));
+    let url = match[0];
+    // Quitar puntuación de cierre habitual pegada al final
+    let trailing = '';
+    while (/[.,;:!?)]+$/.test(url) && !/%[0-9A-Fa-f]{2}$/.test(url)) {
+      trailing = url.slice(-1) + trailing;
+      url = url.slice(0, -1);
+    }
+    // Paréntesis/corchetes de cierre sin apertura en la URL
+    while (
+      (url.endsWith(')') && (url.match(/\(/g) || []).length < (url.match(/\)/g) || []).length) ||
+      (url.endsWith(']') && (url.match(/\[/g) || []).length < (url.match(/\]/g) || []).length)
+    ) {
+      trailing = url.slice(-1) + trailing;
+      url = url.slice(0, -1);
+    }
+    const safeHref = escapeHtml(url);
+    out +=
+      '<a href="' +
+      safeHref +
+      '" target="_blank" rel="noopener noreferrer" class="email-plain-link">' +
+      safeHref +
+      '</a>';
+    out += escapeHtml(trailing);
+    last = match.index + match[0].length;
+  }
+  out += escapeHtml(raw.slice(last));
+  // El panel usa white-space: pre-wrap; no hace falta <br>
+  return out;
+}
+
 function escapeHtml(text) {
   if (!text) return '';
   const div = document.createElement('div');

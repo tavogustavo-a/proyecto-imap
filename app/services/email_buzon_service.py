@@ -155,25 +155,58 @@ def process_incoming_email(raw_email_data, buzon_server_id=None):
             )
             return None  # No guardar en la base de datos
         
+        to_addr = parsed_email.get('to', '')
+        forwarding_id = None
+        try:
+            from app.models.email_forwarding import EmailForwarding
+            from sqlalchemy import func
+
+            to_norm = (to_addr or '').strip().lower()
+            if to_norm and '@' in to_norm:
+                fwd = (
+                    EmailForwarding.query.filter(
+                        EmailForwarding.source_email.isnot(None),
+                        func.lower(func.trim(EmailForwarding.source_email)) == to_norm,
+                    ).first()
+                )
+                if fwd:
+                    forwarding_id = fwd.id
+        except Exception:
+            forwarding_id = None
+
         # Crear registro en la base de datos
         received_email = ReceivedEmail(
             from_email=from_email,
-            to_email=parsed_email.get('to', ''),
+            to_email=to_addr,
             subject=parsed_email.get('subject', ''),
             content_text=parsed_email.get('text', ''),
             content_html=parsed_email.get('html', ''),
             message_id=parsed_email.get('message_id', ''),
             buzon_server_id=buzon_server_id,
+            forwarding_id=forwarding_id,
             processed=False
         )
         
         db.session.add(received_email)
         db.session.commit()
-        
+
+        if forwarding_id:
+            try:
+                from app.models.email_forwarding import EmailForwarding
+
+                fwd = EmailForwarding.query.get(forwarding_id)
+                if fwd:
+                    apply_forwarding_folder_routing(received_email, fwd)
+            except Exception:
+                logger.exception(
+                    '[buzón] apply_forwarding_folder_routing falló (incoming id=%s)',
+                    getattr(received_email, 'id', None),
+                )
+
         # Aplicar solo filtros manuales configurados por el usuario
         from app.services.email_filter_service import auto_tag_email
         auto_tag_email(received_email)
-        
+
         return received_email
         
     except Exception:
@@ -262,16 +295,20 @@ def process_smtp_email(email_data):
             content_text=email_data.get('body', email_data.get('text', '')),
             content_html=email_data.get('html', ''),
             message_id=email_data.get('message_id', f"smtp-{hash(str(email_data))}"),
+            forwarding_id=configured_forwarding.id,
             processed=False
         )
         
         db.session.add(received_email)
         db.session.commit()
-        
-        # Aplicar solo filtros manuales configurados por el usuario
+
+        # Carpetas de la dirección SMTP (etiqueta / spam / papelera; sin inbox → no Recibidos)
+        apply_forwarding_folder_routing(received_email, configured_forwarding)
+
+        # Filtros manuales adicionales del usuario
         from app.services.email_filter_service import auto_tag_email
         auto_tag_email(received_email)
-        
+
         return received_email
         
     except Exception:
@@ -283,15 +320,68 @@ def process_smtp_email(email_data):
         return None
 
 
+def apply_forwarding_folder_routing(email, forwarding):
+    """
+    Enruta un correo nuevo según las carpetas de la dirección SMTP.
+
+    - tag:<id> / spam → etiqueta el correo (sale de Recibidos).
+    - trash → lo mueve a papelera.
+    - solo inbox (o sin carpetas guardadas) → queda en Recibidos (sin etiquetas).
+    """
+    if email is None or forwarding is None:
+        return []
+
+    from datetime import datetime
+
+    from app.models import EmailTag
+    from app.services.email_tag_service import get_or_create_spam_tag
+
+    keys = forwarding.stored_folder_keys()
+    if keys is None:
+        # Dirección antigua sin carpetas configuradas → Recibidos
+        return []
+
+    applied = []
+    for key in keys:
+        key = str(key or '').strip()
+        if not key or key == 'inbox':
+            continue
+        if key == 'trash':
+            email.deleted = True
+            if not email.deleted_at:
+                email.deleted_at = datetime.utcnow()
+            applied.append('trash')
+            continue
+        tag = None
+        if key == 'spam':
+            tag = get_or_create_spam_tag()
+        elif key.startswith('tag:') and key[4:].isdigit():
+            tag = EmailTag.query.get(int(key[4:]))
+        if tag is not None and tag not in email.tags:
+            email.tags.append(tag)
+            applied.append(f'tag:{tag.id}')
+
+    if applied:
+        db.session.commit()
+        logger.info(
+            '[buzón] Enrutado por carpetas SMTP forwarding_id=%s → %s',
+            forwarding.id,
+            applied,
+        )
+    return applied
+
+
 def cascade_delete_received_emails_for_forwarding(forwarding):
     """
     Al eliminar un reenvío, borra ReceivedEmail asociados.
 
-    - source_email concreto: borra correos cuyo to_email coincide (sin distinguir mayúsculas).
-    - Fila legada sin source (None): mismo criterio que antes si quedan otras filas con/sin catch-all.
+    Preferencia:
+    1) Filas con forwarding_id (FK ON DELETE CASCADE también limpia restos).
+    2) Legacy: match por to_email / original_to_email (sin forwarding_id).
+    3) Catch-all legado (source_email None) como antes.
     """
     from app.models.email_forwarding import EmailForwarding
-    from sqlalchemy import func
+    from sqlalchemy import func, or_
 
     fid = forwarding.id
     src = forwarding.source_email
@@ -300,28 +390,47 @@ def cascade_delete_received_emails_for_forwarding(forwarding):
     def norm(s):
         return (s or "").strip().lower()
 
+    seen_ids = set()
     to_delete = []
+
+    def _collect(rows):
+        for email in rows:
+            if email.id in seen_ids:
+                continue
+            seen_ids.add(email.id)
+            to_delete.append(email)
+
+    _collect(ReceivedEmail.query.filter(ReceivedEmail.forwarding_id == fid).all())
 
     if src is not None:
         n = norm(src)
-        to_delete = (
+        _collect(
             ReceivedEmail.query.filter(
-                func.lower(func.trim(ReceivedEmail.to_email)) == n
+                ReceivedEmail.forwarding_id.is_(None),
+                or_(
+                    func.lower(func.trim(ReceivedEmail.to_email)) == n,
+                    func.lower(func.trim(ReceivedEmail.original_to_email)) == n,
+                ),
             ).all()
         )
     else:
         still_catch_all = any(f.source_email is None for f in others)
         if still_catch_all:
-            return 0
-        specifics = {norm(f.source_email) for f in others if f.source_email}
-        if not specifics:
-            to_delete = ReceivedEmail.query.all()
+            # Solo los ya vinculados por FK a este catch-all (si los hay)
+            pass
         else:
-            to_delete = (
-                ReceivedEmail.query.filter(
-                    ~func.lower(func.trim(ReceivedEmail.to_email)).in_(list(specifics))
-                ).all()
-            )
+            specifics = {norm(f.source_email) for f in others if f.source_email}
+            if not specifics:
+                _collect(
+                    ReceivedEmail.query.filter(ReceivedEmail.forwarding_id.is_(None)).all()
+                )
+            else:
+                _collect(
+                    ReceivedEmail.query.filter(
+                        ReceivedEmail.forwarding_id.is_(None),
+                        ~func.lower(func.trim(ReceivedEmail.to_email)).in_(list(specifics)),
+                    ).all()
+                )
 
     count = 0
     for email in to_delete:

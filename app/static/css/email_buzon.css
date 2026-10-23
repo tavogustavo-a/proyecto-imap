@@ -1133,6 +1133,11 @@ form {
   line-height: 1.2;
 }
 
+.smtp-address-add .smtp-folder-preview,
+.cleanup-create-form .smtp-folder-preview {
+  text-align: center;
+}
+
 .smtp-address-add .create-server-fields button.smtp-folder-select,
 .cleanup-create-form .create-server-fields button.smtp-folder-select,
 .edit-form-group button.smtp-folder-select {
@@ -1149,7 +1154,7 @@ form {
   max-height: 2.45rem;
   margin: 0 !important;
   padding: 0 1.8rem 0 0.7rem !important;
-  border: 2px solid #111 !important;
+  border: 1.5px solid #111 !important;
   border-radius: 6px !important;
   background: #fff !important;
   color: #111 !important;
@@ -1158,6 +1163,12 @@ form {
   line-height: 1.2;
   cursor: pointer;
   flex: none;
+}
+
+.smtp-address-add .create-server-fields button.smtp-folder-select,
+.cleanup-create-form .create-server-fields button.smtp-folder-select {
+  justify-content: center !important;
+  padding: 0 1.8rem !important;
 }
 
 .smtp-folder-select .fa-chevron-down {
@@ -1295,8 +1306,9 @@ form {
   width: 100% !important;
   max-width: 100%;
   padding: 0 0.7rem;
-  border: 2px solid #111 !important;
+  border: 1.5px solid #111 !important;
   line-height: 1.2;
+  text-align: center;
 }
 
 .smtp-address-add .create-server-field input:focus {
@@ -1340,8 +1352,9 @@ form {
   width: 100% !important;
   max-width: 100%;
   padding: 0 0.55rem;
-  border: 2px solid #111 !important;
+  border: 1.5px solid #111 !important;
   background: #fff;
+  text-align: center;
 }
 
 .cleanup-create-form .create-server-fields button {
@@ -1357,7 +1370,11 @@ form {
   padding: 0 1.8rem 0 0.7rem !important;
   background: #fff !important;
   color: #111 !important;
-  border: 2px solid #111 !important;
+  border: 1.5px solid #111 !important;
+}
+
+.cleanup-create-form .create-server-fields button.smtp-folder-select {
+  padding: 0 1.8rem !important;
 }
 
 /* Estilos para formularios inline */
@@ -2937,6 +2954,17 @@ form {
   font-family: ui-monospace, "Cascadia Code", "Courier New", monospace;
   font-size: 13px;
   line-height: 1.45;
+}
+
+#viewEmailModal .email-tab-plain a.email-plain-link {
+  color: #1565c0;
+  text-decoration: underline;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+#viewEmailModal .email-tab-plain a.email-plain-link:hover {
+  color: #0d47a1;
 }
 
 #viewEmailModal .email-tab-html {
