@@ -350,6 +350,11 @@ function initBuscadorHerramientas() {
       }
     });
   }
+
+  function updateClearBtnVisibility() {
+    if (!clearBtn || !searchInput) return;
+    clearBtn.classList.toggle('show', !!searchInput.value.trim());
+  }
   
   if (form) {
     form.addEventListener('submit', function(e) {
@@ -358,17 +363,21 @@ function initBuscadorHerramientas() {
   }
 
   if (searchInput) {
-    // Event listeners optimizados para el buscador
-    searchInput.addEventListener('input', filtrar, { passive: true });
+    searchInput.addEventListener('input', function() {
+      filtrar();
+      updateClearBtnVisibility();
+    }, { passive: true });
     searchInput.addEventListener('touchstart', function() {
       // Permitir que el input se enfoque normalmente
     }, { passive: true });
+    updateClearBtnVisibility();
   }
 
   if (clearBtn) {
     clearBtn.addEventListener('click', function() {
       searchInput.value = '';
       filtrar();
+      updateClearBtnVisibility();
       searchInput.focus();
     }, { passive: true });
     
@@ -1866,7 +1875,7 @@ function optimizeYouTubeEventListeners() {
 setupGlobalTouchInterceptor();
 interceptYouTubeScripts();
 
-document.addEventListener('DOMContentLoaded', function() {
+function initHerramientasPage() {
   initMenuTienda();
   initAccordionHerramientas();
   initBuscadorHerramientas();
@@ -1883,36 +1892,14 @@ document.addEventListener('DOMContentLoaded', function() {
   initChatbotIAForm();
   initGenericaForm();
   initHttpApiForm();
-  
-  // Aplicar optimizaciones adicionales
-  addOptimizedEventListeners();
-  
-  // Configurar observer para iframes dinámicos
-  setupIframeObserver();
-  
-  // Optimizar event listeners de YouTube después de un delay
-  setTimeout(() => {
-    optimizeYouTubeEventListeners();
-  }, 1000);
-  
-  // Iniciar corrector de labels de YouTube
-  startYouTubeLabelFixer();
-  
-  // Suprimir errores de CORS de YouTube en la consola
-  window.addEventListener('error', function(e) {
-    if (e.message && (e.message.includes('CORS') || e.message.includes('cross-origin') || e.message.includes('youtube'))) {
-      e.preventDefault();
-      return false;
-    }
-  });
-  
-  // Suprimir errores de promesas rechazadas relacionados con CORS
-  window.addEventListener('unhandledrejection', function(e) {
-    if (e.reason && e.reason.message && (e.reason.message.includes('CORS') || e.reason.message.includes('cross-origin'))) {
-      e.preventDefault();
-      return false;
-    }
-  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.requestIdleCallback) {
+    requestIdleCallback(initHerramientasPage, { timeout: 150 });
+  } else {
+    setTimeout(initHerramientasPage, 0);
+  }
 }); 
 
 // ============================================================================

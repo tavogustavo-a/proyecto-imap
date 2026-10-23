@@ -234,20 +234,42 @@ def link_service_ajax():
 
         srv = ServiceModel.query.get_or_404(service_id)
 
-        if regex_id:
-            rx = RegexModel.query.get_or_404(regex_id)
-            if rx not in srv.regexes:
-                srv.regexes.append(rx)
-                db.session.commit()
-            return jsonify({"status": "ok", "message": "Regex vinculado"}), 200
-        elif filter_id:
-            ft = FilterModel.query.get_or_404(filter_id)
-            if ft not in srv.filters:
-                srv.filters.append(ft)
-                db.session.commit()
-            return jsonify({"status": "ok", "message": "Filtro vinculado"}), 200
-        else:
-            return jsonify({"status": "error", "message": "No se indicó regex_id o filter_id."}), 400
+        regex_ids = data.get("regex_ids")
+        filter_ids = data.get("filter_ids")
+        if regex_ids is None and regex_id:
+            regex_ids = [regex_id]
+        if filter_ids is None and filter_id:
+            filter_ids = [filter_id]
+
+        if regex_ids is not None:
+            linked = 0
+            for raw_id in regex_ids:
+                try:
+                    rid = int(raw_id)
+                except (TypeError, ValueError):
+                    continue
+                rx = RegexModel.query.get(rid)
+                if rx and rx not in srv.regexes:
+                    srv.regexes.append(rx)
+                    linked += 1
+            db.session.commit()
+            return jsonify({"status": "ok", "message": f"{linked} regex vinculado(s)", "linked": linked}), 200
+
+        if filter_ids is not None:
+            linked = 0
+            for raw_id in filter_ids:
+                try:
+                    fid = int(raw_id)
+                except (TypeError, ValueError):
+                    continue
+                ft = FilterModel.query.get(fid)
+                if ft and ft not in srv.filters:
+                    srv.filters.append(ft)
+                    linked += 1
+            db.session.commit()
+            return jsonify({"status": "ok", "message": f"{linked} filtro(s) vinculado(s)", "linked": linked}), 200
+
+        return jsonify({"status": "error", "message": "No se indicó regex_id(s) o filter_id(s)."}), 400
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
@@ -267,14 +289,14 @@ def unlink_service_ajax():
             if f in srv.filters:
                 srv.filters.remove(f)
                 db.session.commit()
-            return jsonify({"status": "ok", "message": "Filtro desvinculado."}), 200
+            return _refresh_services()
 
         if regex_id:
             r = RegexModel.query.get_or_404(regex_id)
             if r in srv.regexes:
                 srv.regexes.remove(r)
                 db.session.commit()
-            return jsonify({"status": "ok", "message": "Regex desvinculado."}), 200
+            return _refresh_services()
 
         return jsonify({"status": "error", "message": "No se indicó filter_id ni regex_id."}), 400
     except Exception as e:
@@ -496,7 +518,7 @@ def delete_alias_icon_ajax():
         ai = AliasIcon.query.get_or_404(icon_id)
         db.session.delete(ai)
         db.session.commit()
-        return jsonify({"status": "ok", "message": "Ícono de alias eliminado."}), 200
+        return _refresh_services()
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 

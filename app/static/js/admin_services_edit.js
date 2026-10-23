@@ -19,6 +19,202 @@ document.addEventListener("DOMContentLoaded", function() {
     // Los colores de alias ahora se manejan centralmente en services.html
 
     // Las vistas previas de colores de servicios se manejan en services.html
+
+    const editServiceAliasesContainer = document.getElementById("editServiceAliasesContainer");
+    const editServiceDescripcionesCard = document.getElementById("editServiceDescripcionesCard");
+    const editServiceConfirmOverlay = document.getElementById("editServiceConfirmOverlay");
+    const editServiceConfirmPopup = document.getElementById("editServiceConfirmPopup");
+    const editServiceConfirmCancelBtn = document.getElementById("editServiceConfirmCancelBtn");
+    const editServiceConfirmAcceptBtn = document.getElementById("editServiceConfirmAcceptBtn");
+    let pendingConfirmAction = null;
+    let lastConfirmTrigger = null;
+
+    function openEditServiceConfirm(onAccept, triggerEl) {
+      pendingConfirmAction = typeof onAccept === "function" ? onAccept : null;
+      lastConfirmTrigger =
+        triggerEl && typeof triggerEl.focus === "function" ? triggerEl : null;
+      if (editServiceConfirmOverlay) {
+        editServiceConfirmOverlay.classList.remove("modal-hidden");
+        editServiceConfirmOverlay.classList.add("modal-visible");
+        editServiceConfirmOverlay.setAttribute("aria-hidden", "false");
+        editServiceConfirmOverlay.removeAttribute("inert");
+      }
+      if (editServiceConfirmPopup) {
+        editServiceConfirmPopup.classList.remove("modal-hidden");
+        editServiceConfirmPopup.classList.add("modal-visible");
+      }
+      window.requestAnimationFrame(() => {
+        if (editServiceConfirmCancelBtn) editServiceConfirmCancelBtn.focus();
+      });
+    }
+
+    function closeEditServiceConfirm() {
+      const action = pendingConfirmAction;
+      const restoreFocusEl = lastConfirmTrigger;
+      pendingConfirmAction = null;
+      lastConfirmTrigger = null;
+
+      const active = document.activeElement;
+      if (
+        active &&
+        editServiceConfirmOverlay &&
+        editServiceConfirmOverlay.contains(active)
+      ) {
+        active.blur();
+      }
+
+      if (editServiceConfirmOverlay) {
+        editServiceConfirmOverlay.classList.add("modal-hidden");
+        editServiceConfirmOverlay.classList.remove("modal-visible");
+        editServiceConfirmOverlay.setAttribute("aria-hidden", "true");
+        editServiceConfirmOverlay.setAttribute("inert", "");
+      }
+      if (editServiceConfirmPopup) {
+        editServiceConfirmPopup.classList.add("modal-hidden");
+        editServiceConfirmPopup.classList.remove("modal-visible");
+      }
+
+      if (restoreFocusEl && document.contains(restoreFocusEl)) {
+        try {
+          restoreFocusEl.focus({ preventScroll: true });
+        } catch (err) {
+          restoreFocusEl.focus();
+        }
+      }
+
+      return action;
+    }
+
+    function requestEditServiceConfirm(onAccept, triggerEl) {
+      openEditServiceConfirm(onAccept, triggerEl);
+    }
+
+    if (editServiceConfirmCancelBtn) {
+      editServiceConfirmCancelBtn.addEventListener("click", () => {
+        closeEditServiceConfirm();
+      });
+    }
+    if (editServiceConfirmAcceptBtn) {
+      editServiceConfirmAcceptBtn.addEventListener("click", () => {
+        const action = closeEditServiceConfirm();
+        if (action) action();
+      });
+    }
+    if (editServiceConfirmOverlay) {
+      editServiceConfirmOverlay.addEventListener("mousedown", (e) => {
+        if (e.target === editServiceConfirmOverlay) closeEditServiceConfirm();
+      });
+    }
+
+    function removeLinkedListItem(triggerBtn, listId, emptyMessage) {
+      const li = triggerBtn && triggerBtn.closest(".edit-service-linked-item");
+      if (li) li.remove();
+      const list = document.getElementById(listId);
+      if (list && !list.querySelector(".edit-service-linked-item")) {
+        list.innerHTML = `<li>${emptyMessage}</li>`;
+      }
+    }
+
+    function escapeHtml(text) {
+      if (text == null) return "";
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function getCurrentEditServiceId() {
+      if (editServiceDescripcionesCard && editServiceDescripcionesCard.dataset.serviceId) {
+        return parseInt(editServiceDescripcionesCard.dataset.serviceId, 10);
+      }
+      const openBtn = document.querySelector(".open-alias-popup");
+      if (openBtn && openBtn.getAttribute("data-service-id")) {
+        return parseInt(openBtn.getAttribute("data-service-id"), 10);
+      }
+      return null;
+    }
+
+    function applyAliasBorders(root) {
+      const scope = root || document;
+      scope.querySelectorAll(".alias-list-item").forEach((item) => {
+        const color = item.dataset.borderColor;
+        if (color) {
+          try {
+            if (/^#[0-9A-Fa-f]{3,6}$/.test(color) || /^(rgb|rgba|hsl|hsla)\(/.test(color)) {
+              item.style.setProperty("--alias-border-color", color);
+            } else {
+              item.style.setProperty("--alias-border-color", "#ccc");
+            }
+          } catch (e) {
+            item.style.setProperty("--alias-border-color", "#ccc");
+          }
+        } else {
+          item.style.setProperty("--alias-border-color", "#ccc");
+        }
+        item.classList.add("alias-item-border");
+      });
+    }
+
+    function renderAliasIconsInline(aliasIcons) {
+      if (!aliasIcons || !aliasIcons.length) return "";
+      return aliasIcons
+        .map(
+          (ai) => `
+                <span class="service-icon-wrapper">
+                  <img src="${decideIconPath(ai.icon_name)}" alt="" class="service-icon-img">
+                  <button type="button" class="delete-service-icon delete-service-icon-btn delete-alias-icon" data-icon-id="${ai.id}" title="Quitar icono" aria-label="Quitar icono">&times;</button>
+                </span>
+              `
+        )
+        .join("");
+    }
+
+    function renderDescriptionsList(aliases) {
+      if (!editServiceAliasesContainer) return;
+      if (!aliases || !aliases.length) {
+        editServiceAliasesContainer.innerHTML =
+          '<p class="edit-service-descripciones-empty text-center">(No hay descripciones creadas para este servicio)</p>';
+        return;
+      }
+      let html = '<ul class="list-unstyled" id="editServiceAliasesList">';
+      aliases.forEach((al) => {
+        const borderColor = escapeHtml(al.alias_color || "#000000");
+        const name = escapeHtml(al.alias_name || "");
+        const iconsInlineHtml = renderAliasIconsInline(al.alias_icons);
+        html += `
+          <li class="alias-list-item alias-card" data-border-color="${borderColor}">
+            <div><strong>${name}</strong></div>
+            <div class="mt-075 alias-action-buttons">
+              <button type="button" class="edit-alias-btn btn-small btn-edit-alias row-icon-btn btn-orange" data-alias-id="${al.id}" data-alias-name="${name}" data-alias-color="${borderColor}" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></button>
+              <button type="button" class="btn-panel btn-red btn-sm delete-alias-btn" data-alias-id="${al.id}" title="Eliminar">
+                <i class="fas fa-trash"></i>
+              </button>
+              <button type="button" class="add-alias-icon-btn btn-small btn-add-icon" data-alias-id="${al.id}">+Icon</button>
+              ${iconsInlineHtml ? `<span class="alias-attached-icons-inline">${iconsInlineHtml}</span>` : ""}
+            </div>
+          </li>
+        `;
+      });
+      html += "</ul>";
+      editServiceAliasesContainer.innerHTML = html;
+      applyAliasBorders(editServiceAliasesContainer);
+    }
+
+    function updateDescriptionsFromServicesPayload(data) {
+      if (!data || data.status !== "ok" || !Array.isArray(data.services)) return;
+      const serviceId = getCurrentEditServiceId();
+      if (!serviceId) return;
+      const svc = data.services.find((s) => s.id === serviceId);
+      renderDescriptionsList(svc ? svc.aliases || [] : []);
+    }
+
+    function closeAliasIconGrid() {
+      if (aliasIconGridOverlay) aliasIconGridOverlay.classList.remove("popup-visible");
+      const container = document.getElementById("aliasIconGridContainer");
+      if (container) container.classList.remove("popup-visible");
+      currentAliasIdForIcons = null;
+    }
   
     if(aliasCreateBtn && aliasCancelBtn && aliasPopup){
       aliasCreateBtn.addEventListener("click",()=>{
@@ -49,9 +245,10 @@ document.addEventListener("DOMContentLoaded", function() {
               if (aliasPopup) {
                 aliasPopup.classList.remove("modal-visible");
                 aliasPopup.classList.add("modal-hidden");
-              } 
+              }
+              if (aliasNameInput) aliasNameInput.value = "";
               currentServiceIdForAlias=null;
-              location.reload();
+              updateDescriptionsFromServicesPayload(data);
             } else {
               alert("Error: "+data.message);
             }
@@ -92,8 +289,12 @@ document.addEventListener("DOMContentLoaded", function() {
           .then(r=>r.json())
           .then(data=>{
             if(data.status==="ok"){
-              if (editAliasPopup) editAliasPopup.classList.remove('popup-visible'); 
-              location.reload();
+              if (editAliasPopup) {
+                editAliasPopup.classList.remove("popup-visible");
+                editAliasPopup.classList.add("modal-hidden");
+              }
+              if (editAliasName) editAliasName.value = "";
+              updateDescriptionsFromServicesPayload(data);
             } else {
               alert("Error: "+data.message);
             }
@@ -122,7 +323,7 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(r=>r.json())
         .then(data=>{
           if(data.status==="ok"){
-            location.reload();
+            updateDescriptionsFromServicesPayload(data);
           } else {
             alert("Error: "+data.message);
           }
@@ -138,10 +339,7 @@ document.addEventListener("DOMContentLoaded", function() {
   
     if(closeAliasIconGridBtn){
       closeAliasIconGridBtn.addEventListener("click",()=>{
-        if(aliasIconGridOverlay) aliasIconGridOverlay.classList.remove('popup-visible'); 
-        const container = document.getElementById("aliasIconGridContainer");
-        if (container) container.classList.remove('popup-visible'); 
-        currentAliasIdForIcons=null;
+        closeAliasIconGrid();
       });
     }
   
@@ -185,8 +383,8 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(r=>r.json())
         .then(data=>{
           if(data.status==="ok"){
-            aliasIconGridOverlay.classList.remove('popup-visible');
-            location.reload();
+            closeAliasIconGrid();
+            updateDescriptionsFromServicesPayload(data);
           } else {
             alert("Error: "+data.message);
           }
@@ -208,7 +406,7 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(r=>r.json())
         .then(data=>{
           if(data.status==="ok"){
-            location.reload();
+            updateDescriptionsFromServicesPayload(data);
           } else {
             alert("Error: " + data.message);
           }
@@ -217,7 +415,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   
     // UNLINK FILTER/REGEX
-    function unlinkServiceFilter(serviceId, filterId){
+    function unlinkServiceFilter(serviceId, filterId, triggerBtn){
       const payload={ service_id: parseInt(serviceId), filter_id:parseInt(filterId) };
       fetch("/admin/unlink_service_ajax",{
         method:"POST",
@@ -230,14 +428,18 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(r=>r.json())
         .then(data=>{
           if(data.status==="ok"){
-            location.reload();
+            removeLinkedListItem(
+              triggerBtn,
+              "editServiceFilterList",
+              "(No hay filtros vinculados a este servicio)"
+            );
           } else {
             alert("Error: "+data.message);
           }
         })
         .catch(err=>{});
     }
-    function unlinkServiceRegex(serviceId, regexId){
+    function unlinkServiceRegex(serviceId, regexId, triggerBtn){
       const payload={ service_id: parseInt(serviceId), regex_id: parseInt(regexId) };
       fetch("/admin/unlink_service_ajax",{
         method:"POST",
@@ -250,7 +452,11 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(r=>r.json())
         .then(data=>{
           if(data.status==="ok"){
-            location.reload();
+            removeLinkedListItem(
+              triggerBtn,
+              "editServiceRegexList",
+              "(No hay regex vinculados a este servicio)"
+            );
           } else {
             alert("Error: "+data.message);
           }
@@ -273,14 +479,16 @@ document.addEventListener("DOMContentLoaded", function() {
       }
   
       // Edit alias
-      if(e.target.classList.contains("edit-alias-btn")){
+      if(e.target.classList.contains("edit-alias-btn") || e.target.closest(".edit-alias-btn")){
         e.preventDefault();
-        const aId=e.target.getAttribute("data-alias-id");
-        const aName=e.target.getAttribute("data-alias-name");
+        const button = e.target.classList.contains("edit-alias-btn") ? e.target : e.target.closest(".edit-alias-btn");
+        const aId = button.getAttribute("data-alias-id");
+        const aName = button.getAttribute("data-alias-name");
         if(editAliasId) editAliasId.value=aId;
         if(editAliasName) editAliasName.value=aName;
-        if(editAliasPopup) { 
-            editAliasPopup.classList.add('popup-visible'); 
+        if(editAliasPopup) {
+            editAliasPopup.classList.remove("modal-hidden");
+            editAliasPopup.classList.add("popup-visible");
         }
       }
   
@@ -289,8 +497,7 @@ document.addEventListener("DOMContentLoaded", function() {
         e.preventDefault();
         const button = e.target.classList.contains("delete-alias-btn") ? e.target : e.target.closest(".delete-alias-btn");
         const aId = button.getAttribute("data-alias-id");
-        if(!confirm("¿Eliminar alias?"))return;
-        deleteAlias(aId);
+        requestEditServiceConfirm(() => deleteAlias(aId), button);
       }
   
       // +Icon alias => mini-grid
@@ -305,23 +512,25 @@ document.addEventListener("DOMContentLoaded", function() {
         e.preventDefault();
         const button = e.target.classList.contains("delete-alias-icon") ? e.target : e.target.closest(".delete-alias-icon");
         const iconId = button.getAttribute("data-icon-id");
-        deleteAliasIcon(iconId);
+        requestEditServiceConfirm(() => deleteAliasIcon(iconId), button);
       }
   
       // Unlink filter
-      if(e.target.classList.contains("unlink-filter-btn")){
+      if(e.target.classList.contains("unlink-filter-btn") || e.target.closest(".unlink-filter-btn")){
         e.preventDefault();
-        const sId=e.target.getAttribute("data-service-id");
-        const fId=e.target.getAttribute("data-filter-id");
-        unlinkServiceFilter(sId,fId);
+        const button = e.target.classList.contains("unlink-filter-btn") ? e.target : e.target.closest(".unlink-filter-btn");
+        const sId=button.getAttribute("data-service-id");
+        const fId=button.getAttribute("data-filter-id");
+        requestEditServiceConfirm(() => unlinkServiceFilter(sId, fId, button), button);
       }
   
       // Unlink regex
-      if(e.target.classList.contains("unlink-regex-btn")){
+      if(e.target.classList.contains("unlink-regex-btn") || e.target.closest(".unlink-regex-btn")){
         e.preventDefault();
-        const sId=e.target.getAttribute("data-service-id");
-        const rId=e.target.getAttribute("data-regex-id");
-        unlinkServiceRegex(sId,rId);
+        const button = e.target.classList.contains("unlink-regex-btn") ? e.target : e.target.closest(".unlink-regex-btn");
+        const sId=button.getAttribute("data-service-id");
+        const rId=button.getAttribute("data-regex-id");
+        requestEditServiceConfirm(() => unlinkServiceRegex(sId, rId, button), button);
       }
     });
   
@@ -340,7 +549,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // --- Selectores Botones Navegación --- 
     const btnVolver = document.getElementById("btnVolverEditSrv");
-    const btnCancelar = document.getElementById("btnCancelarEditSrv");
 
     // --- Helper Navegación --- 
     function navigateToUrl(button) {
@@ -354,31 +562,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // --- Listeners Navegación --- 
     if(btnVolver) btnVolver.addEventListener("click", () => navigateToUrl(btnVolver));
-    if(btnCancelar) btnCancelar.addEventListener("click", () => navigateToUrl(btnCancelar));
 
-    // --- Aplicar borde de color dinámico a alias --- 
-    const aliasListItems = document.querySelectorAll(".alias-list-item");
-    aliasListItems.forEach(item => {
-        const color = item.dataset.borderColor;
-        if (color) {
-            try {
-                if (/^#[0-9A-Fa-f]{3,6}$/.test(color) || /^(rgb|rgba|hsl|hsla)\(/.test(color)) {
-                   item.style.setProperty('--alias-border-color', color);
-                   item.classList.add('alias-item-border');
-                } else {
-                   item.style.setProperty('--alias-border-color', '#ccc');
-                   item.classList.add('alias-item-border');
-                }
-            } catch (e) {
-                item.style.setProperty('--alias-border-color', '#ccc');
-                item.classList.add('alias-item-border');
-            }
-        } else {
-            item.style.setProperty('--alias-border-color', '#ccc');
-            item.classList.add('alias-item-border');
-        }
-    });
-    // --- Fin aplicar borde --- 
+    applyAliasBorders(editServiceAliasesContainer || document);
 
     // --- Cerrar popups al hacer clic fuera ---
     document.addEventListener('mousedown', function(event) {

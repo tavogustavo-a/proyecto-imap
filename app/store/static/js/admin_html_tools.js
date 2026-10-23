@@ -45,17 +45,79 @@
     }
   }
 
+  var PASTE_JUNK_CLASSES = ['selectable-text', 'copyable-text', 'xkrh14z'];
+
+  function stripJunkFromElement(el) {
+    if (!el || !el.classList) return;
+    for (var c = 0; c < PASTE_JUNK_CLASSES.length; c++) {
+      el.classList.remove(PASTE_JUNK_CLASSES[c]);
+    }
+    if (el.classList.length === 0) el.removeAttribute('class');
+    el.removeAttribute('data-start');
+    el.removeAttribute('data-end');
+    el.removeAttribute('data-id');
+    el.removeAttribute('data-offset');
+    el.removeAttribute('data-index');
+    el.removeAttribute('dir');
+    var style = el.getAttribute('style');
+    if (style !== null && !String(style).trim()) el.removeAttribute('style');
+  }
+
+  function sanitizeHtmlContent(html) {
+    if (!html) return '';
+    html = html.replace(/<!--\s*\/?(?:Start|End)Fragment\s*-->/gi, '');
+    html = html.replace(/\s*style\s*=\s*["'][\s]*["']/gi, '');
+    try {
+      var wrap = document.createElement('div');
+      wrap.innerHTML = html;
+      stripJunkFromElement(wrap);
+      var nodes = wrap.querySelectorAll('*');
+      for (var i = 0; i < nodes.length; i++) {
+        stripJunkFromElement(nodes[i]);
+      }
+      html = wrap.innerHTML;
+    } catch (e) {}
+    return html;
+  }
+
   function cleanHtmlString(html) {
     if (!html) return '';
-    html = html.replace(/\s*style\s*=\s*["'][\s]*["']/g, '');
+    html = sanitizeHtmlContent(html);
     html = html.replace(/&amp;nbsp;/g, ' ').replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ');
     html = html.replace(/<p>\s*<\/p>/g, '').replace(/<div>\s*<\/div>/g, '');
     return html.trim();
   }
 
+  function normalizeEditorCaretStyles(root) {
+    if (!root) return;
+    try {
+      root.style.setProperty('caret-color', '#111111', 'important');
+      root.style.setProperty('-webkit-text-fill-color', 'currentcolor', 'important');
+    } catch (e) {}
+    var nodes = root.querySelectorAll('*');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var tag = el.tagName;
+      if (tag === 'IMG' || tag === 'BR') continue;
+      if (el.classList && el.classList.contains('html-editor-icon')) continue;
+      el.classList.remove('selectable-text', 'copyable-text', 'xkrh14z');
+      try {
+        el.style.setProperty('caret-color', '#111111', 'important');
+        el.style.setProperty('-webkit-text-fill-color', 'currentcolor', 'important');
+      } catch (err) {}
+      var cs = window.getComputedStyle(el);
+      if (cs && (cs.webkitTextFillColor === 'rgb(255, 255, 255)' || cs.color === 'rgb(255, 255, 255)')) {
+        if (!el.getAttribute('style') || el.getAttribute('style').indexOf('color') === -1) {
+          el.style.setProperty('color', '#111111', 'important');
+        }
+      }
+    }
+  }
+
   function updateHtmlOutput() {
     if (!editor || !htmlOutput) return;
     if (document.activeElement === htmlOutput) return;
+    normalizeEditorCaretStyles(editor);
     var html = editor.innerHTML.trim();
     if (!html) {
       htmlOutput.value = '';
@@ -131,12 +193,30 @@
     if (!editor || !htmlOutput) return;
     var html = htmlOutput.value;
     try {
-      editor.innerHTML = processHtmlImages(html) || '';
+      editor.innerHTML = processHtmlImages(sanitizeHtmlContent(html)) || '';
+      normalizeEditorCaretStyles(editor);
     } catch (e) {}
   }
 
   if (editor) {
     editor.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        var key = e.key.toLowerCase();
+        if (key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          document.execCommand('undo', false, null);
+          normalizeEditorCaretStyles(editor);
+          updateHtmlOutput();
+          return;
+        }
+        if (key === 'y' || (key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          document.execCommand('redo', false, null);
+          normalizeEditorCaretStyles(editor);
+          updateHtmlOutput();
+          return;
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         document.execCommand('insertLineBreak', false, null);
@@ -178,8 +258,13 @@
           .replace(/>/g, '&gt;');
         html = '<p>' + escaped.replace(/\n/g, '<br>') + '</p>';
       }
-      document.execCommand('insertHTML', false, html || '');
+      html = sanitizeHtmlContent(html || '');
+      document.execCommand('insertHTML', false, html);
+      normalizeEditorCaretStyles(editor);
       updateHtmlOutput();
+    });
+    editor.addEventListener('focus', function() {
+      normalizeEditorCaretStyles(editor);
     });
     editor.addEventListener('click', function(e) {
       var target = (e.target.tagName === 'IMG') ? e.target : (e.target.closest && e.target.closest('.html-editor-icon'));
@@ -187,7 +272,10 @@
         e.preventDefault();
         e.stopPropagation();
         showImageResizeHandles(target);
+        return;
       }
+      editor.focus();
+      normalizeEditorCaretStyles(editor);
     });
     editor.addEventListener('contextmenu', function(e) {
       if (e.target && e.target.tagName === 'IMG') {
@@ -386,6 +474,8 @@
       }
       draggedImg = null;
     });
+
+    normalizeEditorCaretStyles(editor);
   }
 
   if (htmlOutput) {
@@ -393,7 +483,7 @@
     htmlOutput.addEventListener('keyup', applyHtmlToEditor);
   }
 
-  ['btnBold', 'btnItalic', 'btnUnderline', 'btnAlignLeft', 'btnAlignCenter', 'btnAlignRight', 'btnAlignJustify', 'btnFontSize', 'btnFontColor', 'btnHighlight', 'btnParagraph', 'btnList', 'btnLink', 'btnImage', 'btnIcons'].forEach(function(id) {
+  ['btnUndo', 'btnRedo', 'btnRemoveFormat', 'btnBold', 'btnItalic', 'btnUnderline', 'btnAlignLeft', 'btnAlignCenter', 'btnAlignRight', 'btnAlignJustify', 'btnFontSize', 'btnFontColor', 'btnHighlight', 'btnParagraph', 'btnHeading2', 'btnHeading3', 'btnList', 'btnOrderedList', 'btnLink', 'btnImage', 'btnIcons'].forEach(function(id) {
     preventFocusLoss(document.getElementById(id));
   });
   var sizeDropdown = document.getElementById('sizeDropdown');
@@ -402,6 +492,18 @@
   var inputHighlight = document.getElementById('inputHighlight');
   if (inputHighlight) inputHighlight.addEventListener('mousedown', function() { saveSelection(); });
 
+  if (document.getElementById('btnUndo')) {
+    document.getElementById('btnUndo').addEventListener('click', function() { execCmd('undo'); });
+  }
+  if (document.getElementById('btnRedo')) {
+    document.getElementById('btnRedo').addEventListener('click', function() { execCmd('redo'); });
+  }
+  if (document.getElementById('btnRemoveFormat')) {
+    document.getElementById('btnRemoveFormat').addEventListener('click', function() {
+      execCmd('removeFormat');
+      if (editor) normalizeEditorCaretStyles(editor);
+    });
+  }
   if (document.getElementById('btnBold')) {
     document.getElementById('btnBold').addEventListener('click', function() { execCmd('bold'); });
   }
@@ -559,8 +661,17 @@
   if (document.getElementById('btnParagraph')) {
     document.getElementById('btnParagraph').addEventListener('click', function() { execCmd('formatBlock', 'p'); });
   }
+  if (document.getElementById('btnHeading2')) {
+    document.getElementById('btnHeading2').addEventListener('click', function() { execCmd('formatBlock', 'h2'); });
+  }
+  if (document.getElementById('btnHeading3')) {
+    document.getElementById('btnHeading3').addEventListener('click', function() { execCmd('formatBlock', 'h3'); });
+  }
   if (document.getElementById('btnList')) {
     document.getElementById('btnList').addEventListener('click', function() { execCmd('insertUnorderedList'); });
+  }
+  if (document.getElementById('btnOrderedList')) {
+    document.getElementById('btnOrderedList').addEventListener('click', function() { execCmd('insertOrderedList'); });
   }
 
   var modalUrlBox = document.getElementById('modalUrlBox');

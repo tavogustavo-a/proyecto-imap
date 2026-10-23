@@ -96,8 +96,8 @@
       {% endif %}
     </div>
 
-    <div class="mt-1">
-      <h4>Crear Nuevo Regex</h4>
+    <div class="mt-1 admin-create-block">
+      <h4 class="text-center m-0 mb-1">Crear Nuevo Regex</h4>
       <form action="{{ url_for('admin_bp.create_regex') }}" method="POST">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
@@ -131,7 +131,9 @@
           autocomplete="off"
         >
 
-        <button type="submit" class="btn-green">Crear</button>
+        <div class="text-center">
+          <button type="submit" class="btn-green">Crear</button>
+        </div>
       </form>
     </div>
 

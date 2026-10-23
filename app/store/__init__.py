@@ -1,5 +1,6 @@
 from flask import Blueprint, url_for, request
 from decimal import Decimal, InvalidOperation
+from html import escape as html_escape, unescape
 import os
 import re
 from .models import Product, Sale
@@ -22,6 +23,13 @@ def add_microphone_permission_header(response):
     return response
 
 
+@store_bp.app_template_filter('html_info_body')
+def html_info_body_filter(html_obj):
+    """Dibuja el HTML guardado. Las plantillas configuradas no usan el texto crudo."""
+    from app.store.html_presets import html_info_body
+    return html_info_body(html_obj)
+
+
 @store_bp.app_template_filter('rewrite_external_images')
 def rewrite_external_images_filter(html):
     """Reescribe img src externos para usar proxy local y evitar CORB/CORS."""
@@ -30,13 +38,16 @@ def rewrite_external_images_filter(html):
     try:
         host = request.host if request else ''
         def replace_src(m):
-            full_url = m.group(1)
+            full_url = unescape(m.group(1))
             if not full_url.startswith(('http://', 'https://')):
                 return m.group(0)
             from urllib.parse import urlparse
             parsed = urlparse(full_url)
             if parsed.netloc and host and (parsed.netloc in host or host in parsed.netloc):
                 return m.group(0)
+            # El favicon se pide directo: la página pública no usa el proxy con sesión.
+            if (parsed.netloc or '').lower() == 't2.gstatic.com':
+                return f'src="{html_escape(full_url, quote=True)}"'
             proxy_url = url_for('store_bp.proxy_image', url=full_url, _external=True)
             return f'src="{proxy_url}"'
         return re.sub(r'src="([^"]+)"', replace_src, html)

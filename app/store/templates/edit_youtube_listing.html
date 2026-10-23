@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261019-yt-botones">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261021-yt-add-link-label">
 {% endblock %}
 
 {% block content %}
@@ -18,14 +18,14 @@
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="enabled" value="{{ '1' if listing.enabled else '0' }}">
     
-    <div class="mb-3">
+    <div class="mb-3 edit-youtube-field-row">
       <label for="title" class="sr-only">Título</label>
-      <input type="text" name="title" id="title" class="form-control" value="{{ listing.title }}" required autocomplete="off">
+      <input type="text" name="title" id="title" class="form-control" value="{{ listing.title }}" placeholder="Título" required autocomplete="off">
     </div>
     
-    <div class="mb-3">
-      <label for="content">Descripcion YouTube</label>
-      <textarea name="content" id="content" class="form-control" rows="5" autocomplete="off">{% if listing.content and listing.content != 'None' %}{{ listing.content }}{% endif %}</textarea>
+    <div class="mb-3 edit-youtube-field-row">
+      <label for="content" class="sr-only">Descripcion YouTube</label>
+      <textarea name="content" id="content" class="form-control" rows="10" placeholder="Descripcion YouTube" autocomplete="off">{% if listing.content and listing.content != 'None' %}{{ listing.content }}{% endif %}</textarea>
     </div>
     
     <hr class="compact-hr my-3">
@@ -93,7 +93,7 @@
           <input type="url" id="new-link-url" class="form-control edit-youtube-link-url" placeholder="https://youtube.com/..." autocomplete="off">
           <label for="new-link-title" class="sr-only">Título del nuevo link</label>
           <input type="text" id="new-link-title" class="form-control edit-youtube-link-title" placeholder="Título" autocomplete="off">
-          <button type="button" id="add-link-btn" class="btn-panel btn-green">+</button>
+          <button type="button" id="add-link-btn" class="btn-panel btn-green"><i class="fas fa-plus" aria-hidden="true"></i> crear nuevo listado youtube</button>
         </div>
       </div>
     </div>
@@ -111,12 +111,12 @@
     <div class="modal-body">
       <div class="d-flex flex-column gap-2">
         <div>
-          <label for="edit-link-input">URL del Link</label>
-          <input type="url" id="edit-link-input" class="form-control" autocomplete="off">
+          <label for="edit-link-input" class="sr-only">URL del Link</label>
+          <input type="url" id="edit-link-input" class="form-control" placeholder="URL del Link" autocomplete="off">
         </div>
         <div>
-          <label for="edit-link-title-input">Título</label>
-          <input type="text" id="edit-link-title-input" class="form-control" autocomplete="off">
+          <label for="edit-link-title-input" class="sr-only">Título</label>
+          <input type="text" id="edit-link-title-input" class="form-control" placeholder="Título" autocomplete="off">
         </div>
       </div>
       <input type="hidden" id="edit-link-id-input">
@@ -130,6 +130,6 @@
 {% endblock %}
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/edit_youtube_listing.js') }}?v=20261019-usuario" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/edit_youtube_listing.js') }}?v=20261021-yt-links-compact" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/public_link_toggle.js') }}?v=20261019-publico" defer></script>
 {% endblock %} 

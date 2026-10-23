@@ -1,0 +1,30 @@
+<div class="mb-3 tv-editor" data-tv-editor>
+  <div data-tv-rows>
+    {% for row in pantallas.rows %}
+      {% include 'includes/pantallas_row_fields.html' %}
+    {% endfor %}
+  </div>
+  <div class="tv-add-wrap">
+    <button type="button" class="btn-panel btn-green mdp-add-btn" data-tv-add>agregar fila</button>
+  </div>
+  <template id="tv-row-template">
+    {% with row=none %}
+      {% include 'includes/pantallas_row_fields.html' %}
+    {% endwith %}
+  </template>
+  <div class="tv-icon-pop hidden" data-tv-icon-pop>
+    <div class="tv-icon-pop-card" role="dialog" aria-label="Elegir icono">
+      <div class="tv-icon-pop-head">
+        <span>Elegir icono</span>
+        <button type="button" class="delete-service-icon-btn" data-tv-icon-close aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="tv-icon-pop-grid">
+        {% for icon in screen_icons %}
+          <button type="button" class="tv-icon-choice" data-tv-pick="{{ icon.name }}" data-tv-pick-url="{{ icon.dark_url }}">
+            <img src="{{ icon.url }}" alt="">
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>

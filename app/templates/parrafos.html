@@ -43,7 +43,7 @@
 
 {# --- Inicio Contenedor Párrafo 1 --- #}
 <div class="admin-card form-container-medium paragraph-section mb-1">
-  <h3 class="mt-0 text-center">Párrafo 1</h3>
+  <h3 class="mt-0 text-center">Párrafo 1 no registrados</h3>
 
   <form id="saveMsgForm1" action="{{ url_for('admin_bp.update_paragraph', num_paragraph=1) }}" method="POST" class="mb-05">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -57,30 +57,20 @@
     >{{ paragraph }}</textarea>
   </form>
 
-  <div class="d-flex align-items-center flex-wrap gap-05 mt-05">
-    <button type="submit" form="saveMsgForm1" class="btn-green">Guardar</button>
-    <form action="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=1) }}" method="POST" class="m-0">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      {% if paragraph_mode == 'off' %}
-        <button type="submit" class="btn-blue">Habilitar no registrados</button>
-      {% else %}
-        <button type="submit" class="btn-red">Deshabilitado no registrados</button>
-      {% endif %}
-    </form>
-    <div class="ml-auto paragraph-status-text">
-      Estado:
-      {% if paragraph_mode == 'off' %}
-        <strong>desactivado</strong>
-      {% elif paragraph_mode == 'guests' %}
-        <strong>no registrados</strong>
-      {% endif %}
-    </div>
+  <div class="d-flex align-items-center flex-wrap justify-content-center gap-05 mt-05 paragraph-actions-row">
+    <button type="submit" form="saveMsgForm1" class="btn-green paragraph-save-btn">Guardar</button>
+    <button
+      type="button"
+      class="cycle-paragraph-mode-btn {{ p1_btn_class|default('btn-red' if paragraph_mode == 'off' else 'btn-green', true) }}"
+      data-cycle-url="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=1) }}"
+      data-paragraph-num="1"
+    >{{ p1_btn_text|default('Apagado' if paragraph_mode == 'off' else 'Prendido', true) }}</button>
   </div>
 </div>
 
 {# --- Inicio Contenedor Párrafo 2 --- #}
 <div class="admin-card form-container-medium paragraph-section mb-2">
-  <h3 class="text-center">Párrafo 2</h3>
+  <h3 class="text-center">Párrafo usuarios</h3>
 
   <form id="saveMsgForm2" action="{{ url_for('admin_bp.update_paragraph', num_paragraph=2) }}" method="POST" class="mb-05">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -94,24 +84,14 @@
     >{{ paragraph2 }}</textarea>
   </form>
 
-  <div class="d-flex align-items-center flex-wrap gap-05 mt-05">
-    <button type="submit" form="saveMsgForm2" class="btn-green">Guardar</button>
-    <form action="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=2) }}" method="POST" class="m-0">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      {% if paragraph2_mode == 'off' %}
-        <button type="submit" class="btn-blue">Habilitar usuarios</button>
-      {% else %}
-        <button type="submit" class="btn-red">Deshabilitado usuarios</button>
-      {% endif %}
-    </form>
-    <div class="ml-auto paragraph-status-text">
-      Estado:
-      {% if paragraph2_mode == 'off' %}
-        <strong>desactivado</strong>
-      {% elif paragraph2_mode == 'users' %}
-        <strong>usuarios</strong>
-      {% endif %}
-    </div>
+  <div class="d-flex align-items-center flex-wrap justify-content-center gap-05 mt-05 paragraph-actions-row">
+    <button type="submit" form="saveMsgForm2" class="btn-green paragraph-save-btn">Guardar</button>
+    <button
+      type="button"
+      class="cycle-paragraph-mode-btn {{ p2_btn_class|default('btn-red' if paragraph2_mode == 'off' else 'btn-green', true) }}"
+      data-cycle-url="{{ url_for('admin_bp.cycle_paragraph_mode', num_paragraph=2) }}"
+      data-paragraph-num="2"
+    >{{ p2_btn_text|default('Apagado' if paragraph2_mode == 'off' else 'Prendido', true) }}</button>
   </div>
 </div>
 
@@ -126,4 +106,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_parrafos.js') }}?v=20261021-parrafo-btn-fix" defer></script>
 {% endblock %}

@@ -8,7 +8,7 @@
   <meta name="current_user" content="{{ current_user.username if current_user else '' }}">
   <meta name="is_logged_in" content="{{ 'true' if session.get('logged_in') else 'false' }}">
   <meta name="is_admin" content="{{ 'true' if is_admin else 'false' }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261020-worksheet-pag">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261022-guardar-filtro">
 <meta name="has_worksheet_access" content="{{ 'true' if current_user and user_has_worksheet_access(current_user) else 'false' }}">
   <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
 {% endblock %}
@@ -17,14 +17,14 @@
   <div class="d-flex align-items-center justify-content-between mb-1 p-05-12">
     <div class="d-flex gap-05 admin-store-menus">
       {% if is_admin %}
-        <!-- Botones de menú para administradores -->
-        <button id="menu1ToggleBtn" class="btn-blue menu-btn-worksheet"><i class="fas fa-table"></i></button>
+        <!-- Botones de menú para administradores: lista de hojas al lado de Menú2 -->
         <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
         <button id="menu3ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú2</button>
+        <button id="menu1ToggleBtn" class="btn-blue menu-btn-worksheet" title="Lista de hojas de cálculo"><i class="fas fa-table"></i></button>
       {% else %}
         <!-- Botón de menú para usuarios normales -->
-        <button id="menu1ToggleBtn" class="btn-blue menu-btn-worksheet"><i class="fas fa-table"></i></button>
         <button id="menu2ToggleBtn" class="btn-blue menu-btn-worksheet">&#9776; Menú</button>
+        <button id="menu1ToggleBtn" class="btn-blue menu-btn-worksheet" title="Lista de hojas de cálculo"><i class="fas fa-table"></i></button>
       {% endif %}
     </div>
   </div>
@@ -112,10 +112,10 @@
 
 <!-- Modal para crear plantilla de hojas de cálculo -->
 <div id="modalCrearPlantilla" class="modal-overlay d-none">
-  <div class="modal-content worksheet-modal">
+  <div class="modal-content worksheet-modal worksheet-crear-plantilla-modal">
     <div class="modal-header">
       <h3 class="modal-title">Crear plantilla hojas de cálculo</h3>
-      <button id="closeModalCrearPlantilla" class="btn-close">&times;</button>
+      <button id="closeModalCrearPlantilla" class="btn-close worksheet-modal-close-x" type="button" aria-label="Cerrar">&times;</button>
     </div>
     <div class="modal-body">
 
@@ -124,31 +124,31 @@
         <input type="text" class="form-control" id="tituloPlantillaInput" name="tituloPlantillaInput" placeholder="Título de la plantilla..." autocomplete="off">
       </div>
       <div class="worksheet-fields-grid">
-        <button class="worksheet-field-btn" data-field="correo">
+        <button class="worksheet-field-btn" data-field="correo" type="button">
           <i class="fas fa-envelope"></i>
           <span>Correo</span>
         </button>
-        <button class="worksheet-field-btn" data-field="contraseña">
+        <button class="worksheet-field-btn" data-field="contraseña" type="button">
           <i class="fas fa-key"></i>
           <span>Contraseña</span>
         </button>
-        <button class="worksheet-field-btn" data-field="links">
+        <button class="worksheet-field-btn" data-field="links" type="button">
           <i class="fas fa-link"></i>
           <span>Links</span>
         </button>
-        <button class="worksheet-field-btn" data-field="letras">
+        <button class="worksheet-field-btn" data-field="letras" type="button">
           <i class="fas fa-font"></i>
           <span>Letras</span>
         </button>
-        <button class="worksheet-field-btn" data-field="informacion-adicional">
+        <button class="worksheet-field-btn" data-field="informacion-adicional" type="button">
           <i class="fas fa-info-circle"></i>
           <span>Información adicional</span>
         </button>
-        <button class="worksheet-field-btn" data-field="numero">
+        <button class="worksheet-field-btn" data-field="numero" type="button">
           <i class="fas fa-hashtag"></i>
           <span>Número</span>
         </button>
-        <button class="worksheet-field-btn" data-field="otro-campo">
+        <button class="worksheet-field-btn" data-field="otro-campo" type="button">
           <i class="fas fa-ellipsis-h"></i>
           <span>Otro campo</span>
         </button>
@@ -160,11 +160,11 @@
         </div>
       </div>
     </div>
-    <div class="modal-footer">
-      <button id="btnGenerarPlantilla" class="btn-panel btn-green" disabled>
+    <div class="modal-footer worksheet-crear-plantilla-footer">
+      <button id="btnGenerarPlantilla" class="btn-panel btn-green" disabled type="button">
         <i class="fas fa-file-excel"></i> Generar plantilla
       </button>
-      <button id="btnCancelarPlantilla" class="btn-panel btn-red">
+      <button id="btnCancelarPlantilla" class="btn-panel btn-red" type="button">
         Cancelar
       </button>
     </div>
@@ -210,7 +210,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}?v=20261020-worksheet-pag" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}?v=20261022-modos-unificados" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

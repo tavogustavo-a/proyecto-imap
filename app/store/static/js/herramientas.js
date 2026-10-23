@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
   const tableBody = document.getElementById('tools-table-body');
-  const rows = Array.from(tableBody.querySelectorAll('tr[data-title]'));
+  function toolRows() {
+    return Array.from(tableBody.querySelectorAll('tr[data-title]'));
+  }
   const showCountSelect = document.getElementById('showToolCount');
   const prevBtn = document.getElementById('prevToolPageBtn');
   const nextBtn = document.getElementById('nextToolPageBtn');
@@ -9,7 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let perPage = parseInt(showCountSelect.value) || 20;
 
   function getFilteredRows() {
-    return rows.filter(row => !row.classList.contains('filtered-out'));
+    return toolRows().filter(row => !row.classList.contains('filtered-out'));
   }
 
   function renderPage() {
@@ -26,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
     
-    rows.forEach(row => {
+    toolRows().forEach(row => {
       if (row.classList.contains('filtered-out')) {
         row.style.display = 'none';
       }
@@ -37,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function filterRows() {
     const searchTerm = searchInput.value.toLowerCase();
-    rows.forEach(row => {
+    toolRows().forEach(row => {
       const title = row.getAttribute('data-title');
       if (!searchTerm || title.includes(searchTerm)) {
         row.classList.remove('filtered-out');
@@ -50,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   showCountSelect.addEventListener('change', function() {
-    perPage = this.value === 'all' ? rows.length : parseInt(this.value);
+    perPage = this.value === 'all' ? toolRows().length : parseInt(this.value);
     currentPage = 1;
     renderPage();
   });
@@ -89,31 +91,28 @@ document.addEventListener('DOMContentLoaded', function() {
     return meta ? meta.getAttribute('content') : '';
   }
 
-  // Toggle ON/OFF
-  document.querySelectorAll('.btn-toggle-tool').forEach(btn => {
-    btn.addEventListener('click', function(e) {
+  tableBody.addEventListener('click', function(e) {
+    const toggleBtn = e.target.closest('.btn-toggle-tool');
+    const deleteBtn = e.target.closest('.btn-delete-tool');
+    if (toggleBtn) {
       e.preventDefault();
-      const id = this.getAttribute('data-id');
+      const id = toggleBtn.getAttribute('data-id');
       fetch(`/tienda/admin/herramientas/toggle/${id}`, {
         method: 'POST',
         headers: { 'X-CSRFToken': getCsrfToken() }
       })
       .then(r => r.ok ? location.reload() : alert('Error al cambiar estado.'));
-    });
-  });
-
-  // Eliminar
-  document.querySelectorAll('.btn-delete-tool').forEach(btn => {
-    btn.addEventListener('click', function(e) {
+    }
+    if (deleteBtn) {
       e.preventDefault();
-      const id = this.getAttribute('data-id');
+      const id = deleteBtn.getAttribute('data-id');
       if (!confirm('¿Seguro que deseas eliminar esta información?')) return;
       fetch(`/tienda/admin/herramientas/delete/${id}`, {
         method: 'POST',
         headers: { 'X-CSRFToken': getCsrfToken() }
       })
       .then(r => r.ok ? location.reload() : alert('Error al eliminar.'));
-    });
+    }
   });
 
   // Funcionalidad para HTMLs
@@ -188,63 +187,157 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Botones de toggle HTML
-  document.querySelectorAll('.btn-toggle-html').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const htmlId = this.dataset.id;
-      const csrfToken = document.querySelector('meta[name="csrf_token"]').content;
-      
+  if (htmlTableBody) htmlTableBody.addEventListener('click', function(e) {
+    const toggleBtn = e.target.closest('.btn-toggle-html');
+    const deleteBtn = e.target.closest('.btn-delete-html');
+    if (toggleBtn) {
+      const htmlId = toggleBtn.dataset.id;
       fetch(`/tienda/admin/html/${htmlId}/toggle`, {
         method: 'POST',
         headers: {
-          'X-CSRFToken': csrfToken,
+          'X-CSRFToken': getCsrfToken(),
           'Content-Type': 'application/json'
         }
       })
       .then(response => response.json())
       .then(data => {
-        if(data.success) {
-          paintStateSwitch(this, data.new_state === 'OFF');
+        if (data.success) {
+          paintStateSwitch(toggleBtn, data.new_state === 'OFF');
         } else {
           alert(data.error || 'Error al actualizar el estado.');
         }
       })
-      .catch(error => {
+      .catch(function() {
         alert('Error al actualizar el estado.');
       });
-    });
-  });
-  
-  // Botones de eliminar HTML
-  document.querySelectorAll('.btn-delete-html').forEach(btn => {
-    btn.addEventListener('click', function() {
-      if(!confirm('¿Estás seguro de que deseas eliminar este HTML?')) return;
-      
-      const htmlId = this.dataset.id;
-      const csrfToken = document.querySelector('meta[name="csrf_token"]').content;
-      // Verificación segura para closest
-      const row = this && typeof this.closest === 'function' ? this.closest('tr') : null;
-      
+    }
+    if (deleteBtn) {
+      if (!confirm('¿Estás seguro de que deseas eliminar este HTML?')) return;
+      const htmlId = deleteBtn.dataset.id;
+      const row = deleteBtn.closest('tr');
       fetch(`/tienda/admin/html/${htmlId}/delete`, {
         method: 'POST',
         headers: {
-          'X-CSRFToken': csrfToken,
+          'X-CSRFToken': getCsrfToken(),
           'Content-Type': 'application/json'
         }
       })
       .then(response => response.json())
       .then(data => {
-        if(data.success) {
-          row.remove();
-          if(htmlTableBody.querySelectorAll('tr').length === 0) {
+        if (data.success) {
+          if (row) row.remove();
+          if (htmlTableBody.querySelectorAll('tr[data-title]').length === 0) {
             htmlTableBody.innerHTML = '<tr><td colspan="3" class="text-center">No hay HTML añadido aún.</td></tr>';
           }
         } else {
           alert(data.error || 'Error al eliminar el HTML.');
         }
       })
-      .catch(error => {
+      .catch(function() {
         alert('Error al eliminar el HTML.');
+      });
+    }
+  });
+
+  function setCreateStatus(form, message, ok) {
+    let status = form.querySelector('[data-create-status]');
+    if (!status) {
+      status = document.createElement('p');
+      status.setAttribute('data-create-status', '');
+      status.className = 'mb-05';
+      const button = form.querySelector('[type="submit"]');
+      if (button && button.parentNode) {
+        button.parentNode.insertBefore(status, button);
+      } else {
+        form.appendChild(status);
+      }
+    }
+    status.textContent = message || '';
+    status.style.color = ok ? '#1b7f3a' : '#c62828';
+  }
+
+  function driveSubtitlesReady(form) {
+    const tipo = form.querySelector('#api_type');
+    if (!tipo || tipo.value !== 'Drive') return true;
+    const photos = form.querySelector('#drive_subtitle_photos');
+    const videos = form.querySelector('#drive_subtitle_videos');
+    const photosValue = photos ? photos.value.trim() : '';
+    const videosValue = videos ? videos.value.trim() : '';
+    return !!(photosValue || videosValue);
+  }
+
+  function placeCreatedRow(kind, rowHtml) {
+    const holder = document.createElement('tbody');
+    holder.innerHTML = (rowHtml || '').trim();
+    const row = holder.firstElementChild;
+    if (!row) return;
+    if (kind === 'tool') {
+      const empty = tableBody.querySelector('tr:not([data-title])');
+      if (empty) empty.remove();
+      tableBody.prepend(row);
+      currentPage = 1;
+      filterRows();
+      return;
+    }
+    if (kind === 'html') {
+      const empty = htmlTableBody.querySelector('tr:not([data-title])');
+      if (empty) empty.remove();
+      htmlTableBody.prepend(row);
+      currentHtmlPage = 1;
+      filterAndPaginateHtmls();
+      return;
+    }
+    if (kind === 'youtube' && typeof window.herramientasAddYoutubeRow === 'function') {
+      window.herramientasAddYoutubeRow(row);
+      return;
+    }
+    if (kind === 'api' && typeof window.herramientasAddApiRow === 'function') {
+      window.herramientasAddApiRow(row);
+    }
+  }
+
+  document.querySelectorAll('form[data-create-kind]').forEach(function(form) {
+    form.addEventListener('submit', function(ev) {
+      ev.preventDefault();
+      if (form.getAttribute('data-create-kind') === 'api' && !driveSubtitlesReady(form)) {
+        return;
+      }
+      const button = form.querySelector('[type="submit"]');
+      if (button) button.disabled = true;
+      setCreateStatus(form, '', true);
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: {
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        }
+      })
+      .then(function(response) {
+        return response.json().then(function(data) {
+          return { ok: response.ok, data: data };
+        });
+      })
+      .then(function(result) {
+        const data = result.data || {};
+        if (!result.ok || !data.ok) {
+          setCreateStatus(form, data.message || 'No se pudo crear.', false);
+          return;
+        }
+        placeCreatedRow(form.getAttribute('data-create-kind'), data.row_html);
+        form.reset();
+        const preset = form.querySelector('[data-html-preset-select]');
+        if (preset) preset.dispatchEvent(new Event('change'));
+        const apiType = form.querySelector('#api_type');
+        if (apiType) apiType.dispatchEvent(new Event('change'));
+        setCreateStatus(form, data.message || 'Creado.', true);
+      })
+      .catch(function() {
+        setCreateStatus(form, 'No se pudo crear.', false);
+      })
+      .finally(function() {
+        if (button) button.disabled = false;
       });
     });
   });

@@ -4,26 +4,86 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261019-botones2">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261021-como-trabajo">
 {% endblock %}
 
 {% block content %}
 <div class="store-light maxw-800 mx-auto br-8 edit-html-container">
     <div class="edit-tool-page-head">
       <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue edit-tool-back">Volver</a>
-      <h2 class="edit-tool-page-title">Editar HTML</h2>
+      <h2 class="edit-tool-page-title">
+        Editar HTML
+        <span class="tv-title-info" data-tv-title-info {% if html.preset_key != 'foto_pantallas_perfiles_tv' %}hidden{% endif %}>
+          <button type="button" class="info-icon info-icon-square tv-title-info-btn" aria-expanded="false" aria-controls="tvEditorInfo" aria-label="Explicación de pantallas, perfiles y links de tv" title="Explicación">i</button>
+          <span id="tvEditorInfo" class="tv-title-info-box" role="note" hidden>Pantallas es obligatorio. Perfiles es opcional, de 1 a 31. Página oficial y activación de televisor son enlaces. Si un campo queda vacío, en la vista sale ----------. Máximo 2 iconos por fila.</span>
+        </span>
+      </h2>
     </div>
     
-    <form id="htmlForm" method="POST" action="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="edit-html-form">
+    <form id="htmlForm" method="POST" action="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="edit-html-form" data-html-preset-form data-preset="{{ html.preset_key or '' }}">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
             <label for="title" class="sr-only">Título</label>
-            <input type="text" class="form-control" id="title" name="title" value="{{ html.title }}" required autocomplete="off">
+            <input type="text" class="form-control" id="title" name="title" value="{{ html.title }}" required autocomplete="off" data-html-title>
+        </div>
+        <div class="mb-3" data-html-text-wrap>
+            <label for="text" class="form-label text-center d-block">Contenido HTML</label>
+            <textarea class="form-control" id="text" name="text" rows="10" {% if not html.preset_key %}required{% endif %} autocomplete="off" data-html-text>{{ html.text }}</textarea>
         </div>
         <div class="mb-3">
-            <label for="text" class="form-label text-center d-block">Contenido HTML</label>
-            <textarea class="form-control" id="text" name="text" rows="10" required autocomplete="off">{{ html.text }}</textarea>
+            <label for="preset_key" class="sr-only">Plantilla preconfigurada</label>
+            <select name="preset_key" id="preset_key" class="form-control form-select" data-html-preset-select
+                    aria-label="Plantilla preconfigurada"
+                    data-preset-titles="{{ html_preset_titles | tojson }}">
+              <option value="">— Ninguno (HTML personalizado) —</option>
+              {% for preset_key, preset_label in html_preset_choices %}
+              <option value="{{ preset_key }}" {% if html.preset_key == preset_key %}selected{% endif %}>{{ preset_label }}</option>
+              {% endfor %}
+            </select>
         </div>
+
+        <div class="mb-3 mdp-editor" data-mdp-editor>
+          <div class="mdp-main-row">
+            <label for="mdp_main_title" class="sr-only">Título principal</label>
+            <input type="text" class="form-control" id="mdp_main_title" name="mdp_main_title" value="{{ medios_pago.main_title }}" placeholder="medios de pago que recibo" autocomplete="off" maxlength="160">
+            {% include 'includes/medios_pago_main_icon_picker.html' %}
+          </div>
+          <div data-mdp-sections>
+            {% for section in medios_pago.sections %}
+              {% include 'includes/medios_pago_section_fields.html' %}
+            {% endfor %}
+          </div>
+          <button type="button" class="btn-panel btn-green mdp-add-btn" data-mdp-add>agregar título</button>
+          <template id="mdp-section-template">
+            {% with section=none %}
+              {% include 'includes/medios_pago_section_fields.html' %}
+            {% endwith %}
+          </template>
+        </div>
+
+        <div class="mb-3 mdp-editor" data-ct-editor>
+          <div class="mdp-main-row">
+            <label for="ct_main_title" class="sr-only">Título principal</label>
+            <input type="text" class="form-control" id="ct_main_title" name="ct_main_title" value="{{ como_trabajo.main_title }}" placeholder="Cómo trabajo — Guía rápida" autocomplete="off" maxlength="160">
+            {% with mdp_icon_current=como_trabajo.main_icon, mdp_icon_name='ct_main_icon', mdp_icon_choices=como_trabajo_icons %}
+              {% include 'includes/medios_pago_main_icon_picker.html' %}
+            {% endwith %}
+          </div>
+          <div data-ct-sections>
+            {% for section in como_trabajo.sections %}
+              {% include 'includes/como_trabajo_section_fields.html' %}
+            {% endfor %}
+          </div>
+          <button type="button" class="btn-panel btn-green mdp-add-btn" data-ct-add>agregar título</button>
+          <template id="ct-section-template">
+            {% with section=none %}
+              {% include 'includes/como_trabajo_section_fields.html' %}
+            {% endwith %}
+          </template>
+        </div>
+
+        {% include 'includes/codigos_resumen_fields.html' %}
+        {% include 'includes/pantallas_fields.html' %}
 
         <!-- Sección de la tabla de usuarios -->
         <div class="d-flex flex-column align-items-center edit-tool-main-container">
@@ -80,5 +140,6 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('store_bp.static', filename='js/edit_html_users.js') }}?v=20261019-usuario" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/html_preset_form.js') }}?v=20261021-como-trabajo" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/public_link_toggle.js') }}?v=20261019-publico" defer></script>
 {% endblock %} 

@@ -17,14 +17,14 @@
     <div class="accordion-body">
       <div class="tool-calculator-form-container">{{ tool.text | rewrite_external_images | safe }}</div>
       <form class="form-calc-porcentaje" autocomplete="off" name="formCalcPorcentaje">
-        <div class="d-flex align-items-end gap-1 mb-1 tool-calculator-form-row">
-          <div class="flex-2">
+        <div class="d-flex gap-1 mb-1 tool-calculator-form-row">
+          <div class="tool-calculator-field">
             <label for="x-{{ tool.id }}" class="sr-only">Número X (Porcentaje: {{ tool.percent }}%)</label>
             <input type="number" step="any" min="0" class="form-control input-x" id="x-{{ tool.id }}" name="x-{{ tool.id }}" placeholder="Ingresa un número" autocomplete="off">
           </div>
-          <div class="flex-1">
-            <label for="resultadoPorcentaje-{{ tool.id }}">Resultado</label>
-            <input type="text" class="form-control resultado-porcentaje" readonly placeholder="0" name="resultado_porcentaje" id="resultadoPorcentaje-{{ tool.id }}" autocomplete="off">
+          <div class="tool-calculator-field">
+            <label for="resultadoPorcentaje-{{ tool.id }}" class="sr-only">Resultado</label>
+            <input type="text" class="form-control resultado-porcentaje" readonly placeholder="Resultado" name="resultado_porcentaje" id="resultadoPorcentaje-{{ tool.id }}" autocomplete="off" aria-label="Resultado">
           </div>
         </div>
       </form>

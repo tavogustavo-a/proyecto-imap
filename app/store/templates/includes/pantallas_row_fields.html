@@ -1,0 +1,34 @@
+<section class="tv-edit-row" data-tv-row>
+  <div class="tv-fields">
+    <input type="text" class="form-control" name="tv_pantallas" value="{{ row.pantallas if row else '' }}" maxlength="240" autocomplete="off" placeholder="Pantallas" aria-label="Pantallas" data-tv-field="pantallas">
+    <select class="form-control form-select" name="tv_perfiles" aria-label="Perfiles opcional" data-tv-field="perfiles" autocomplete="off">
+      <option value="">Perfiles opcional</option>
+      {% for n in range(1, 32) %}
+      <option value="{{ n }}" {% if row and row.perfiles == n|string %}selected{% endif %}>{{ n }} {% if n == 1 %}perfil{% else %}perfiles{% endif %}</option>
+      {% endfor %}
+    </select>
+    <input type="text" class="form-control tv-url-field" name="tv_pagina" value="{{ row.pagina if row else '' }}" maxlength="240" autocomplete="off" placeholder="Página oficial (url)" aria-label="Página oficial (url)" data-tv-field="pagina">
+    <div class="tv-activacion-line">
+      <input type="text" class="form-control" name="tv_activacion" value="{{ row.activacion if row else '' }}" maxlength="240" autocomplete="off" placeholder="Activación televisor (url)" aria-label="Activación televisor (url)" data-tv-field="activacion">
+      <button type="button" class="btn-small btn-add-icon" data-tv-add-icon>+Icon</button>
+      <span class="tv-icon-slots" data-tv-icon-slots>
+        {% if row and row.icons %}
+          {% for icon in row.icons %}
+            <span class="service-icon-wrapper tv-icon-slot">
+              <img class="service-icon-img" src="{{ url_for('store_bp.stream_icon', name=icon) }}" alt="">
+              <button type="button" class="delete-service-icon-btn" data-tv-icon-clear aria-label="Quitar icono">&times;</button>
+              <input type="hidden" name="tv_icon_{{ loop.index }}" value="{{ icon }}" data-tv-icon-input="{{ loop.index }}">
+            </span>
+          {% endfor %}
+        {% endif %}
+      </span>
+      {% if not row or row.icons|length < 1 %}
+        <input type="hidden" name="tv_icon_1" value="" data-tv-icon-input="1">
+      {% endif %}
+      {% if not row or row.icons|length < 2 %}
+        <input type="hidden" name="tv_icon_2" value="" data-tv-icon-input="2">
+      {% endif %}
+      <button type="button" class="tv-row-remove" data-tv-remove aria-label="Quitar fila" title="Quitar fila">&times;</button>
+    </div>
+  </div>
+</section>

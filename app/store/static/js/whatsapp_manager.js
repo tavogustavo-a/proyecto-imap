@@ -64,11 +64,57 @@ function updateTelegramHealthBanner(config) {
     statusEl.setAttribute('aria-label', 'Estado Telegram: ' + label);
 }
 
+var telegramBotCachedConfig = null;
+var telegramBotMenuButtons = [];
+
+function telegramBotModalIsOpen() {
+    var modal = document.getElementById('telegram-botfather-modal');
+    return !!(modal && !modal.classList.contains('d-none') && !modal.hasAttribute('hidden'));
+}
+
+function telegramBotFields() {
+    return {
+        nameInput: document.getElementById('telegram-bot-alias'),
+        tokenInput: document.getElementById('telegram-bot-value'),
+    };
+}
+
+function telegramBotFieldText(el) {
+    if (!el) return '';
+    return String(el.textContent || '').replace(/\u00a0/g, ' ').trim();
+}
+
+function setTelegramBotFieldText(el, value) {
+    if (!el) return;
+    el.textContent = value || '';
+}
+
+function setTelegramBotFieldsEditable(editable) {
+    var fields = telegramBotFields();
+    [fields.nameInput, fields.tokenInput].forEach(function (input) {
+        if (!input) return;
+        input.setAttribute('contenteditable', editable ? 'true' : 'false');
+        input.setAttribute('aria-readonly', editable ? 'false' : 'true');
+        if (!editable) input.blur();
+    });
+}
+
+function clearTelegramBotFields() {
+    var fields = telegramBotFields();
+    setTelegramBotFieldText(fields.nameInput, '');
+    setTelegramBotFieldText(fields.tokenInput, '');
+    setTelegramBotFieldsEditable(false);
+}
+
 function fillTelegramBotForm(config) {
-    var nameInput = document.getElementById('telegram-bot-username');
-    var tokenInput = document.getElementById('telegram-bot-token');
-    if (nameInput) nameInput.value = (config && config.bot_username) || '';
-    if (tokenInput) tokenInput.value = (config && config.bot_token) || '';
+    telegramBotCachedConfig = config || null;
+    if (!telegramBotModalIsOpen()) {
+        clearTelegramBotFields();
+        return;
+    }
+    var fields = telegramBotFields();
+    setTelegramBotFieldText(fields.nameInput, (config && config.bot_username) || '');
+    setTelegramBotFieldText(fields.tokenInput, (config && config.bot_token) || '');
 }
 
 function setTelegramBotModalStatus(message, ok) {
@@ -77,6 +123,166 @@ function setTelegramBotModalStatus(message, ok) {
     el.textContent = message || '';
     el.classList.remove('telegram-botfather-status--ok', 'telegram-botfather-status--bad');
     if (message) el.classList.add(ok ? 'telegram-botfather-status--ok' : 'telegram-botfather-status--bad');
+}
+
+function setTelegramBotMenuStatus(message, ok) {
+    var el = document.getElementById('telegram-bot-menu-status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.remove('telegram-botfather-status--ok', 'telegram-botfather-status--bad');
+    if (message) el.classList.add(ok ? 'telegram-botfather-status--ok' : 'telegram-botfather-status--bad');
+}
+
+function renderTelegramBotMenuButtons(buttons) {
+    var list = document.getElementById('telegram-bot-menu-list');
+    if (!list) return;
+    telegramBotMenuButtons = Array.isArray(buttons) ? buttons : [];
+    list.innerHTML = '';
+    if (!telegramBotMenuButtons.length) {
+        var empty = document.createElement('p');
+        empty.className = 'telegram-botfather-status';
+        empty.textContent = 'No hay botones para gestionar.';
+        list.appendChild(empty);
+        return;
+    }
+    telegramBotMenuButtons.forEach(function (item) {
+        var row = document.createElement('div');
+        row.className = 'telegram-bot-menu-row';
+        row.setAttribute('role', 'listitem');
+        row.dataset.key = item.key;
+
+        var name = document.createElement('span');
+        name.className = 'telegram-bot-menu-name';
+        name.textContent = item.label || item.default_label || item.key;
+
+        var switchWrap = document.createElement('label');
+        switchWrap.className = 'telegram-bot-menu-switch';
+        switchWrap.title = item.enabled ? 'Encendido' : 'Apagado';
+        var checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !!item.enabled;
+        checkbox.setAttribute('aria-label', 'Activar ' + (item.label || item.key));
+        var slider = document.createElement('span');
+        switchWrap.appendChild(checkbox);
+        switchWrap.appendChild(slider);
+        checkbox.addEventListener('change', function () {
+            saveTelegramBotMenuButton(item.key, { enabled: !!checkbox.checked });
+        });
+
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn-orange row-icon-btn telegram-bot-menu-edit';
+        editBtn.title = 'Editar';
+        editBtn.setAttribute('aria-label', 'Editar');
+        editBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
+        editBtn.addEventListener('click', function () {
+            openTelegramBotMenuEditModal(item);
+        });
+
+        row.appendChild(name);
+        row.appendChild(switchWrap);
+        row.appendChild(editBtn);
+        list.appendChild(row);
+    });
+}
+
+function openTelegramBotMenuEditModal(item) {
+    var modal = document.getElementById('telegram-bot-menu-edit-modal');
+    var keyInput = document.getElementById('telegram-bot-menu-edit-key');
+    var nameInput = document.getElementById('telegram-bot-menu-edit-input');
+    var hint = document.getElementById('telegram-bot-menu-edit-hint');
+    if (!modal || !keyInput || !nameInput) return;
+    keyInput.value = item.key || '';
+    nameInput.value = item.label || item.default_label || '';
+    if (hint) {
+        hint.textContent = item.default_label
+            ? ('Original: ' + item.default_label)
+            : '';
+    }
+    modal.classList.remove('d-none');
+    modal.removeAttribute('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(function () {
+        nameInput.focus();
+        nameInput.select();
+    }, 0);
+}
+
+function closeTelegramBotMenuEditModal() {
+    var modal = document.getElementById('telegram-bot-menu-edit-modal');
+    var keyInput = document.getElementById('telegram-bot-menu-edit-key');
+    var nameInput = document.getElementById('telegram-bot-menu-edit-input');
+    if (!modal) return;
+    modal.classList.add('d-none');
+    modal.setAttribute('hidden', '');
+    modal.setAttribute('aria-hidden', 'true');
+    if (keyInput) keyInput.value = '';
+    if (nameInput) nameInput.value = '';
+}
+
+async function saveTelegramBotMenuEditModal() {
+    var keyInput = document.getElementById('telegram-bot-menu-edit-key');
+    var nameInput = document.getElementById('telegram-bot-menu-edit-input');
+    var saveBtn = document.getElementById('telegram-bot-menu-edit-save-btn');
+    var key = keyInput ? keyInput.value.trim() : '';
+    var label = nameInput ? nameInput.value.trim() : '';
+    if (!key) return;
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+        await saveTelegramBotMenuButton(key, { label: label });
+        closeTelegramBotMenuEditModal();
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+async function loadTelegramBotMenuButtons() {
+    try {
+        var response = await fetch('/tienda/admin/telegram_bot/menu_buttons', { credentials: 'same-origin' });
+        var result = await response.json();
+        if (!result || !result.success) {
+            setTelegramBotMenuStatus((result && result.error) || 'No se pudieron leer los botones.', false);
+            renderTelegramBotMenuButtons([]);
+            return;
+        }
+        setTelegramBotMenuStatus('', true);
+        renderTelegramBotMenuButtons(result.buttons || []);
+    } catch (error) {
+        setTelegramBotMenuStatus('No se pudieron leer los botones.', false);
+        renderTelegramBotMenuButtons([]);
+    }
+}
+
+async function saveTelegramBotMenuButton(key, changes) {
+    var payload = { key: key };
+    if (changes && Object.prototype.hasOwnProperty.call(changes, 'enabled')) {
+        payload.enabled = !!changes.enabled;
+    }
+    if (changes && Object.prototype.hasOwnProperty.call(changes, 'label')) {
+        payload.label = changes.label;
+    }
+    try {
+        var response = await fetch('/tienda/admin/telegram_bot/menu_buttons', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': whatsappCsrfToken(),
+            },
+            body: JSON.stringify(payload),
+        });
+        var result = await response.json();
+        if (!result || !result.success) {
+            setTelegramBotMenuStatus((result && result.error) || 'No se pudo guardar el botón.', false);
+            await loadTelegramBotMenuButtons();
+            return;
+        }
+        setTelegramBotMenuStatus('Botón actualizado.', true);
+        renderTelegramBotMenuButtons(result.buttons || []);
+    } catch (error) {
+        setTelegramBotMenuStatus('No se pudo guardar el botón.', false);
+        await loadTelegramBotMenuButtons();
+    }
 }
 
 async function loadTelegramBot() {
@@ -122,11 +328,10 @@ async function refreshTelegramBotHealth(silent) {
 }
 
 async function saveTelegramBotFromModal() {
-    var nameInput = document.getElementById('telegram-bot-username');
-    var tokenInput = document.getElementById('telegram-bot-token');
+    var fields = telegramBotFields();
     var saveBtn = document.getElementById('telegram-botfather-save-btn');
-    var username = nameInput ? nameInput.value.trim() : '';
-    var token = tokenInput ? tokenInput.value.trim() : '';
+    var username = telegramBotFieldText(fields.nameInput);
+    var token = telegramBotFieldText(fields.tokenInput);
     if (saveBtn) saveBtn.disabled = true;
     setTelegramBotModalStatus('Comprobando…', true);
     try {
@@ -1772,13 +1977,25 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     var telegramBotOpen = document.getElementById('telegram-botfather-open-btn');
     var telegramBotModal = document.getElementById('telegram-botfather-modal');
-    var telegramBotClose = document.getElementById('telegram-botfather-close-btn');
+    var telegramBotCloseX = document.getElementById('telegram-botfather-close-x');
     var telegramBotSave = document.getElementById('telegram-botfather-save-btn');
+    function closeTelegramGroupExtractInfo() {
+        var infoBox = document.getElementById('telegramGroupExtractInfoBox');
+        var infoBtn = document.getElementById('telegramGroupExtractInfoBtn');
+        if (infoBox) infoBox.hidden = true;
+        if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false');
+    }
     function closeTelegramBotModal() {
         if (!telegramBotModal) return;
+        closeTelegramGroupExtractInfo();
+        closeTelegramBotMenuEditModal();
         telegramBotModal.classList.add('d-none');
         telegramBotModal.setAttribute('hidden', '');
         telegramBotModal.setAttribute('aria-hidden', 'true');
+        clearTelegramBotFields();
+        setTelegramBotMenuStatus('', true);
+        var menuList = document.getElementById('telegram-bot-menu-list');
+        if (menuList) menuList.innerHTML = '';
         if (telegramBotOpen) telegramBotOpen.focus({ preventScroll: true });
     }
     function setTelegramGroupExtractStatus(message) {
@@ -1927,20 +2144,83 @@ document.addEventListener('DOMContentLoaded', function () {
         telegramBotModal.classList.remove('d-none');
         telegramBotModal.removeAttribute('hidden');
         telegramBotModal.setAttribute('aria-hidden', 'false');
+        setTelegramBotFieldsEditable(true);
+        fillTelegramBotForm(telegramBotCachedConfig);
         setTelegramBotModalStatus('', true);
+        setTelegramBotMenuStatus('', true);
         resetTelegramGroupTable();
-        var infoBox = document.getElementById('telegramGroupExtractInfoBox');
-        var infoBtn = document.getElementById('telegramGroupExtractInfoBtn');
-        if (infoBox) infoBox.hidden = true;
-        if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false');
-        var nameInput = document.getElementById('telegram-bot-username');
-        if (nameInput) nameInput.focus();
+        closeTelegramGroupExtractInfo();
+        loadTelegramBotMenuButtons();
+        if (telegramBotCloseX) telegramBotCloseX.focus({ preventScroll: true });
+        else telegramBotModal.focus({ preventScroll: true });
     }
     if (telegramBotOpen) telegramBotOpen.addEventListener('click', openTelegramBotModal);
     var telegramGroupLoad = document.getElementById('telegram-group-extract-load-btn');
     if (telegramGroupLoad) telegramGroupLoad.addEventListener('click', loadTelegramBotGroups);
-    if (telegramBotClose) telegramBotClose.addEventListener('click', closeTelegramBotModal);
+    var telegramGroupInfoBtn = document.getElementById('telegramGroupExtractInfoBtn');
+    if (telegramGroupInfoBtn) {
+        telegramGroupInfoBtn.addEventListener('click', function () {
+            var infoBox = document.getElementById('telegramGroupExtractInfoBox');
+            if (!infoBox) return;
+            var open = infoBox.hidden;
+            infoBox.hidden = !open;
+            telegramGroupInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    }
+    if (telegramBotCloseX) telegramBotCloseX.addEventListener('click', closeTelegramBotModal);
     if (telegramBotSave) telegramBotSave.addEventListener('click', saveTelegramBotFromModal);
+    var telegramMenuEditModal = document.getElementById('telegram-bot-menu-edit-modal');
+    var telegramMenuEditSave = document.getElementById('telegram-bot-menu-edit-save-btn');
+    var telegramMenuEditCancel = document.getElementById('telegram-bot-menu-edit-cancel-btn');
+    var telegramMenuEditInput = document.getElementById('telegram-bot-menu-edit-input');
+    if (telegramMenuEditSave) telegramMenuEditSave.addEventListener('click', saveTelegramBotMenuEditModal);
+    if (telegramMenuEditCancel) telegramMenuEditCancel.addEventListener('click', closeTelegramBotMenuEditModal);
+    if (telegramMenuEditInput) {
+        telegramMenuEditInput.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                saveTelegramBotMenuEditModal();
+            }
+        });
+    }
+    if (telegramMenuEditModal) {
+        telegramMenuEditModal.addEventListener('click', function (e) {
+            if (e.target === telegramMenuEditModal) closeTelegramBotMenuEditModal();
+        });
+        telegramMenuEditModal.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                closeTelegramBotMenuEditModal();
+            }
+        });
+    }
+    var telegramBotForm = document.getElementById('telegram-botfather-form');
+    if (telegramBotForm) {
+        telegramBotForm.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' || e.shiftKey) return;
+            var target = e.target;
+            if (!target || !target.classList || !target.classList.contains('telegram-botfather-field')) return;
+            e.preventDefault();
+            saveTelegramBotFromModal();
+        });
+        telegramBotForm.addEventListener('paste', function (e) {
+            var target = e.target;
+            if (!target || !target.classList || !target.classList.contains('telegram-botfather-field')) return;
+            e.preventDefault();
+            var text = '';
+            try {
+                text = (e.clipboardData || window.clipboardData).getData('text') || '';
+            } catch (err) {
+                text = '';
+            }
+            text = String(text).replace(/\r?\n/g, ' ').trim();
+            if (document.execCommand) {
+                document.execCommand('insertText', false, text);
+            } else {
+                target.textContent = text;
+            }
+        });
+    }
     if (telegramBotModal) {
         telegramBotModal.addEventListener('click', function (e) {
             if (e.target === telegramBotModal) closeTelegramBotModal();
@@ -1948,6 +2228,11 @@ document.addEventListener('DOMContentLoaded', function () {
         telegramBotModal.addEventListener('keydown', function (ev) {
             if (ev.key === 'Escape') {
                 ev.preventDefault();
+                var infoBox = document.getElementById('telegramGroupExtractInfoBox');
+                if (infoBox && !infoBox.hidden) {
+                    closeTelegramGroupExtractInfo();
+                    return;
+                }
                 closeTelegramBotModal();
             }
         });

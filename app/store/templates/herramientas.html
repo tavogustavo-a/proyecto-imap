@@ -6,7 +6,7 @@
 {% block head %}
   {{ super() }}
   <meta name="csrf_token" content="{{ csrf_token() }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261020-herramientas-textarea-border">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261021-herramientas-trash-align">
 {% endblock %}
 {% block content %}
 
@@ -39,9 +39,8 @@
     <button id="menuToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
     <button id="menu2ToggleBtn" type="button" class="btn-panel btn-blue menu-toggle-btn" title="Menú secundario" aria-label="Abrir segundo menú">&#9776; Menú2</button>
   </div>
-  <h2 class="m-0 mb-1 text-center w-100"><i class="fas fa-tools"></i> Herramientas</h2>
+  <h4 class="mb-1">Herramientas/ Información añadida</h4>
   <div class="d-flex flex-column align-items-center">
-    <h4 class="mb-1">Información añadida</h4>
     <div class="d-flex flex-wrap align-items-center mb-1 productos-buscar-mostrar">
       <div class="search-container">
         <label for="searchToolInput" class="sr-only">Buscar herramientas</label>
@@ -78,7 +77,7 @@
             <td>
               <div class="action-stack">
                 {% call state_switch(tool.enabled, 'btn-toggle-tool') %}data-id="{{ tool.id }}"{% endcall %}
-                <a href="{{ url_for('store_bp.edit_tool', tool_id=tool.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+                <a href="{{ url_for('store_bp.edit_tool', tool_id=tool.id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                 <button class="btn-panel btn-red btn-sm btn-delete-tool" data-id="{{ tool.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
@@ -96,8 +95,7 @@
       <button id="nextToolPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
     </div>
     <hr class="compact-hr">
-    <h4 class="mb-1">Crear porcentajes/resultados</h4>
-    <form method="POST" action="{{ url_for('store_bp.create_tool') }}" class="edit-html-form mb-05">
+    <form method="POST" action="{{ url_for('store_bp.create_tool') }}" class="edit-html-form mb-05" data-create-kind="tool">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="mb-2">
         <label for="title" class="sr-only">Título</label>
@@ -112,7 +110,7 @@
         <input type="number" name="percent" id="percent" class="form-control" placeholder="%" min="0" step="any" required autocomplete="off">
       </div>
       <div class="d-flex justify-content-center">
-        <button type="submit" class="btn-panel btn-green mt-1">Añadir información</button>
+        <button type="submit" class="btn-panel btn-green mt-1">crear porcentajes/resultados</button>
       </div>
     </form>
   </div>
@@ -156,13 +154,17 @@
             <td><strong>{{ html.title }}</strong></td>
             <td class="text-primary">
                 <strong>
-                    {{ html.text | striptags | truncate(20) }}
+                    {% if html.preset_key and html_preset_titles.get(html.preset_key) %}
+                      {{ html_preset_titles[html.preset_key] }}
+                    {% else %}
+                      {{ html.text | striptags | truncate(20) }}
+                    {% endif %}
                 </strong>
             </td>
             <td>
               <div class="action-stack">
                 {% call state_switch(html.enabled, 'btn-toggle-html') %}data-id="{{ html.id }}"{% endcall %}
-                <a href="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+                <a href="{{ url_for('store_bp.edit_html', html_id=html.id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                 <button class="btn-panel btn-red btn-sm btn-delete-html" data-id="{{ html.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
@@ -180,19 +182,29 @@
       <button id="nextHtmlPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
     </div>
     <hr class="compact-hr">
-    <h4 class="mb-1">Crear HTML</h4>
-    <form method="POST" action="{{ url_for('store_bp.add_html') }}" class="edit-html-form mb-05">
+    <form method="POST" action="{{ url_for('store_bp.add_html') }}" class="edit-html-form mb-05" data-html-preset-form data-create-kind="html">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="mb-2">
         <label for="html_title" class="sr-only">Título</label>
-        <input type="text" name="title" id="html_title" class="form-control" placeholder="Título" required autocomplete="off">
+        <input type="text" name="title" id="html_title" class="form-control" placeholder="Título" required autocomplete="off" data-html-title>
       </div>
       <div class="mb-2">
         <label for="html_text" class="sr-only">Contenido HTML</label>
-        <textarea name="text" id="html_text" class="form-control" rows="10" placeholder="Contenido HTML" required autocomplete="off"></textarea>
+        <textarea name="text" id="html_text" class="form-control" rows="10" placeholder="Contenido HTML (opcional si eliges un HTML ya configurado)" required autocomplete="off" data-html-text></textarea>
+      </div>
+      <div class="mb-2">
+        <label for="html_preset_key" class="sr-only">Plantilla preconfigurada</label>
+        <select name="preset_key" id="html_preset_key" class="form-control form-select" data-html-preset-select
+                aria-label="Plantilla preconfigurada"
+                data-preset-titles="{{ html_preset_titles | tojson }}">
+          <option value="">— Ninguno (HTML personalizado) —</option>
+          {% for preset_key, preset_label in html_preset_choices %}
+          <option value="{{ preset_key }}">{{ preset_label }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="d-flex justify-content-center">
-        <button type="submit" class="btn-panel btn-green mt-1">Añadir HTML</button>
+        <button type="submit" class="btn-panel btn-green mt-1">crear html</button>
       </div>
     </form>
   </div>
@@ -224,7 +236,6 @@
         <thead>
           <tr>
             <th>Título</th>
-            <th>Descripcion YouTube</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -233,11 +244,10 @@
             {% for listing in youtube_listings %}
             <tr data-title="{{ listing.title|lower }}">
               <td><strong>{{ listing.title }}</strong></td>
-              <td>{% if listing.content and listing.content != 'None' %}{{ listing.content | truncate(60) }}{% endif %}</td>
               <td>
                 <div class="action-stack">
                   {% call state_switch(listing.enabled, 'btn-toggle-youtube') %}data-id="{{ listing.id }}"{% endcall %}
-                  <a href="{{ url_for('store_bp.edit_youtube_listing', listing_id=listing.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+                  <a href="{{ url_for('store_bp.edit_youtube_listing', listing_id=listing.id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                   <button class="btn-panel btn-red btn-sm btn-delete-youtube" data-id="{{ listing.id }}" title="Eliminar">
                     <i class="fas fa-trash"></i>
                   </button>
@@ -246,7 +256,7 @@
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="3" class="text-center">No hay listados de YouTube aún.</td></tr>
+            <tr><td colspan="2" class="text-center">No hay listados de YouTube aún.</td></tr>
           {% endif %}
         </tbody>
       </table>
@@ -256,19 +266,18 @@
         <button id="nextYouTubePageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
     </div>
     <hr class="compact-hr">
-    <h4 class="mb-1">Crear listado YouTube</h4>
-    <form method="POST" action="{{ url_for('store_bp.create_youtube_listing') }}" class="edit-html-form mb-05">
+    <form method="POST" action="{{ url_for('store_bp.create_youtube_listing') }}" class="edit-html-form mb-05" data-create-kind="youtube">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="mb-2">
         <label for="youtube_title" class="sr-only">Título</label>
         <input type="text" name="title" id="youtube_title" class="form-control" placeholder="Título" required autocomplete="off">
       </div>
       <div class="mb-2">
-        <label for="youtube_content" class="sr-only">Descripción YouTube</label>
-        <textarea name="youtube_content" id="youtube_content" class="form-control" rows="3" placeholder="Descripción YouTube" autocomplete="off"></textarea>
+        <label for="youtube_content" class="sr-only">Descripcion YouTube</label>
+        <textarea name="youtube_content" id="youtube_content" class="form-control" rows="10" placeholder="Descripcion YouTube" autocomplete="off"></textarea>
       </div>
       <div class="d-flex justify-content-center">
-        <button type="submit" class="btn-panel btn-green mt-1">Añadir a Listado</button>
+        <button type="submit" class="btn-panel btn-green mt-1">crear listado de youtube</button>
       </div>
     </form>
   </div>
@@ -310,7 +319,7 @@
             <td>
               <div class="action-stack">
                 {% call state_switch(api.enabled, 'btn-toggle-api') %}data-id="{{ api.id }}"{% endcall %}
-                <a href="{{ url_for('store_bp.edit_api', api_id=api.id) }}" class="action-btn action-blue btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+                <a href="{{ url_for('store_bp.edit_api', api_id=api.id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
                 <button class="btn-panel btn-red btn-sm btn-delete-api" data-id="{{ api.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
@@ -328,20 +337,19 @@
         <button id="nextApiPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
     </div>
     <hr class="compact-hr">
-    <h4 class="mb-1">Crear Listado de APIs</h4>
-    <form id="apiForm" method="POST" action="{{ url_for('store_bp.create_api') }}" class="edit-html-form mb-05">
+    <form id="apiForm" method="POST" action="{{ url_for('store_bp.create_api') }}" class="edit-html-form mb-05" data-create-kind="api">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="mb-2">
         <label for="api_title" class="sr-only">Título</label>
         <input type="text" name="title" id="api_title" class="form-control" placeholder="Título" required autocomplete="off">
       </div>
       <div class="mb-2">
-        <label for="api_key" class="sr-only">Campo de API</label>
-        <textarea name="api_key" id="api_key" class="form-control" rows="3" placeholder="Campo de API" required autocomplete="off"></textarea>
+        <label for="api_key" class="sr-only">Campo de API o HTML</label>
+        <textarea name="api_key" id="api_key" class="form-control" rows="10" placeholder="Campo de API o HTML" required autocomplete="off"></textarea>
       </div>
       <div class="mb-2">
         <label for="api_type" class="sr-only">Tipo de API</label>
-        <select name="api_type" id="api_type" class="form-control" required autocomplete="off" aria-label="Tipo de API">
+        <select name="api_type" id="api_type" class="form-control" autocomplete="off" aria-label="Tipo de API">
           <option value="">Tipo de API — Genérica / Ninguno</option>
           <option value="Drive">Drive</option>
           <option value="Búsqueda de Medios">Búsqueda de Medios</option>
@@ -358,7 +366,7 @@
         </div>
       </div>
       <div class="d-flex justify-content-center">
-        <button type="submit" class="btn-panel btn-green mt-1">Añadir API</button>
+        <button type="submit" class="btn-panel btn-green mt-1">crear listado de api</button>
       </div>
     </form>
   </div>
@@ -400,8 +408,9 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/herramientas.js') }}?v=20261016-switch" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/youtube_listings.js') }}?v=20261016-switch" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/api_list.js') }}?v=20261016-switch" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_herramientas.js') }}?v=20261020-import-export" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/herramientas.js') }}?v=20261021-ajax-create" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/youtube_listings.js') }}?v=20261021-ajax-create" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/api_list.js') }}?v=20261021-ajax-create" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_herramientas.js') }}?v=20261021-api-field-html" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/html_preset_form.js') }}?v=20261021-medios-pago" defer></script>
 {% endblock %} 

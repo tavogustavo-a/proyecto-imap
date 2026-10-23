@@ -135,9 +135,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    window.herramientasAddYoutubeRow = function(row) {
+        allRows = allRows.filter(function(item) { return item.dataset && item.dataset.title; });
+        allRows.unshift(row);
+        currentPage = 1;
+        displayRows();
+    };
+
     // Inicialización
-    if(allRows.length > 0 && allRows[0].children.length > 1) { // Mensaje "No hay listados"
-      setupEventListeners();
+    setupEventListeners();
+    const titledRows = allRows.filter(function(row) { return row.dataset && row.dataset.title; });
+    if (titledRows.length > 0) {
+      allRows = titledRows;
       displayRows();
     } else {
       prevPageBtn.style.display = 'none';

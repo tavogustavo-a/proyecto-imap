@@ -1,0 +1,18 @@
+{% set sec = section if section is defined and section else none %}
+<div class="mdp-section-edit" data-mdp-section>
+  <div class="mdp-title-row">
+    <label class="sr-only" data-mdp-label="title">Título</label>
+    <input type="text" name="mdp_title" class="form-control" data-mdp-field="title" placeholder="Título" value="{{ sec.title if sec else '' }}" autocomplete="off" maxlength="160">
+    <label class="sr-only" data-mdp-label="color">Color del título</label>
+    <input type="color" name="mdp_color" data-mdp-field="color" value="{{ sec.color if sec else '#1e88e5' }}">
+  </div>
+  <label class="sr-only" data-mdp-label="subtitles">Subtítulos</label>
+  <textarea name="mdp_subtitles" class="form-control" data-mdp-field="subtitles" rows="3" placeholder="Subtítulos, uno por línea (opcional)" autocomplete="off">{% if sec %}{{ sec.subtitles | join('\n') }}{% endif %}</textarea>
+  <label class="sr-only" data-mdp-label="description">Descripción</label>
+  <textarea name="mdp_description" class="form-control" data-mdp-field="description" rows="2" placeholder="Descripción (opcional)" autocomplete="off">{% if sec %}{{ sec.description }}{% endif %}</textarea>
+  <div class="mdp-url-row">
+    <label class="sr-only" data-mdp-label="url">URL</label>
+    <input type="text" name="mdp_url" class="form-control" data-mdp-field="url" placeholder="URL (opcional)" value="{{ sec.url if sec else '' }}" autocomplete="off" maxlength="400">
+    <button type="button" class="mdp-remove-x" data-mdp-remove aria-label="Eliminar título" title="Eliminar título">&times;</button>
+  </div>
+</div>

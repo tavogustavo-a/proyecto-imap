@@ -67,10 +67,10 @@
 
   <!-- Sección unificada con contorno único -->
   <div class="service-config-section">
-    <!-- Subsección Colores de Alias -->
+    <!-- Subsección Colores de descripciones -->
     <div class="alias-colors-section">
-      <h4>Colores de Alias</h4>
-      <div class="d-flex gap-05 flex-wrap mb-1 mt-05 align-items-end">
+      <h4 class="text-center m-0 mb-1">Colores de descripciones</h4>
+      <div class="d-flex gap-05 service-color-controls-row">
       <div class="d-flex gap-03 align-items-center">
         <input
           type="color"
@@ -90,27 +90,22 @@
         >
       </div>
       <div class="gradient-preview-container">
-        <span class="service-color-label">Vista previa:</span>
+        <span class="service-color-label">Vista:</span>
         <div id="aliasGradientPreview" class="gradient-preview"></div>
         <button type="button" id="resetAliasColorsBtn" class="btn-panel btn-sm btn-orange" title="Restablecer colores predeterminados">
           <i class="fas fa-undo"></i>
         </button>
       </div>
-      <div class="d-flex gap-03">
-        <button type="button" id="saveAliasColorsBtn" class="btn-panel btn-sm btn-green">
-          <i class="fas fa-save"></i> Guardar
-        </button>
-        <button type="button" id="cancelAliasColorsBtn" class="btn-panel btn-sm btn-red">
-          <i class="fas fa-times"></i> Cancelar
-        </button>
+      <div class="d-flex gap-03 service-color-save-actions">
+        <button type="button" id="saveAliasColorsBtn" class="btn-panel btn-sm btn-green">Guardar</button>
       </div>
       </div>
     </div>
 
     <!-- Subsección Cuando se da clic -->
     <div class="click-colors-section">
-      <h4>Cuando se da clic</h4>
-      <div class="d-flex gap-05 flex-wrap mb-1 mt-05 align-items-end">
+      <h4 class="text-center m-0 mb-1">Cuando se da clic</h4>
+      <div class="d-flex gap-05 service-color-controls-row">
       <div class="d-flex gap-03 align-items-center">
         <input
           type="color"
@@ -130,27 +125,22 @@
         >
       </div>
       <div class="gradient-preview-container">
-        <span class="service-color-label">Vista previa:</span>
+        <span class="service-color-label">Vista:</span>
         <div id="clickGradientPreview" class="gradient-preview"></div>
         <button type="button" id="resetClickColorsBtn" class="btn-panel btn-sm btn-orange" title="Restablecer colores predeterminados">
           <i class="fas fa-undo"></i>
         </button>
       </div>
-      <div class="d-flex gap-03">
-        <button type="button" id="saveClickColorsBtn" class="btn-panel btn-sm btn-green">
-          <i class="fas fa-save"></i> Guardar
-        </button>
-        <button type="button" id="cancelClickColorsBtn" class="btn-panel btn-sm btn-red">
-          <i class="fas fa-times"></i> Cancelar
-        </button>
+      <div class="d-flex gap-03 service-color-save-actions">
+        <button type="button" id="saveClickColorsBtn" class="btn-panel btn-sm btn-green">Guardar</button>
       </div>
       </div>
     </div>
 
     <!-- Subsección Sin darle clic -->
     <div class="normal-colors-section">
-      <h4>Sin darle clic</h4>
-      <div class="d-flex gap-05 flex-wrap mb-1 mt-05 align-items-end">
+      <h4 class="text-center m-0 mb-1">Sin darle clic</h4>
+      <div class="d-flex gap-05 service-color-controls-row">
       <div class="d-flex gap-03 align-items-center">
         <input
           type="color"
@@ -170,33 +160,28 @@
         >
       </div>
       <div class="gradient-preview-container">
-        <span class="service-color-label">Vista previa:</span>
+        <span class="service-color-label">Vista:</span>
         <div id="normalGradientPreview" class="gradient-preview"></div>
         <button type="button" id="resetNormalColorsBtn" class="btn-panel btn-sm btn-orange" title="Restablecer colores predeterminados">
           <i class="fas fa-undo"></i>
         </button>
       </div>
-      <div class="d-flex gap-03">
-        <button type="button" id="saveNormalColorsBtn" class="btn-panel btn-sm btn-green">
-          <i class="fas fa-save"></i> Guardar
-        </button>
-        <button type="button" id="cancelNormalColorsBtn" class="btn-panel btn-sm btn-red">
-          <i class="fas fa-times"></i> Cancelar
-        </button>
+      <div class="d-flex gap-03 service-color-save-actions">
+        <button type="button" id="saveNormalColorsBtn" class="btn-panel btn-sm btn-green">Guardar</button>
       </div>
       </div>
     </div>
 
     <!-- Subsección Crear Nuevo Servicio -->
     <div class="create-service-section">
-      <h4>Crear Nuevo Servicio</h4>
-      <div class="d-flex gap-05 flex-wrap mb-1 mt-05">
+      <h4 class="text-center m-0 mb-1">Crear Nuevo Servicio</h4>
+      <div class="d-flex gap-05 flex-wrap mb-1 mt-05 justify-content-center align-items-center create-service-form-row">
       <label for="newServiceName" class="sr-only">Nombre</label>
       <input
         type="text"
         id="newServiceName"
         placeholder="Nombre del servicio"
-        class="flex-grow-1"
+        class="create-service-name-input"
       >
       <button type="button" id="createServiceBtn" class="btn-green">Crear</button>
       </div>
@@ -204,20 +189,22 @@
   </div>
 </div>
 
-<div id="popupRegex" class="popup-base popup-small modal-hidden">
-  <h4>Vincular Regex</h4>
-  <select id="regexSelect" class="select-min-width-200"></select>
-  <br><br>
-  <button id="regexLinkSaveBtn" class="popup-button-confirm">Vincular</button>
-  <button id="regexLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+<div id="popupRegex" class="popup-base popup-small modal-hidden service-link-popup">
+  <h4 class="service-link-popup-title text-center mt-0">Vincular Regex</h4>
+  <div id="regexSelectList" class="service-link-popup-list" role="listbox" aria-multiselectable="true" aria-label="Lista de regex"></div>
+  <div class="service-link-popup-actions d-flex gap-05 justify-content-center flex-wrap">
+    <button type="button" id="regexLinkSaveBtn" class="popup-button-confirm">Vincular</button>
+    <button type="button" id="regexLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+  </div>
 </div>
 
-<div id="popupFilter" class="popup-base popup-small modal-hidden">
-  <h4>Vincular Filtro</h4>
-  <select id="filterSelect" class="select-min-width-200"></select>
-  <br><br>
-  <button id="filterLinkSaveBtn" class="popup-button-confirm">Vincular</button>
-  <button id="filterLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+<div id="popupFilter" class="popup-base popup-small modal-hidden service-link-popup">
+  <h4 class="service-link-popup-title text-center mt-0">Vincular Filtro</h4>
+  <div id="filterSelectList" class="service-link-popup-list" role="listbox" aria-multiselectable="true" aria-label="Lista de filtros"></div>
+  <div class="service-link-popup-actions d-flex gap-05 justify-content-center flex-wrap">
+    <button type="button" id="filterLinkSaveBtn" class="popup-button-confirm">Vincular</button>
+    <button type="button" id="filterLinkCancelBtn" class="popup-button-cancel">Cancelar</button>
+  </div>
 </div>
 
 <div id="iconGridOverlay" class="popup-overlay modal-hidden">
@@ -236,5 +223,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20261021-service-icon-x" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20261021-no-color-cancel" defer></script>
 {% endblock %}

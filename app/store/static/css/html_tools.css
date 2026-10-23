@@ -67,6 +67,13 @@
   border-color: #007bff;
 }
 
+.html-toolbar button.html-toolbar-text-btn {
+  min-width: 2.25rem;
+  justify-content: center;
+  font-weight: 600;
+  padding: 6px 8px;
+}
+
 .html-toolbar select {
   padding: 6px 6px;
   border: 1px solid #ddd;
@@ -326,7 +333,7 @@
 
 .html-editor-wrap {
   position: relative;
-  border: 2px solid #e0e0e0;
+  border: 1.5px solid #111;
   border-radius: 6px;
   min-height: 180px;
   background: #fff;
@@ -375,6 +382,51 @@
   overflow-y: auto;
   background: #fff;
   border-radius: 4px;
+  cursor: text !important;
+  caret-color: #111 !important;
+  color: #111;
+  -webkit-text-fill-color: currentColor;
+  position: relative;
+  z-index: 1;
+}
+
+/* Cursor y caret visibles (negros) frente a reglas globales de .store-light */
+.store-light.html-tools-container .html-editor-wrap,
+.store-light.html-tools-container #htmlEditor,
+.container.store-light.html-tools-container .html-editor-wrap,
+.container.store-light.html-tools-container #htmlEditor {
+  cursor: text !important;
+  caret-color: #111 !important;
+}
+
+.store-light.html-tools-container #htmlEditor:focus,
+.container.store-light.html-tools-container #htmlEditor:focus {
+  caret-color: #111 !important;
+}
+
+.store-light.html-tools-container #htmlEditor p,
+.store-light.html-tools-container #htmlEditor div,
+.store-light.html-tools-container #htmlEditor span,
+.store-light.html-tools-container #htmlEditor h1,
+.store-light.html-tools-container #htmlEditor h2,
+.store-light.html-tools-container #htmlEditor h3,
+.store-light.html-tools-container #htmlEditor h4,
+.store-light.html-tools-container #htmlEditor li {
+  caret-color: #111 !important;
+  cursor: text !important;
+}
+
+.store-light.html-tools-container #htmlEditor img,
+.store-light.html-tools-container #htmlEditor .html-editor-icon {
+  cursor: pointer !important;
+}
+
+/* WebKit usa -webkit-text-fill-color del nodo actual para el caret; forzar negro */
+.container.store-light.html-tools-container #htmlEditor,
+.container.store-light.html-tools-container #htmlEditor *:not(img):not(.html-editor-icon) {
+  caret-color: #000 !important;
+  -webkit-text-fill-color: currentcolor !important;
+  color-scheme: light;
 }
 
 #htmlEditor p,
@@ -392,6 +444,13 @@
 #htmlEditor:empty::before {
   content: "Escribe aquí o usa las herramientas...";
   color: #999;
+  pointer-events: none;
+}
+
+.html-tools-container #htmlEditor:focus,
+.html-tools-container #htmlOutput:focus {
+  outline: 2px solid rgba(13, 110, 253, 0.4);
+  outline-offset: 0;
 }
 
 .html-panel-label {
@@ -406,7 +465,8 @@
   margin-top: 0;
 }
 
-.html-output-wrap textarea {
+.html-output-wrap textarea,
+.html-tools-container #htmlOutput {
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -414,11 +474,25 @@
   padding: 8px;
   font-family: monospace;
   font-size: 12px;
-  border: 2px solid #e0e0e0;
+  border: 1.5px solid #111;
   border-radius: 6px;
   resize: vertical;
-  background: #fff;
+  background: #fff !important;
+  color: #111 !important;
+  caret-color: #111 !important;
+  -webkit-text-fill-color: #111 !important;
+  cursor: text !important;
   box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.store-light.html-tools-container #htmlOutput,
+.store-light.html-tools-container #htmlOutput:focus,
+.container.store-light.html-tools-container #htmlOutput,
+.container.store-light.html-tools-container #htmlOutput:focus {
+  caret-color: #111 !important;
+  color: #111 !important;
+  -webkit-text-fill-color: #111 !important;
+  cursor: text !important;
 }
 
 .html-output-actions {

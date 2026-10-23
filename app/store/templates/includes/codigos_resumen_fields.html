@@ -1,0 +1,23 @@
+<div class="mb-3 mdp-editor" data-codigos-editor>
+  <div class="mdp-main-row">
+    <label for="codigos_main_title" class="sr-only">Título principal</label>
+    <input type="text" class="form-control" id="codigos_main_title" name="codigos_main_title" value="{{ codigos_resumen.main_title }}" placeholder="resumen de las consultas de la pagina de codigos" autocomplete="off" maxlength="160">
+  </div>
+  <p class="codigos-editor-note">Los botones y sus listas salen de la página de códigos. Si cambia un botón o su icono de información, aquí se actualiza solo. En cada uno solo se cambia el color.</p>
+  <div data-mdp-sections>
+    {% for button in codigos_resumen.buttons %}
+    <div class="mdp-section-edit">
+      <div class="mdp-title-row">
+        <input type="hidden" name="codigos_service_id" value="{{ button.id }}">
+        <label class="sr-only" for="codigos_title_{{ button.id }}">{{ button.title }}</label>
+        <input type="text" class="form-control" id="codigos_title_{{ button.id }}" value="{{ button.title }}" readonly>
+        <label class="sr-only" for="codigos_color_{{ button.id }}">Color de {{ button.title }}</label>
+        <input type="color" name="codigos_color" id="codigos_color_{{ button.id }}" value="{{ button.color }}">
+      </div>
+      <p class="codigos-alias-preview">{% if button.subtitles %}{{ button.subtitles | join(' · ') }}{% else %}Sin icono de información{% endif %}</p>
+    </div>
+    {% else %}
+    <p class="codigos-editor-note">No hay botones visibles en la página de códigos.</p>
+    {% endfor %}
+  </div>
+</div>

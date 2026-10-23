@@ -320,6 +320,71 @@
   line-height: 1.5;
 }
 
+/* Filas 2FA / SMS: editar y basura alineados (misma altura, centrados en la fila) */
+#sms-management-container .twofa-section-card #twofa-configs-list .regex-item,
+#sms-management-container #sms-configs-list .regex-item {
+  align-items: center !important;
+}
+
+#sms-management-container .twofa-list-row-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  align-self: center !important;
+  flex-shrink: 0;
+  gap: 0.35rem;
+}
+
+#sms-management-container .twofa-list-row-actions button.edit-twofa-config.row-icon-btn,
+#sms-management-container .twofa-list-row-actions button.edit-sms-config.row-icon-btn,
+#sms-management-container .twofa-list-row-actions button.delete-twofa-config,
+#sms-management-container .twofa-list-row-actions button.delete-sms-config,
+#sms-management-container .twofa-list-row-actions button.delete-sms-regex-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  max-width: 2.55rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  max-height: 1.45rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  flex: 0 0 auto !important;
+  vertical-align: middle;
+  box-sizing: border-box !important;
+}
+
+#sms-management-container .twofa-list-row-actions button.edit-twofa-config.row-icon-btn,
+#sms-management-container .twofa-list-row-actions button.edit-sms-config.row-icon-btn {
+  background: #f39c12 !important;
+  background-color: #f39c12 !important;
+  border: 2px solid #f39c12 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  font-size: 0.8rem !important;
+}
+
+#sms-management-container .twofa-list-row-actions button.edit-twofa-config.row-icon-btn:hover,
+#sms-management-container .twofa-list-row-actions button.edit-sms-config.row-icon-btn:hover {
+  background: #d35400 !important;
+  background-color: #d35400 !important;
+  border-color: #d35400 !important;
+}
+
+#sms-management-container .twofa-list-row-actions button.edit-twofa-config.row-icon-btn i,
+#sms-management-container .twofa-list-row-actions button.edit-sms-config.row-icon-btn i,
+#sms-management-container .twofa-list-row-actions button.delete-twofa-config i,
+#sms-management-container .twofa-list-row-actions button.delete-sms-config i,
+#sms-management-container .twofa-list-row-actions button.delete-sms-regex-btn i {
+  display: block;
+  line-height: 1;
+  margin: 0;
+  pointer-events: none;
+}
+
 .twofa-description-text {
   font-size: 0.9rem;
 }
@@ -396,7 +461,48 @@
 }
 
 .twofa-compact-row input[type="text"] {
-  min-width: 200px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 480px) {
+  #sms-management-container .twofa-section-card .twofa-compact-row {
+    gap: 0.2rem !important;
+    flex-wrap: nowrap;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  #sms-management-container .twofa-section-card .twofa-compact-row input[type="text"] {
+    min-width: 0 !important;
+    flex: 1 1 0 !important;
+    width: auto !important;
+    padding: 6px 6px !important;
+    font-size: 13px !important;
+  }
+
+  #sms-management-container .twofa-section-card .twofa-compact-row #twofa-upload-qr-btn,
+  #sms-management-container .twofa-section-card .twofa-compact-row #edit-twofa-upload-qr-btn {
+    flex: 0 0 auto;
+    padding: 2px 5px !important;
+    min-width: 0 !important;
+    font-size: 0.8rem !important;
+    line-height: 1.2;
+  }
+
+  #sms-management-container .twofa-section-card .twofa-compact-row #twofa-save-btn,
+  #sms-management-container .twofa-section-card .twofa-compact-row #edit-twofa-save-btn,
+  #sms-management-container .twofa-section-card .twofa-compact-row #twofa-cancel-btn {
+    flex: 0 0 auto;
+    padding: 2px 7px !important;
+    min-width: 0 !important;
+    white-space: nowrap;
+    font-size: 0.85rem !important;
+  }
+
+  #sms-management-container .twofa-section-card .twofa-compact-row .twofa-qr-btn-label {
+    display: none;
+  }
 }
 
 .twofa-qr-preview-img {
@@ -560,6 +666,11 @@
 #btn-refresh-messages {
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+#sms-management-container .sms-controls-row #btn-cleanup-sms.btn-imap-small:has(> i.fa-trash) {
+  align-self: center;
+  vertical-align: middle;
 }
 
 .sms-controls-row {
@@ -735,48 +846,123 @@
   flex: 0 0 auto;
 }
 
-#allowedNumbersPagination > #deleteAllNumbersBtn {
+/* Paginación lista correos SMS (misma fila: Todo | Anterior | info | Siguiente) */
+#allowedNumbersPagination {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+}
+
+#allowedNumbersPagination > #deleteAllNumbersBtn,
+#allowedNumbersPagination .allowed-emails-page-nav .btn-blue {
   flex: 0 0 auto;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  gap: 0.28rem;
+  box-sizing: border-box !important;
+  min-width: auto !important;
+  max-width: none !important;
   width: auto !important;
-  min-width: 0 !important;
-  height: 2rem !important;
-  margin-left: 0 !important;
-  padding: 0 0.55rem !important;
-  font-size: 1rem !important;
+  height: auto !important;
+  min-height: 1.45rem;
+  font-size: 1.08rem !important;
   font-weight: 600;
+  padding: 3px 8px !important;
   border-radius: 6px !important;
-  line-height: 1;
+  line-height: 1.25 !important;
   white-space: nowrap;
 }
 
-/* Estilos para paginación de números permitidos (igual que emails) */
+#allowedNumbersPagination > #deleteAllNumbersBtn {
+  gap: 0.28rem;
+}
+
+#allowedNumbersPagination .allowed-emails-page-nav {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  min-width: 0;
+}
+
+#paginationInfoNumbers {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
 @media (max-width: 768px) {
   #allowedNumbersPagination {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 0.22rem;
   }
-  
+
+  #allowedNumbersPagination .allowed-emails-page-nav {
+    width: auto;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+
+  #allowedNumbersPagination > #deleteAllNumbersBtn,
+  #allowedNumbersPagination .allowed-emails-page-nav .btn-blue {
+    min-width: auto !important;
+    padding: 3px 7px !important;
+    font-size: 0.9rem !important;
+    line-height: 1.25 !important;
+  }
+
+  #paginationInfoNumbers {
+    font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 576px) {
+  #allowedNumbersPagination {
+    gap: 0.22rem;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
   #allowedNumbersPagination > #deleteAllNumbersBtn {
-    margin-left: 0 !important;
-    margin-right: 0;
+    flex: 0 0 auto;
+    min-width: auto !important;
     width: auto !important;
-    min-width: 0 !important;
-    height: 2rem;
-    padding: 0 0.45rem !important;
+    padding: 3px 9px !important;
+    font-size: 0.85rem !important;
+    line-height: 1.25 !important;
   }
-  
-  #allowedNumbersPagination > .ml-auto {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    margin-left: 0 !important;
-    margin-right: 0;
-    order: 3;
+
+  #allowedNumbersPagination .allowed-emails-page-nav {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: auto;
+    justify-content: flex-end;
+    gap: 0.18rem;
+  }
+
+  #allowedNumbersPagination .allowed-emails-page-nav .btn-blue {
+    flex: 0 0 auto !important;
+    min-width: auto !important;
+    max-width: none !important;
+    width: auto !important;
+    padding: 3px 5px !important;
+    font-size: 0.8rem !important;
+    line-height: 1.25 !important;
+  }
+
+  #paginationInfoNumbers {
+    flex: 0 0 auto;
+    font-size: 0.65rem !important;
+    max-width: 5.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 

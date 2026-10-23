@@ -4,11 +4,11 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261022-tv-fullwidth">
 {% endblock %}
 
 {% block content %}
-<div class="store-light maxw-800 mx-auto mt-3 br-8 public-tools-container">
+<div class="store-light maxw-800 mx-auto mt-3 br-8 public-tools-container public-tools-wide">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
   {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
     <div class="d-flex justify-content-start menu-toggle-container">
@@ -62,15 +62,18 @@
       <form id="ajax-search-form" class="mb-3-5 d-flex flex-column gap-05" name="toolsSearchForm">
         <div class="search-form-inner">
           <label for="searchTools" class="sr-only">Buscar herramienta</label>
-          <input
-            type="search"
-            id="searchTools"
-            class="search-input"
-            placeholder="Buscar herramienta..."
-            required
-            autocomplete="off"
-          >
-          <button type="button" id="clearSearchTools" class="btn-search">Limpiar</button>
+          <div class="search-textarea-wrapper public-tools-search-wrap">
+            <input
+              type="search"
+              id="searchTools"
+              class="search-input"
+              placeholder="Buscar herramienta..."
+              autocomplete="off"
+            >
+            <button type="button" id="clearSearchTools" class="search-textarea-clear-btn" aria-label="Limpiar búsqueda">
+              <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -94,14 +97,14 @@
           <div class="accordion-body hidden">
               <div class="tool-calculator-form-container">{{ tool.text | rewrite_external_images | safe }}</div>
               <form class="form-calc-porcentaje" autocomplete="off" name="formCalcPorcentaje">
-                <div class="d-flex align-items-end gap-1 mb-1 tool-calculator-form-row">
-                  <div class="flex-2">
+                <div class="d-flex gap-1 mb-1 tool-calculator-form-row">
+                  <div class="tool-calculator-field">
                     <label for="x-{{ tool.id }}" class="sr-only">Número X (Porcentaje: {{ tool.percent }}%)</label>
                     <input type="number" step="any" min="0" class="form-control input-x" id="x-{{ tool.id }}" name="x-{{ tool.id }}" placeholder="Ingresa un número" autocomplete="off">
                   </div>
-                  <div class="flex-1">
-                    <label for="resultadoPorcentaje">Resultado</label>
-                    <input type="text" class="form-control resultado-porcentaje" readonly placeholder="0" name="resultado_porcentaje" id="resultadoPorcentaje" autocomplete="off">
+                  <div class="tool-calculator-field">
+                    <label for="resultadoPorcentaje-{{ tool.id }}" class="sr-only">Resultado</label>
+                    <input type="text" class="form-control resultado-porcentaje" readonly placeholder="Resultado" name="resultado_porcentaje" id="resultadoPorcentaje-{{ tool.id }}" autocomplete="off" aria-label="Resultado">
                   </div>
                 </div>
               </form>
@@ -129,7 +132,7 @@
               <div class="accordion-arrow"></div>
             </div>
             <div class="accordion-body hidden">
-              {{ html_content.text | rewrite_external_images | safe }}
+              {{ html_content | html_info_body | rewrite_external_images | safe }}
             </div>
           </div>
       {% endfor %}
@@ -188,7 +191,6 @@
                                   frameborder="0" 
                                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                   allowfullscreen 
-                                  sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" 
                                   loading="lazy"
                                   title="Reproductor de video de YouTube: {{ link.title }}"
                                   aria-label="Reproductor de video de YouTube: {{ link.title }}"
@@ -491,7 +493,7 @@
 {% block scripts %}
 {{ super() }}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}?v=20260710-no-db-query" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}?v=20261021-console-violations" defer></script>
 <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

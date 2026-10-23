@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
+import time
 from datetime import datetime
 
 import requests
@@ -19,10 +21,20 @@ logger = logging.getLogger(__name__)
 
 _BTN_ID = 'Saber tu ID de tu usuario'
 _BTN_ID_PREVIOUS = 'Saber el ID de tu cuenta'
-_BTN_PRICES = 'Lista de precios'
+_BTN_PRICES = 'Lista de precios y mensualidades'
+_BTN_PRICES_PREVIOUS = 'Lista de precios'
 _BTN_CODES = 'Qué hace cada botón de códigos'
+_BTN_PAGOS = 'Medios De Pago Que Recibo'
+_BTN_TRABAJO = 'Cómo trabajo — Guía rápida'
+_BTN_PANTALLAS = 'Foto de pantallas, perfiles, links de tv'
 _BTN_AD = 'Link de publicidad'
 _MENU_TEXT_LIMIT = 4000
+_REPEAT_SECONDS = 120
+_recent_button_sends = {}
+_recent_button_lock = threading.Lock()
+_CODE_FIELD = 'correo@dominio.com'
+_pending_code_search = {}
+_pending_code_lock = threading.Lock()
 
 _schema_ready = False
 _detail_lock = threading.Lock()
@@ -75,6 +87,25 @@ def _ensure_telegram_bot_enabled_column() -> None:
             pass
 
 
+def _ensure_telegram_menu_buttons_column() -> None:
+    try:
+        insp = inspect(db.engine)
+        cols = {c['name'] for c in insp.get_columns('telegram_bot_configs')}
+        if 'menu_buttons' in cols:
+            return
+        db.session.execute(text('ALTER TABLE telegram_bot_configs ADD COLUMN menu_buttons TEXT'))
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            current_app.logger.warning('ensure telegram menu_buttons: %s', exc)
+        except Exception:
+            pass
+
+
 def ensure_telegram_bot_schema() -> bool:
     """Crea telegram_bot_configs si falta. No usa db.create_all."""
     global _schema_ready
@@ -85,6 +116,7 @@ def ensure_telegram_bot_schema() -> bool:
         if 'telegram_bot_configs' in set(insp.get_table_names()):
             _ensure_telegram_bot_enabled_column()
             _ensure_telegram_update_offset_column()
+            _ensure_telegram_menu_buttons_column()
             _ensure_telegram_known_chats_table()
             _schema_ready = True
             return True
@@ -117,6 +149,8 @@ def ensure_telegram_bot_schema() -> bool:
             """
         with db.engine.begin() as conn:
             conn.execute(text(ddl))
+        _ensure_telegram_update_offset_column()
+        _ensure_telegram_menu_buttons_column()
         _ensure_telegram_known_chats_table()
         _schema_ready = True
         return True
@@ -910,13 +944,30 @@ def _menu_action(text: str) -> str:
         command = raw.split()[0].split('@')[0].lower()
         return 'start' if command == '/start' else ''
     key = raw.casefold()
-    return {
+    fixed = {
         _BTN_ID.casefold(): 'id',
         _BTN_ID_PREVIOUS.casefold(): 'id',
         _BTN_PRICES.casefold(): 'prices',
+        _BTN_PRICES_PREVIOUS.casefold(): 'prices',
         _BTN_CODES.casefold(): 'codes',
+        _BTN_PAGOS.casefold(): 'pagos',
+        _BTN_TRABAJO.casefold(): 'trabajo',
+        _BTN_PANTALLAS.casefold(): 'pantallas',
         _BTN_AD.casefold(): 'ad',
     }.get(key, '')
+    if fixed:
+        button = _menu_button(fixed)
+        if button is not None and not button['enabled']:
+            return ''
+        return fixed
+    for item in menu_button_catalog():
+        names = {item['label'].casefold(), item['default_label'].casefold()}
+        if key not in names:
+            continue
+        if not item['enabled']:
+            return ''
+        return item['key']
+    return ''
 
 
 def _money_amount(value) -> str:
@@ -964,24 +1015,217 @@ def _chat_belongs_to_store_user(chat_id) -> bool:
     return False
 
 
-def _inline_menu_button(text: str, data: str) -> dict:
-    return {'text': text, 'callback_data': data, 'style': 'primary'}
+def _inline_menu_button(text: str, data: str, style: str = 'primary') -> dict:
+    button = {'text': text, 'callback_data': data}
+    if style:
+        button['style'] = style
+    return button
 
 
-def _inline_menu_markup(include_ad: bool) -> dict:
-    rows = [
-        [_inline_menu_button(_BTN_ID, 'id')],
-        [_inline_menu_button(_BTN_PRICES, 'prices')],
-        [_inline_menu_button(_BTN_CODES, 'codes')],
+def _code_services_for_menu() -> list:
+    """Servicios que ve un usuario logueado en la página de códigos."""
+    try:
+        from app.models.service import ServiceModel
+
+        rows = (
+            ServiceModel.query.filter(
+                ServiceModel.enabled.is_(True),
+                ServiceModel.visibility_mode.in_(('on-usuarios', 'sms')),
+            )
+            .order_by(ServiceModel.position.asc(), ServiceModel.id.asc())
+            .all()
+        )
+    except Exception:
+        logger.exception('telegram code services')
+        return []
+    services = []
+    for row in rows:
+        name = (row.name or '').strip()
+        if not name or not row.id:
+            continue
+        services.append({
+            'id': int(row.id),
+            'name': name,
+            'sms': row.visibility_mode == 'sms',
+        })
+    return services
+
+
+def _code_service_by_id(service_id: int):
+    for service in _code_services_for_menu():
+        if service['id'] == int(service_id):
+            return service
+    return None
+
+
+def _menu_button_defaults() -> list:
+    """Botones fijos y, en medio, los servicios de la página de códigos."""
+    head = [
+        ('id', _BTN_ID),
+        ('prices', _BTN_PRICES),
+        ('codes', _BTN_CODES),
     ]
-    if include_ad:
-        rows.append([_inline_menu_button(_BTN_AD, 'ad')])
+    services = [
+        (f"svc:{service['id']}", service['name'])
+        for service in _code_services_for_menu()
+    ]
+    tail = [
+        ('pantallas', _BTN_PANTALLAS),
+        ('pagos', _BTN_PAGOS),
+        ('trabajo', _BTN_TRABAJO),
+        ('ad', _BTN_AD),
+    ]
+    return head + services + tail
+
+
+def _load_menu_button_prefs() -> dict:
+    row = get_telegram_bot_config()
+    raw = (getattr(row, 'menu_buttons', None) or '') if row else ''
+    try:
+        data = json.loads(raw) if raw else {}
+    except (TypeError, ValueError):
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def menu_button_catalog() -> list:
+    """Nombre visible, nombre original y si el botón está encendido."""
+    prefs = _load_menu_button_prefs()
+    items = []
+    for key, default in _menu_button_defaults():
+        pref = prefs.get(key) if isinstance(prefs.get(key), dict) else {}
+        custom = str(pref.get('label') or '').strip()
+        enabled = pref.get('enabled')
+        items.append({
+            'key': key,
+            'label': (custom or default)[:64],
+            'default_label': default,
+            'enabled': True if enabled is None else bool(enabled),
+        })
+    return items
+
+
+def _menu_button(key: str):
+    for item in menu_button_catalog():
+        if item['key'] == key:
+            return item
+    return None
+
+
+def _menu_key_enabled(key: str) -> bool:
+    if key == 'start':
+        return True
+    button = _menu_button(key)
+    if button is None:
+        return True
+    return bool(button['enabled'])
+
+
+def update_menu_button(key: str, enabled=None, label=None) -> list:
+    clean_key = str(key or '').strip()
+    current = _menu_button(clean_key)
+    if current is None:
+        raise ValueError('boton')
+    prefs = _load_menu_button_prefs()
+    stored = prefs.get(clean_key) if isinstance(prefs.get(clean_key), dict) else {}
+    if enabled is not None:
+        stored['enabled'] = bool(enabled)
+    if label is not None:
+        text = re.sub(r'\s+', ' ', str(label)).strip()[:64]
+        if not text or text == current['default_label']:
+            stored.pop('label', None)
+        else:
+            stored['label'] = text
+    if stored.get('enabled', True) is not False and 'label' not in stored:
+        prefs.pop(clean_key, None)
+    else:
+        prefs[clean_key] = stored
+    row = _get_or_create()
+    row.menu_buttons = json.dumps(prefs, ensure_ascii=False)
+    row.updated_at = datetime.utcnow()
+    db.session.commit()
+    return menu_button_catalog()
+
+
+def _visible_menu_entries(
+    include_ad: bool,
+    include_pagos: bool,
+    include_pantallas: bool,
+    include_trabajo: bool,
+) -> list:
+    ready = {
+        'pantallas': include_pantallas,
+        'pagos': include_pagos,
+        'trabajo': include_trabajo,
+        'ad': include_ad,
+    }
+    visible = []
+    for item in menu_button_catalog():
+        if not item['enabled']:
+            continue
+        if item['key'] in ready and not ready[item['key']]:
+            continue
+        visible.append(item)
+    return visible
+
+
+def _code_service_button_rows(services: list) -> list:
+    rows = []
+    for service in services:
+        data = f"svc:{service['id']}"
+        label = service['name'][:64]
+        rows.append([_inline_menu_button(_CODE_FIELD, data, '')])
+        rows.append([_inline_menu_button(label, data)])
+    return rows
+
+
+def _code_service_rows_html(services: list) -> str:
+    chunks = []
+    for service in services:
+        data = f"svc:{service['id']}"
+        name = _html_text(service['name'][:64])
+        chunks.append(
+            '<tg-button-row align="center">'
+            f'<tg-button type="callback_data" data="{data}">{_html_text(_CODE_FIELD)}</tg-button>'
+            '</tg-button-row>'
+            '<tg-button-row align="center">'
+            f'<tg-button type="callback_data" style="primary" data="{data}">{name}</tg-button>'
+            '</tg-button-row>'
+        )
+    return ''.join(chunks)
+
+
+def _medios_pago_menu_ready() -> bool:
+    """El botón solo aparece si hay un HTML de medios de pago activo y con datos."""
+    data = _load_medios_pago_card()
+    return bool(data and (data.get('main_title') or data.get('sections')))
+
+
+def _inline_menu_markup(
+    include_ad: bool,
+    include_pagos: bool = False,
+    include_pantallas: bool = False,
+    include_trabajo: bool = False,
+    code_services: list | None = None,
+) -> dict:
+    del code_services
+    rows = []
+    for item in _visible_menu_entries(include_ad, include_pagos, include_pantallas, include_trabajo):
+        if item['key'].startswith('svc:'):
+            rows.append([_inline_menu_button(_CODE_FIELD, item['key'], '')])
+        rows.append([_inline_menu_button(item['label'][:64], item['key'])])
     return {'inline_keyboard': rows}
 
 
 def _menu_markup_for(chat_id) -> dict:
     include_ad = bool(_working_ad_group_id()) and _chat_belongs_to_store_user(chat_id)
-    return _inline_menu_markup(include_ad)
+    return _inline_menu_markup(
+        include_ad,
+        _medios_pago_menu_ready(),
+        _pantallas_menu_ready(),
+        _como_trabajo_menu_ready(),
+        _code_services_for_menu(),
+    )
 
 
 def _markup_without_style(markup: dict) -> dict:
@@ -1017,15 +1261,27 @@ def _html_text(value: str) -> str:
     )
 
 
-def _centered_menu_html(include_ad: bool) -> str:
+def _centered_menu_html(
+    include_ad: bool,
+    include_pagos: bool = False,
+    include_pantallas: bool = False,
+    include_trabajo: bool = False,
+    code_services: list | None = None,
+) -> str:
+    del code_services
     rows = []
-    labels = [(_BTN_ID, 'id'), (_BTN_PRICES, 'prices'), (_BTN_CODES, 'codes')]
-    if include_ad:
-        labels.append((_BTN_AD, 'ad'))
-    for label, data in labels:
+    for item in _visible_menu_entries(include_ad, include_pagos, include_pantallas, include_trabajo):
+        data = item['key']
+        name = _html_text(item['label'][:64])
+        if data.startswith('svc:'):
+            rows.append(
+                '<tg-button-row align="center">'
+                f'<tg-button type="callback_data" data="{data}">{_html_text(_CODE_FIELD)}</tg-button>'
+                '</tg-button-row>'
+            )
         rows.append(
             '<tg-button-row align="center">'
-            f'<tg-button type="callback_data" style="primary" data="{data}">{_html_text(label)}</tg-button>'
+            f'<tg-button type="callback_data" style="primary" data="{data}">{name}</tg-button>'
             '</tg-button-row>'
         )
     return ''.join(rows)
@@ -1034,19 +1290,29 @@ def _centered_menu_html(include_ad: bool) -> str:
 def _send_with_menu(token: str, chat_id, text: str, include_menu: bool = True) -> dict:
     """Mensaje con los botones azules centrados. Si Telegram no acepta el formato, usa el teclado inline."""
     include_ad = bool(include_menu) and bool(_working_ad_group_id()) and _chat_belongs_to_store_user(chat_id)
+    include_pagos = bool(include_menu) and _medios_pago_menu_ready()
+    include_pantallas = bool(include_menu) and _pantallas_menu_ready()
+    include_trabajo = bool(include_menu) and _como_trabajo_menu_ready()
+    code_services = _code_services_for_menu() if include_menu else []
     body = _html_text(text).replace('\n', '<br>')
-    buttons = _centered_menu_html(include_ad) if include_menu else ''
+    if text.strip() == 'Elige una opción:':
+        body = f'<pullquote>{body}</pullquote>'
+    buttons = _centered_menu_html(
+        include_ad, include_pagos, include_pantallas, include_trabajo, code_services,
+    ) if include_menu else ''
     sent = _telegram_call(
         token,
         'sendRichMessage',
         {
             'chat_id': chat_id,
-            'rich_message': {'html': body + buttons},
+            'rich_message': {'html': body + buttons, 'skip_entity_detection': True},
             'reply_markup': {'remove_keyboard': True},
         },
     )
     if not sent.get('ok'):
-        markup = _inline_menu_markup(include_ad) if include_menu else None
+        markup = _inline_menu_markup(
+            include_ad, include_pagos, include_pantallas, include_trabajo, code_services,
+        ) if include_menu else None
         sent = _send_text(token, chat_id, text, markup)
     if include_menu:
         _replace_previous_menu(token, chat_id, sent)
@@ -1144,7 +1410,7 @@ def _price_list_payload(chat_id):
     if not products:
         return 'Cuentas y precios\n\nNo hay cuentas publicadas.'
     periods = _product_billing_period_map(products)
-    lines = []
+    rows = []
     for product in products:
         period = periods.get(product.id) or 'mensual'
         if currency == 'COP':
@@ -1152,59 +1418,1064 @@ def _price_list_payload(chat_id):
         else:
             amount = _final_price(product.price_usd, getattr(product, 'discount_usd_extra', 0))
         name = ' '.join(str(product.name or '').split()) or 'Cuenta'
-        lines.append(f'* {name}\n{period}: ${_money_amount(amount)} {currency}')
-    return (f'Cuentas y precios {currency}', lines)
+        rows.append({
+            'name': name,
+            'period': ' '.join(str(period or 'mensual').split()) or 'mensual',
+            'price': f'${_money_amount(amount)} {currency}',
+        })
+    return (f'Cuentas y precios {currency}', rows)
 
 
 def _send_price_list(token: str, chat_id) -> None:
-    """Título centrado y, por cuenta, el nombre y el periodo con el precio al lado."""
+    """Tabla de cuentas y precios como imagen, con los productos publicados en ese momento."""
     payload = _price_list_payload(chat_id)
     if isinstance(payload, str):
         _send_long_text(token, chat_id, payload)
         return
-    title, lines = payload
-    plain = title + '\n\n' + '\n\n'.join(lines)
-    blocks = [{'type': 'pullquote', 'text': title}]
-    for line in lines:
-        blocks.append({'type': 'paragraph', 'text': line})
-    sent = _telegram_call(token, 'sendRichMessage', {
-        'chat_id': chat_id,
-        'rich_message': {'blocks': blocks},
-    })
+    title, rows = payload
+    png = render_price_list_png(title, rows)
+    sent = _send_photo_bytes(token, chat_id, png, 'cuentas-y-precios.png')
     if not sent.get('ok'):
+        plain = title + '\n\n' + '\n\n'.join(
+            f"* {row['name']}\n{row['period']}: {row['price']}" for row in rows
+        )
         _send_long_text(token, chat_id, plain)
         return
     _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
-def _codes_help_text() -> str:
-    """Los mismos botones visibles en Códigos, con el texto del icono de información."""
-    from app.models.service import ServiceModel
+_FA_ICON_MARK = {
+    'crown': '👑',
+    'credit-card': '💳',
+    'wallet': '👛',
+    'money-bill-wave': '💵',
+    'coins': '🪙',
+    'gem': '💎',
+    'star': '⭐',
+    'university': '🏦',
+    'hand-holding-usd': '💰',
+    'shield-alt': '🛡️',
+}
 
-    services = (
-        ServiceModel.query
-        .filter(
-            ServiceModel.enabled.is_(True),
-            ServiceModel.visibility_mode.in_(('on-usuarios', 'on-no-usuarios', 'sms')),
-        )
-        .order_by(ServiceModel.position.asc(), ServiceModel.id.asc())
-        .all()
+
+def _medios_pago_icon_text(icon: str | None) -> str:
+    value = (icon or '').strip() or '👑'
+    if value.startswith('fa:'):
+        return _FA_ICON_MARK.get(value[3:].strip(), '')
+    return value
+
+
+def _font_file(bold: bool) -> str | None:
+    import os
+
+    names = (
+        ('arialbd.ttf', 'DejaVuSans-Bold.ttf', 'LiberationSans-Bold.ttf')
+        if bold else
+        ('arial.ttf', 'DejaVuSans.ttf', 'LiberationSans-Regular.ttf')
     )
-    blocks = []
-    for service in services:
-        lines = [f'* {service.name}']
-        aliases = sorted(service.aliases or [], key=lambda item: item.id or 0)
-        for alias in aliases:
-            if getattr(alias, 'enabled', True) is False:
-                continue
-            name = ' '.join(str(alias.alias_name or '').split())
-            if name:
-                lines.append(f'- {name}')
-        if len(lines) > 1:
-            blocks.append('\n'.join(lines))
-    if not blocks:
-        return 'No hay botones de códigos con descripción.'
-    return '\n\n'.join(blocks)
+    folders = (
+        r'C:\Windows\Fonts',
+        '/usr/share/fonts/truetype/dejavu',
+        '/usr/share/fonts/truetype/liberation',
+    )
+    for folder in folders:
+        for name in names:
+            path = os.path.join(folder, name)
+            if os.path.isfile(path):
+                return path
+    return None
+
+
+def _load_font(size: int, bold: bool = False):
+    from PIL import ImageFont
+
+    path = _font_file(bold)
+    if path:
+        return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
+def _wrap_words(draw, text: str, font, max_width: int) -> list[str]:
+    words = ' '.join(str(text or '').split()).split(' ')
+    if not words or words == ['']:
+        return []
+    lines: list[str] = []
+    current = ''
+    for word in words:
+        trial = word if not current else f'{current} {word}'
+        if draw.textlength(trial, font=font) <= max_width:
+            current = trial
+            continue
+        if current:
+            lines.append(current)
+        current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _hex_rgb(value: str) -> tuple[int, int, int]:
+    raw = (value or '').strip().lstrip('#')
+    if len(raw) == 3:
+        raw = ''.join(ch * 2 for ch in raw)
+    if len(raw) != 6:
+        return (30, 136, 229)
+    try:
+        return tuple(int(raw[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return (30, 136, 229)
+
+
+def _rounded_mask(size: tuple[int, int], radius: int):
+    from PIL import Image, ImageDraw
+
+    mask = Image.new('L', size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, size[0] - 1, size[1] - 1), radius=radius, fill=255)
+    return mask
+
+
+def render_medios_pago_png(data: dict) -> bytes:
+    """Dibuja la ficha de medios de pago como PNG para enviarla por Telegram."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    width = 760
+    pad = 22
+    inner = width - pad * 2
+    title_font = _load_font(34, True)
+    section_font = _load_font(24, True)
+    item_font = _load_font(22, True)
+    body_font = _load_font(20, False)
+    line_gap = 8
+    sections = data.get('sections') or []
+    main_title = ' '.join(str(data.get('main_title') or 'medios de pago que recibo').split()).upper()
+    icon = _medios_pago_icon_text(data.get('main_icon'))
+
+    probe = Image.new('RGB', (width, 40), 'white')
+    measure = ImageDraw.Draw(probe)
+
+    def block_height(text: str, font, max_width: int) -> tuple[list[str], int]:
+        lines = _wrap_words(measure, text, font, max_width)
+        if not lines:
+            return [], 0
+        sample = measure.textbbox((0, 0), 'Ag', font=font)
+        line_h = sample[3] - sample[1]
+        return lines, len(lines) * (line_h + line_gap) - line_gap
+
+    title_lines, title_h = block_height(main_title, title_font, inner - 36)
+    banner_h = max(88, title_h + 36)
+    total = pad + banner_h + 18
+    prepared = []
+    for section in sections:
+        color = _hex_rgb(section.get('color'))
+        heading = ' '.join(str(section.get('title') or '').split()).upper()
+        head_lines, head_h = block_height(heading, section_font, inner - 28) if heading else ([], 0)
+        bar_h = head_h + 22 if heading else 0
+        content_h = 16
+        items = []
+        for line in section.get('subtitles') or []:
+            wrapped, height = block_height(line, item_font, inner - 58)
+            if wrapped:
+                items.append((wrapped, height))
+                content_h += height + 8
+        desc_lines, desc_h = block_height(section.get('description') or '', body_font, inner - 36)
+        if desc_lines:
+            content_h += desc_h + 8
+        url = ' '.join(str(section.get('url') or '').split())
+        url_label = url
+        for prefix in ('https://', 'http://'):
+            if url_label.lower().startswith(prefix):
+                url_label = url_label[len(prefix):]
+        url_lines, url_h = block_height(url_label, item_font, inner - 36)
+        if url_lines:
+            content_h += url_h + 6
+        content_h = max(content_h, 18)
+        box_h = bar_h + content_h + 12
+        prepared.append({
+            'color': color,
+            'head_lines': head_lines,
+            'bar_h': bar_h,
+            'items': items,
+            'desc_lines': desc_lines,
+            'url_lines': url_lines,
+            'box_h': box_h,
+        })
+        total += box_h + 16
+    total += pad
+
+    image = Image.new('RGB', (width, total), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    y = pad
+    banner = Image.new('RGB', (inner, banner_h), (240, 68, 54))
+    gradient = ImageDraw.Draw(banner)
+    for row in range(banner_h):
+        mix = row / max(banner_h - 1, 1)
+        color = (
+            int(255 + (240 - 255) * mix),
+            int(125 + (68 - 125) * mix),
+            int(104 + (54 - 104) * mix),
+        )
+        gradient.line((0, row, inner, row), fill=color)
+    banner.putalpha(_rounded_mask((inner, banner_h), 16))
+    image.paste(banner, (pad, y), banner)
+    text_y = y + (banner_h - title_h) // 2
+    for line in title_lines:
+        line_w = draw.textlength(line, font=title_font)
+        draw.text(((width - line_w) / 2, text_y), line, font=title_font, fill=(255, 255, 255))
+        sample = draw.textbbox((0, 0), line, font=title_font)
+        text_y += (sample[3] - sample[1]) + line_gap
+    if icon and title_lines:
+        icon_font = title_font
+        icon_path = r'C:\Windows\Fonts\seguiemj.ttf'
+        try:
+            import os
+            from PIL import ImageFont
+            if os.path.isfile(icon_path):
+                icon_font = ImageFont.truetype(icon_path, 32)
+        except Exception:
+            icon_font = title_font
+        last = title_lines[-1]
+        last_w = draw.textlength(last, font=title_font)
+        icon_x = (width + last_w) / 2 + 10
+        icon_y = y + 18
+        try:
+            draw.text((icon_x, icon_y), icon, font=icon_font, embedded_color=True)
+        except TypeError:
+            draw.text((icon_x, icon_y), icon, font=icon_font, fill=(255, 220, 80))
+    y += banner_h + 18
+
+    for section in prepared:
+        x0 = pad
+        box_h = section['box_h']
+        color = section['color']
+        draw.rounded_rectangle((x0, y, x0 + inner, y + box_h), radius=14, outline=color, width=3)
+        cursor = y
+        if section['bar_h']:
+            bar = Image.new('RGB', (inner - 6, section['bar_h']), color)
+            image.paste(bar, (x0 + 3, y + 3))
+            text_y = y + 12
+            for line in section['head_lines']:
+                line_w = draw.textlength(line, font=section_font)
+                draw.text(((width - line_w) / 2, text_y), line, font=section_font, fill=(255, 255, 255))
+                sample = draw.textbbox((0, 0), line, font=section_font)
+                text_y += (sample[3] - sample[1]) + line_gap
+            cursor = y + section['bar_h'] + 8
+        else:
+            cursor = y + 12
+        for wrapped, _height in section['items']:
+            dot_y = cursor + 8
+            draw.ellipse((x0 + 18, dot_y, x0 + 32, dot_y + 14), fill=color)
+            line_y = cursor
+            for line in wrapped:
+                draw.text((x0 + 42, line_y), line, font=item_font, fill=(36, 48, 64))
+                sample = draw.textbbox((0, 0), line, font=item_font)
+                line_y += (sample[3] - sample[1]) + line_gap
+            cursor = line_y + 4
+        for line in section['desc_lines']:
+            draw.text((x0 + 18, cursor), line, font=body_font, fill=(44, 62, 80))
+            sample = draw.textbbox((0, 0), line, font=body_font)
+            cursor += (sample[3] - sample[1]) + line_gap
+        if section['desc_lines']:
+            cursor += 4
+        for line in section['url_lines']:
+            draw.text((x0 + 18, cursor), line, font=item_font, fill=(21, 101, 192))
+            sample = draw.textbbox((0, 0), line, font=item_font)
+            cursor += (sample[3] - sample[1]) + line_gap
+        y += box_h + 16
+
+    out = io.BytesIO()
+    image.save(out, format='PNG', optimize=True)
+    return out.getvalue()
+
+
+def _font_line_h(font) -> int:
+    ascent, descent = font.getmetrics()
+    return int(ascent + descent)
+
+
+def _emoji_font(size: int):
+    import os
+
+    from PIL import ImageFont
+
+    path = r'C:\Windows\Fonts\seguiemj.ttf'
+    if os.path.isfile(path):
+        return ImageFont.truetype(path, size)
+    return None
+
+
+def _is_emoji_char(ch: str) -> bool:
+    return ord(ch) >= 0x2190
+
+
+def _draw_mixed_text(draw, x: int, y: int, text: str, font, fill, emoji_font) -> None:
+    if not emoji_font or not any(_is_emoji_char(ch) for ch in text):
+        draw.text((x, y), text, font=font, fill=fill)
+        return
+    cursor = x
+    chunk = ''
+    emoji_mode = None
+
+    def flush(piece: str, as_emoji: bool) -> None:
+        nonlocal cursor
+        if not piece:
+            return
+        if as_emoji:
+            try:
+                draw.text((cursor, y - 2), piece, font=emoji_font, embedded_color=True)
+            except TypeError:
+                draw.text((cursor, y - 2), piece, font=emoji_font, fill=fill)
+            cursor += int(draw.textlength(piece, font=emoji_font))
+            return
+        draw.text((cursor, y), piece, font=font, fill=fill)
+        cursor += int(draw.textlength(piece, font=font))
+
+    for ch in text:
+        mode = _is_emoji_char(ch)
+        if emoji_mode is None:
+            emoji_mode = mode
+        if mode != emoji_mode:
+            flush(chunk, bool(emoji_mode))
+            chunk = ch
+            emoji_mode = mode
+        else:
+            chunk += ch
+    flush(chunk, bool(emoji_mode))
+
+
+def render_codigos_png(data: dict) -> bytes:
+    """Dibuja el resumen de códigos como PNG, con el mismo estilo de la ficha pública."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    width = 980
+    pad = 24
+    inner = width - pad * 2
+    title_font = _load_font(36, True)
+    intro_font = _load_font(22, False)
+    section_font = _load_font(26, True)
+    item_font = _load_font(24, True)
+    emoji_font = _emoji_font(22)
+    line_gap = 8
+    buttons = data.get('buttons') or []
+    main_title = ' '.join(str(data.get('main_title') or '').split()).upper()
+    intro = ' '.join(str(data.get('intro') or '').split())
+
+    probe = Image.new('RGB', (width, 40), 'white')
+    measure = ImageDraw.Draw(probe)
+
+    def block_height(text: str, font, max_width: int) -> tuple[list[str], int]:
+        lines = _wrap_words(measure, text, font, max_width)
+        if not lines:
+            return [], 0
+        line_h = _font_line_h(font)
+        return lines, len(lines) * (line_h + line_gap) - line_gap
+
+    title_lines, title_h = block_height(main_title, title_font, inner - 40)
+    banner_h = max(92, title_h + 40)
+    intro_lines, intro_h = block_height(intro, intro_font, inner - 56)
+    total = pad + banner_h + 18 + (intro_h + 16 if intro_lines else 0)
+    prepared = []
+    for button in buttons:
+        color = _hex_rgb(button.get('color'))
+        heading = ' '.join(str(button.get('title') or '').split()).upper()
+        head_lines, head_h = block_height(heading, section_font, inner - 28) if heading else ([], 0)
+        bar_h = head_h + 22 if heading else 0
+        content_h = 16
+        items = []
+        for line in button.get('subtitles') or []:
+            wrapped, height = block_height(line, item_font, inner - 64)
+            if wrapped:
+                items.append((wrapped, height))
+                content_h += height + 12
+        if not items:
+            content_h += 8
+        content_h = max(content_h, 18)
+        box_h = bar_h + content_h + 20
+        prepared.append({
+            'color': color,
+            'head_lines': head_lines,
+            'bar_h': bar_h,
+            'items': items,
+            'box_h': box_h,
+        })
+        total += box_h + 16
+    total += pad
+
+    image = Image.new('RGB', (width, max(total, banner_h + pad * 2)), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    y = pad
+    banner = Image.new('RGB', (inner, banner_h), (240, 68, 54))
+    gradient = ImageDraw.Draw(banner)
+    for row in range(banner_h):
+        mix = row / max(banner_h - 1, 1)
+        color = (
+            int(255 + (240 - 255) * mix),
+            int(125 + (68 - 125) * mix),
+            int(104 + (54 - 104) * mix),
+        )
+        gradient.line((0, row, inner, row), fill=color)
+    banner.putalpha(_rounded_mask((inner, banner_h), 16))
+    image.paste(banner, (pad, y), banner)
+    text_y = y + (banner_h - title_h) // 2
+    for line in title_lines:
+        line_w = draw.textlength(line, font=title_font)
+        draw.text(((width - line_w) / 2, text_y), line, font=title_font, fill=(255, 255, 255))
+        text_y += _font_line_h(title_font) + line_gap
+    y += banner_h + 18
+    for line in intro_lines:
+        line_w = draw.textlength(line, font=intro_font)
+        draw.text(((width - line_w) / 2, y), line, font=intro_font, fill=(52, 73, 94))
+        y += _font_line_h(intro_font) + line_gap
+    if intro_lines:
+        y += 16
+
+    for section in prepared:
+        x0 = pad
+        box_h = section['box_h']
+        color = section['color']
+        draw.rounded_rectangle((x0, y, x0 + inner, y + box_h), radius=14, outline=color, width=3)
+        if section['bar_h']:
+            bar = Image.new('RGB', (inner - 6, section['bar_h']), color)
+            image.paste(bar, (x0 + 3, y + 3))
+            text_y = y + 12
+            for line in section['head_lines']:
+                line_w = draw.textlength(line, font=section_font)
+                draw.text(((width - line_w) / 2, text_y), line, font=section_font, fill=(255, 255, 255))
+                text_y += _font_line_h(section_font) + line_gap
+            cursor = y + section['bar_h'] + 10
+        else:
+            cursor = y + 12
+        for wrapped, _height in section['items']:
+            dot_y = cursor + 8
+            draw.ellipse((x0 + 20, dot_y, x0 + 36, dot_y + 16), fill=color)
+            line_y = cursor
+            for line in wrapped:
+                _draw_mixed_text(draw, x0 + 48, line_y, line, item_font, (36, 48, 64), emoji_font)
+                line_y += _font_line_h(item_font) + line_gap
+            cursor = line_y + 4
+        y += box_h + 16
+
+    out = io.BytesIO()
+    image.save(out, format='PNG', optimize=True)
+    return out.getvalue()
+
+
+def render_price_list_png(title: str, rows: list[dict]) -> bytes:
+    """Tabla de cuentas y precios, lista para enviarla por Telegram."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    width = 900
+    pad = 16
+    inner = width - pad * 2
+    title_font = _load_font(30, True)
+    head_font = _load_font(18, True)
+    cell_font = _load_font(20, True)
+    line_gap = 3
+    name_w = int(inner * 0.52)
+    period_w = int(inner * 0.22)
+    price_w = inner - name_w - period_w
+    cell_pad = 12
+    header_h = 36
+
+    probe = Image.new('RGB', (width, 40), 'white')
+    measure = ImageDraw.Draw(probe)
+
+    def wrap(text: str, font, max_width: int) -> list[str]:
+        return _wrap_words(measure, text, font, max_width) or ['']
+
+    def block_h(lines: list[str], font) -> int:
+        if not lines:
+            return 0
+        line_h = _font_line_h(font)
+        return len(lines) * (line_h + line_gap) - line_gap
+
+    title_lines = wrap(str(title or 'Cuentas y precios').upper(), title_font, inner - 40)
+    title_h = block_h(title_lines, title_font)
+    banner_h = max(64, title_h + 24)
+    prepared = []
+    table_h = header_h
+    for row in rows:
+        name_lines = wrap(row.get('name') or 'Cuenta', cell_font, name_w - cell_pad * 2)
+        period_lines = wrap(row.get('period') or '', cell_font, period_w - 12)
+        price_lines = wrap(row.get('price') or '', cell_font, price_w - cell_pad * 2)
+        row_h = max(block_h(name_lines, cell_font), block_h(period_lines, cell_font), block_h(price_lines, cell_font)) + 12
+        prepared.append((name_lines, period_lines, price_lines, row_h))
+        table_h += row_h
+    total = pad + banner_h + 12 + table_h + pad
+
+    image = Image.new('RGB', (width, total), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    y = pad
+    banner = Image.new('RGB', (inner, banner_h), (21, 101, 192))
+    gradient = ImageDraw.Draw(banner)
+    for row_i in range(banner_h):
+        mix = row_i / max(banner_h - 1, 1)
+        color = (
+            int(30 + (21 - 30) * mix),
+            int(136 + (101 - 136) * mix),
+            int(229 + (192 - 229) * mix),
+        )
+        gradient.line((0, row_i, inner, row_i), fill=color)
+    banner.putalpha(_rounded_mask((inner, banner_h), 16))
+    image.paste(banner, (pad, y), banner)
+    text_y = y + (banner_h - title_h) // 2
+    for line in title_lines:
+        line_w = draw.textlength(line, font=title_font)
+        draw.text(((width - line_w) / 2, text_y), line, font=title_font, fill=(255, 255, 255))
+        text_y += _font_line_h(title_font) + line_gap
+    y += banner_h + 12
+
+    x0 = pad
+    table_top = y
+    draw.rectangle((x0 + 4, y + 4, x0 + inner - 4, y + header_h), fill=(238, 244, 250))
+    headers = (('Cuenta', name_w, 'left'), ('Periodo', period_w, 'center'), ('Precio', price_w, 'right'))
+    cursor_x = x0
+    for label, col_w, align in headers:
+        label_w = draw.textlength(label, font=head_font)
+        if align == 'center':
+            label_x = cursor_x + (col_w - label_w) / 2
+        elif align == 'right':
+            label_x = cursor_x + col_w - cell_pad - label_w
+        else:
+            label_x = cursor_x + cell_pad
+        draw.text((label_x, y + 8), label, font=head_font, fill=(30, 58, 95))
+        cursor_x += col_w
+    y += header_h
+
+    for index, (name_lines, period_lines, price_lines, row_h) in enumerate(prepared):
+        if index % 2 == 1:
+            draw.rectangle((x0 + 4, y + 1, x0 + inner - 4, y + row_h - 1), fill=(248, 250, 252))
+        draw.line((x0 + 3, y, x0 + inner - 3, y), fill=(0, 0, 0), width=2)
+        columns = (
+            (name_lines, name_w, 'left'),
+            (period_lines, period_w, 'center'),
+            (price_lines, price_w, 'right'),
+        )
+        cursor_x = x0
+        line_h = _font_line_h(cell_font)
+        for lines, col_w, align in columns:
+            block = block_h(lines, cell_font)
+            line_y = y + max(5, (row_h - block) // 2)
+            for line in lines:
+                line_w = draw.textlength(line, font=cell_font)
+                if align == 'center':
+                    line_x = cursor_x + (col_w - line_w) / 2
+                elif align == 'right':
+                    line_x = cursor_x + col_w - cell_pad - line_w
+                else:
+                    line_x = cursor_x + cell_pad
+                draw.text((line_x, line_y), line, font=cell_font, fill=(31, 42, 55))
+                line_y += line_h + line_gap
+            cursor_x += col_w
+        y += row_h
+    draw.rounded_rectangle(
+        (x0, table_top, x0 + inner, table_top + table_h),
+        radius=12,
+        outline=(0, 0, 0),
+        width=3,
+    )
+
+    out = io.BytesIO()
+    image.save(out, format='PNG', optimize=True)
+    return out.getvalue()
+
+
+def _load_medios_pago_card() -> dict | None:
+    from app.store.html_presets import MEDIOS_DE_PAGO_KEY, parse_medios_pago_payload
+    from app.store.models import HtmlInfo
+
+    row = (
+        HtmlInfo.query
+        .filter(HtmlInfo.preset_key == MEDIOS_DE_PAGO_KEY, HtmlInfo.enabled.is_(True))
+        .order_by(HtmlInfo.id.desc())
+        .first()
+    )
+    if not row:
+        return None
+    return parse_medios_pago_payload(row.text)
+
+
+def _load_codigos_card() -> dict:
+    from app.store.html_presets import RESUMEN_CODIGOS_KEY, _CODIGOS_INTRO, codigos_editor_data
+    from app.store.models import HtmlInfo
+
+    row = (
+        HtmlInfo.query
+        .filter(HtmlInfo.preset_key == RESUMEN_CODIGOS_KEY, HtmlInfo.enabled.is_(True))
+        .order_by(HtmlInfo.id.desc())
+        .first()
+    )
+    data = codigos_editor_data(row.text if row else '')
+    data['intro'] = _CODIGOS_INTRO
+    return data
+
+
+def _load_pantallas_card() -> dict | None:
+    from app.store.html_presets import FOTO_PANTALLAS_KEY, parse_pantallas_payload
+    from app.store.models import HtmlInfo
+
+    row = (
+        HtmlInfo.query
+        .filter(HtmlInfo.preset_key == FOTO_PANTALLAS_KEY, HtmlInfo.enabled.is_(True))
+        .order_by(HtmlInfo.id.desc())
+        .first()
+    )
+    if not row:
+        return None
+    data = parse_pantallas_payload(row.text)
+    data['title'] = (row.title or '').strip() or 'Foto de pantallas, perfiles, links de tv'
+    if not data.get('rows'):
+        return None
+    return data
+
+
+def _pantallas_menu_ready() -> bool:
+    return _load_pantallas_card() is not None
+
+
+def _load_como_trabajo_card() -> dict | None:
+    from app.store.html_presets import COMO_TRABAJO_KEY, parse_como_trabajo_payload
+    from app.store.models import HtmlInfo
+
+    row = (
+        HtmlInfo.query
+        .filter(HtmlInfo.preset_key == COMO_TRABAJO_KEY, HtmlInfo.enabled.is_(True))
+        .order_by(HtmlInfo.id.desc())
+        .first()
+    )
+    if not row:
+        return None
+    data = parse_como_trabajo_payload(row.text)
+    if not data or not (data.get('main_title') or data.get('sections')):
+        return None
+    return data
+
+
+def _como_trabajo_menu_ready() -> bool:
+    return _load_como_trabajo_card() is not None
+
+
+def render_como_trabajo_png(data: dict) -> bytes:
+    """Ficha de Cómo trabajo como PNG, con flecha en el título y punto negro en los subtítulos."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    width = 820
+    pad = 22
+    inner = width - pad * 2
+    title_font = _load_font(32, True)
+    section_font = _load_font(22, True)
+    item_font = _load_font(20, True)
+    body_font = _load_font(18, False)
+    emoji_font = _emoji_font(26)
+    section_emoji = _emoji_font(22)
+    line_gap = 6
+    sections = data.get('sections') or []
+    main_title = ' '.join(str(data.get('main_title') or 'Cómo trabajo — Guía rápida').split())
+    icon = _medios_pago_icon_text(data.get('main_icon'))
+
+    probe = Image.new('RGB', (width, 40), 'white')
+    measure = ImageDraw.Draw(probe)
+
+    def block_height(text: str, font, max_width: int) -> tuple[list[str], int]:
+        lines = _wrap_words(measure, text, font, max_width)
+        if not lines:
+            return [], 0
+        sample = measure.textbbox((0, 0), 'Ag', font=font)
+        line_h = sample[3] - sample[1]
+        return lines, len(lines) * (line_h + line_gap) - line_gap
+
+    title_lines, title_h = block_height(main_title, title_font, inner - 70)
+    banner_h = max(84, title_h + 34)
+    total = pad + banner_h + 16
+    prepared = []
+    for section in sections:
+        color = _hex_rgb(section.get('color'))
+        heading = ' '.join(str(section.get('title') or '').split())
+        section_icon = _medios_pago_icon_text(section.get('icon')) if section.get('icon') else ''
+        head_lines, head_h = block_height(heading, section_font, inner - 90) if heading else ([], 0)
+        bar_h = max(head_h + 20, 46) if heading or section_icon else 0
+        content_h = 14
+        items = []
+        for line in section.get('subtitles') or []:
+            wrapped, height = block_height(line, item_font, inner - 64)
+            if wrapped:
+                items.append((wrapped, height))
+                content_h += height + 8
+        desc_lines, desc_h = block_height(section.get('description') or '', body_font, inner - 36)
+        if desc_lines:
+            content_h += desc_h + 8
+        content_h = max(content_h, 16)
+        box_h = bar_h + content_h + 12
+        prepared.append({
+            'color': color,
+            'icon': section_icon,
+            'head_lines': head_lines,
+            'bar_h': bar_h,
+            'items': items,
+            'desc_lines': desc_lines,
+            'box_h': box_h,
+        })
+        total += box_h + 14
+    total += pad
+
+    image = Image.new('RGB', (width, max(total, 80)), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    y = pad
+    banner = Image.new('RGB', (inner, banner_h), (240, 68, 54))
+    gradient = ImageDraw.Draw(banner)
+    for row in range(banner_h):
+        mix = row / max(banner_h - 1, 1)
+        color = (
+            int(255 + (240 - 255) * mix),
+            int(125 + (68 - 125) * mix),
+            int(104 + (54 - 104) * mix),
+        )
+        gradient.line((0, row, inner, row), fill=color)
+    banner.putalpha(_rounded_mask((inner, banner_h), 16))
+    image.paste(banner, (pad, y), banner)
+    text_y = y + (banner_h - title_h) // 2
+    for line in title_lines:
+        line_w = draw.textlength(line, font=title_font)
+        draw.text(((width - line_w) / 2, text_y), line, font=title_font, fill=(255, 255, 255))
+        sample = draw.textbbox((0, 0), line, font=title_font)
+        text_y += (sample[3] - sample[1]) + line_gap
+    if icon and title_lines and emoji_font:
+        last = title_lines[-1]
+        last_w = draw.textlength(last, font=title_font)
+        icon_x = (width + last_w) / 2 + 12
+        try:
+            draw.text((icon_x, y + 22), icon, font=emoji_font, embedded_color=True)
+        except TypeError:
+            draw.text((icon_x, y + 22), icon, font=emoji_font, fill=(255, 255, 255))
+    y += banner_h + 16
+
+    for section in prepared:
+        x0 = pad
+        box_h = section['box_h']
+        color = section['color']
+        draw.rounded_rectangle((x0, y, x0 + inner, y + box_h), radius=12, outline=color, width=3)
+        if section['bar_h']:
+            bar = Image.new('RGB', (inner - 6, section['bar_h']), color)
+            image.paste(bar, (x0 + 3, y + 3))
+            first = section['head_lines'][0] if section['head_lines'] else ''
+            first_w = int(draw.textlength(first, font=section_font)) if first else 0
+            icon_w = int(draw.textlength(section['icon'], font=section_emoji)) if section['icon'] and section_emoji else 0
+            arrow_w = 16
+            gap = 8
+            pieces = arrow_w
+            if icon_w:
+                pieces += gap + icon_w
+            if first_w:
+                pieces += gap + first_w
+            start_x = x0 + (inner - pieces) / 2
+            arrow_top = y + 14
+            draw.polygon(
+                [(start_x, arrow_top), (start_x, arrow_top + 16), (start_x + 12, arrow_top + 8)],
+                fill=(255, 255, 255),
+            )
+            cursor_x = start_x + arrow_w + gap
+            if section['icon'] and section_emoji:
+                try:
+                    draw.text((cursor_x, y + 8), section['icon'], font=section_emoji, embedded_color=True)
+                except TypeError:
+                    draw.text((cursor_x, y + 8), section['icon'], font=section_emoji, fill=(255, 255, 255))
+                cursor_x += icon_w + gap
+            text_y = y + 10
+            for index, line in enumerate(section['head_lines']):
+                line_x = cursor_x if index == 0 else x0 + (inner - draw.textlength(line, font=section_font)) / 2
+                draw.text((line_x, text_y), line, font=section_font, fill=(255, 255, 255))
+                sample = draw.textbbox((0, 0), line, font=section_font)
+                text_y += (sample[3] - sample[1]) + line_gap
+            cursor = y + section['bar_h'] + 10
+        else:
+            cursor = y + 12
+        for wrapped, _height in section['items']:
+            draw.ellipse((x0 + 18, cursor + 6, x0 + 34, cursor + 22), fill=(17, 17, 17))
+            line_y = cursor
+            for line in wrapped:
+                draw.text((x0 + 44, line_y), line, font=item_font, fill=(36, 48, 64))
+                sample = draw.textbbox((0, 0), line, font=item_font)
+                line_y += (sample[3] - sample[1]) + line_gap
+            cursor = line_y + 4
+        for line in section['desc_lines']:
+            draw.text((x0 + 18, cursor), line, font=body_font, fill=(44, 62, 80))
+            sample = draw.textbbox((0, 0), line, font=body_font)
+            cursor += (sample[3] - sample[1]) + line_gap
+        y += box_h + 14
+
+    out = io.BytesIO()
+    image.save(out, format='PNG', optimize=True)
+    return out.getvalue()
+
+
+def _send_como_trabajo_image(token: str, chat_id) -> None:
+    data = _load_como_trabajo_card()
+    if not data:
+        _send_text(token, chat_id, 'Todavía no hay Cómo trabajo — Guía rápida configurado.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    png = render_como_trabajo_png(data)
+    sent = _send_photo_bytes(token, chat_id, png, 'como-trabajo-guia-rapida.png')
+    if not sent.get('ok'):
+        _send_text(token, chat_id, 'No se pudo enviar la imagen de Cómo trabajo — Guía rápida.')
+    _send_with_menu(token, chat_id, 'Elige una opción:')
+
+
+_TV_PLATE = (15, 23, 42)
+
+
+def _fetch_favicon_image(page: str):
+    import io
+
+    from PIL import Image
+
+    from app.store.html_presets import favicon_url_for
+
+    url = favicon_url_for(page)
+    if not url:
+        return None
+    try:
+        response = requests.get(url, timeout=8)
+        if response.status_code != 200 or not response.content:
+            return None
+        return Image.open(io.BytesIO(response.content)).convert('RGBA')
+    except Exception:
+        return None
+
+
+def _paste_on_plate(canvas, icon, x: int, y: int, size: int, inset: int) -> None:
+    """Placa oscura redondeada con el icono centrado."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle((x, y, x + size, y + size), radius=max(8, size // 5), fill=_TV_PLATE)
+    if icon is None:
+        return
+    inner = size - inset * 2
+    icon = icon.copy()
+    icon.thumbnail((inner, inner))
+    canvas.paste(icon, (x + (size - icon.width) // 2, y + (size - icon.height) // 2), icon)
+
+
+def _paste_favicon(canvas, page: str, x: int, y: int, size: int = 60) -> bool:
+    icon = _fetch_favicon_image(page)
+    if icon is None:
+        return False
+    _paste_on_plate(canvas, icon, x, y, size, 9)
+    return True
+
+
+def _paste_screen_icon(canvas, name: str, x: int, y: int, size: int = 44) -> None:
+    import os
+
+    from flask import current_app
+
+    from app.store.icon_tools import dark_screen_icon
+
+    path = os.path.join(current_app.static_folder, 'images', name or '')
+    icon = dark_screen_icon(path, 160)
+    if icon is None:
+        return
+    _paste_on_plate(canvas, icon, x, y, size, 6)
+
+
+def render_pantallas_png(data: dict) -> bytes:
+    """Tabla de pantallas y perfiles como PNG para Telegram."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    from app.store.html_presets import _tv_perfiles_label, favicon_source_page
+
+    width = 1100
+    pad = 16
+    inner = width - pad * 2
+    head_font = _load_font(18, True)
+    cell_font = _load_font(18, True)
+    line_gap = 2
+    icon_w = 140
+    rest = inner - icon_w
+    col_w = [icon_w, int(rest * 0.28), int(rest * 0.16), int(rest * 0.28)]
+    col_w.append(inner - sum(col_w))
+    headers = ('', 'PANTALLAS', 'PERFILES', 'PAGINA OFICIAL', 'ACTIVACION TELEVISOR')
+    keys = ('pantallas', 'perfiles', 'pagina', 'activacion')
+    fav_size = 60
+    logo_size = 44
+    gap = 6
+
+    head_a = (11, 42, 111)
+    head_b = (30, 136, 229)
+    accent = (245, 124, 0)
+    grid = (201, 214, 238)
+    row_a = (255, 255, 255)
+    row_b = (232, 240, 251)
+    text_color = (15, 27, 51)
+    link_color = (13, 71, 161)
+
+    probe = Image.new('RGB', (width, 40), 'white')
+    measure = ImageDraw.Draw(probe)
+
+    def wrap(text: str, font, max_width: int) -> list[str]:
+        return _wrap_words(measure, text, font, max_width) or ['----------']
+
+    def block_h(lines: list[str], font) -> int:
+        line_h = _font_line_h(font)
+        return len(lines) * (line_h + line_gap) - line_gap
+
+    def cell_text(row: dict, key: str) -> str:
+        if key == 'perfiles':
+            return _tv_perfiles_label(row.get(key) or '') or '----------'
+        return row.get(key) or '----------'
+
+    header_h = 56
+    prepared = []
+    table_h = header_h
+    for row in data.get('rows') or []:
+        cells = []
+        heights = []
+        for index, key in enumerate(keys):
+            lines = wrap(cell_text(row, key), cell_font, col_w[index + 1] - 16)
+            cells.append(lines)
+            heights.append(block_h(lines, cell_font))
+        fav_page = favicon_source_page(row)
+        icons = (row.get('icons') or [])[:2]
+        stack_h = (fav_size if fav_page else 0) + (logo_size if icons else 0) + (gap if fav_page and icons else 0)
+        row_h = max(heights + [stack_h, 56]) + 20
+        prepared.append((row, cells, row_h, fav_page, icons, stack_h))
+        table_h += row_h
+    total = pad * 2 + table_h
+
+    image = Image.new('RGB', (width, total), (240, 244, 251))
+    draw = ImageDraw.Draw(image)
+    y = pad
+    table_top = y
+    for step in range(inner):
+        ratio = step / max(1, inner - 1)
+        color = tuple(int(head_a[i] + (head_b[i] - head_a[i]) * ratio) for i in range(3))
+        draw.line((pad + step, y, pad + step, y + header_h), fill=color)
+    draw.line((pad, y + header_h - 2, pad + inner, y + header_h - 2), fill=accent, width=3)
+    cursor_x = pad
+    for index, label in enumerate(headers):
+        if label:
+            label_w = draw.textlength(label, font=head_font)
+            draw.text((cursor_x + (col_w[index] - label_w) / 2, y + 17), label, font=head_font, fill=(255, 255, 255))
+        cursor_x += col_w[index]
+    y += header_h
+    for number, (row, cells, row_h, fav_page, icons, stack_h) in enumerate(prepared):
+        draw.rectangle((pad, y, pad + inner, y + row_h), fill=row_a if number % 2 == 0 else row_b)
+        stack_y = y + (row_h - stack_h) // 2
+        if fav_page:
+            fav_x = pad + (col_w[0] - fav_size) // 2
+            if not _paste_favicon(image, fav_page, fav_x, stack_y, fav_size):
+                _paste_on_plate(image, None, fav_x, stack_y, fav_size, 9)
+            stack_y += fav_size + (gap if icons else 0)
+        if icons:
+            span = len(icons) * logo_size + (len(icons) - 1) * gap
+            icon_x = pad + (col_w[0] - span) // 2
+            for name in icons:
+                _paste_screen_icon(image, name, icon_x, stack_y, logo_size)
+                icon_x += logo_size + gap
+        if not fav_page and not icons:
+            dash_w = draw.textlength('----------', font=cell_font)
+            draw.text((pad + (col_w[0] - dash_w) / 2, y + (row_h - _font_line_h(cell_font)) / 2), '----------', font=cell_font, fill=(91, 107, 134))
+        cursor_x = pad + col_w[0]
+        for index, lines in enumerate(cells):
+            block = block_h(lines, cell_font)
+            line_y = y + max(8, (row_h - block) // 2)
+            is_link = keys[index] in ('pagina', 'activacion') and (row.get(keys[index]) or '').strip()
+            for line in lines:
+                line_w = draw.textlength(line, font=cell_font)
+                line_x = cursor_x + (col_w[index + 1] - line_w) / 2
+                draw.text((line_x, line_y), line, font=cell_font, fill=link_color if is_link else text_color)
+                if is_link:
+                    under_y = line_y + _font_line_h(cell_font) - 2
+                    draw.line((line_x, under_y, line_x + line_w, under_y), fill=link_color, width=1)
+                line_y += _font_line_h(cell_font) + line_gap
+            cursor_x += col_w[index + 1]
+        y += row_h
+    cursor_y = table_top + header_h
+    for _row, _cells, row_h, _fav, _icons, _stack in prepared:
+        cursor_y += row_h
+        if cursor_y < table_top + table_h:
+            draw.line((pad, cursor_y, pad + inner, cursor_y), fill=grid, width=1)
+    cursor_x = pad
+    for col in col_w[:-1]:
+        cursor_x += col
+        draw.line((cursor_x, table_top, cursor_x, table_top + table_h), fill=grid, width=1)
+    draw.rounded_rectangle((pad, table_top, pad + inner, table_top + table_h), radius=14, outline=(185, 199, 226), width=2)
+    out = io.BytesIO()
+    image.save(out, format='PNG', optimize=True)
+    return out.getvalue()
+
+
+def _send_pantallas_image(token: str, chat_id) -> None:
+    data = _load_pantallas_card()
+    if not data:
+        _send_text(token, chat_id, 'Todavía no hay pantallas, perfiles y links de TV configurados.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    png = render_pantallas_png(data)
+    sent = _send_photo_bytes(token, chat_id, png, 'pantallas-perfiles-tv.png')
+    if not sent.get('ok'):
+        _send_text(token, chat_id, 'No se pudo enviar la imagen de pantallas y perfiles.')
+    _send_with_menu(token, chat_id, 'Elige una opción:')
+
+
+def _send_photo_bytes(token: str, chat_id, png: bytes, filename: str = 'medios-de-pago.png') -> dict:
+    clean = (token or '').strip()
+    if not clean:
+        return {'ok': False, 'description': 'sin token'}
+    try:
+        response = requests.post(
+            f'https://api.telegram.org/bot{clean}/sendPhoto',
+            data={'chat_id': chat_id},
+            files={'photo': (filename, png, 'image/png')},
+            timeout=60,
+        )
+        data = response.json()
+    except Exception:
+        return {'ok': False, 'description': 'network'}
+    if isinstance(data, dict) and data.get('ok'):
+        return {'ok': True, 'result': data.get('result')}
+    description = ''
+    if isinstance(data, dict):
+        description = str(data.get('description') or '')
+    return {'ok': False, 'description': description}
+
+
+def _send_medios_pago_image(token: str, chat_id) -> None:
+    data = _load_medios_pago_card()
+    if not data or not (data.get('main_title') or data.get('sections')):
+        _send_text(token, chat_id, 'Todavía no hay Medios De Pago Que Recibo configurado.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    png = render_medios_pago_png(data)
+    sent = _send_photo_bytes(token, chat_id, png)
+    if not sent.get('ok'):
+        _send_text(token, chat_id, 'No se pudo enviar la imagen de medios de pago.')
+    _send_with_menu(token, chat_id, 'Elige una opción:')
+
+
+def _send_codigos_image(token: str, chat_id) -> None:
+    data = _load_codigos_card()
+    buttons = [button for button in (data.get('buttons') or []) if button.get('title')]
+    if not buttons:
+        _send_text(token, chat_id, 'No hay botones de códigos con descripción.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    data = {**data, 'buttons': buttons}
+    png = render_codigos_png(data)
+    sent = _send_photo_bytes(token, chat_id, png, 'resumen-codigos.png')
+    if not sent.get('ok'):
+        _send_text(token, chat_id, 'No se pudo enviar la imagen del resumen de códigos.')
+    _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
 def _send_ad_invite(token: str, chat_id) -> None:
@@ -1245,32 +2516,344 @@ def _send_ad_invite(token: str, chat_id) -> None:
     _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
+def _button_sent_recently(chat_id, action: str) -> bool:
+    """True si ese botón ya se envió a este chat hace menos de 2 minutos."""
+    now = time.monotonic()
+    key = (str(chat_id), action)
+    with _recent_button_lock:
+        stale = [item for item, sent_at in _recent_button_sends.items() if now - sent_at >= _REPEAT_SECONDS]
+        for item in stale:
+            _recent_button_sends.pop(item, None)
+        sent_at = _recent_button_sends.get(key)
+        if sent_at is not None and now - sent_at < _REPEAT_SECONDS:
+            return True
+        _recent_button_sends[key] = now
+        return False
+
+
+def _forget_button_send(chat_id, action: str) -> None:
+    with _recent_button_lock:
+        _recent_button_sends.pop((str(chat_id), action), None)
+
+
+def _take_pending_code_search(chat_id):
+    with _pending_code_lock:
+        return _pending_code_search.pop(str(chat_id), None)
+
+
+def _drop_pending_code_prompt(token: str, chat_id) -> None:
+    entry = _take_pending_code_search(chat_id)
+    if isinstance(entry, dict) and entry.get('prompt_id'):
+        _telegram_call(token, 'deleteMessage', {
+            'chat_id': chat_id,
+            'message_id': entry['prompt_id'],
+        })
+
+
+def _unwrap_result_code(raw: str) -> str:
+    text = str(raw or '').strip()
+    marker = '/admin/redirect_to?url='
+    index = text.find(marker)
+    if index < 0:
+        return text
+    from urllib.parse import unquote
+
+    tail = text[index + len(marker):].split('"')[0].split("'")[0]
+    return unquote(tail).strip() or text
+
+
+def _code_item(code: str, date: str = ''):
+    clean = _unwrap_result_code(code)
+    if not clean:
+        return None
+    link = ''
+    if re.match(r'^https?://', clean, re.I):
+        link = clean
+    elif clean.lower().startswith('www.'):
+        link = 'https://' + clean
+    return {
+        'code': clean,
+        'date': str(date or '').replace('|', ' ').strip(),
+        'link': link,
+    }
+
+
+def _plain_from_mail(mail: dict) -> str:
+    text = str(mail.get('text') or '').strip()
+    if text:
+        return text
+    html = str(mail.get('html') or '')
+    if not html:
+        return ''
+    cleaned = re.sub(r'(?is)<(script|style).*?>.*?</\1>', ' ', html)
+    cleaned = re.sub(r'(?s)<[^>]+>', ' ', cleaned)
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
+
+def _items_from_mail(mail: dict) -> list:
+    if not isinstance(mail, dict):
+        return []
+    if mail.get('is_sms_result'):
+        items = []
+        for msg in mail.get('sms_messages') or []:
+            item = _code_item(msg.get('message_body'), msg.get('created_at'))
+            if item:
+                items.append(item)
+        return items
+    date = mail.get('formatted_date') or ''
+    if mail.get('filter_matched'):
+        code = str(mail.get('filter_code') or '').strip()
+        source = code or _plain_from_mail(mail)[:800]
+        item = _code_item(source, date) if source else None
+        return [item] if item else []
+    matches = mail.get('regex_matches') or {}
+    if isinstance(matches, dict):
+        for values in matches.values():
+            if not isinstance(values, list) or not values:
+                continue
+            first = values[0]
+            if isinstance(first, list):
+                first = ''.join(str(part) for part in first)
+            item = _code_item(first, date)
+            return [item] if item else []
+    plain = _plain_from_mail(mail)
+    item = _code_item(plain[:800], date) if plain else None
+    return [item] if item else []
+
+
+def _json_from_response(resp) -> dict:
+    getter = getattr(resp, 'get_json', None)
+    if not callable(getter):
+        return {}
+    data = getter(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def _lookup_code(user, service: dict, email: str):
+    """Misma búsqueda que la página de códigos para ese usuario y servicio."""
+    from flask import session
+
+    from app.api import (
+        _email_reserved_for_other_user,
+        _is_support_user,
+        _user_has_allowed_email,
+        get_2fa_code_for_email,
+        search_sms_messages,
+    )
+    from app.services.search_service import search_and_apply_filters, search_linked_projects_only
+
+    email_raw = (email or '').strip()
+    if not email_raw:
+        return 'Escribe el correo.', []
+    email_normalized = email_raw.lower()
+
+    def twofa_items() -> list:
+        if not service.get('sms'):
+            return []
+        try:
+            with current_app.test_request_context():
+                session['user_id'] = user.id
+                session['logged_in'] = True
+                resp = get_2fa_code_for_email(email_normalized)
+            data = _json_from_response(resp)
+            code = str(data.get('code') or '').strip()
+            if not code:
+                return []
+            remaining = data.get('time_remaining')
+            when = f'2FA · vence en {remaining}s' if remaining is not None else '2FA'
+            item = _code_item(code, when)
+            return [item] if item else []
+        except Exception:
+            logger.exception('telegram 2fa')
+            return []
+
+    if service.get('sms'):
+        with current_app.test_request_context():
+            resp = search_sms_messages(email_raw, user)
+        payload = _json_from_response(resp)
+        if payload.get('error'):
+            return str(payload['error']), []
+        results = payload.get('results') or []
+        items = _items_from_mail(results[0]) if results else []
+        items.extend(twofa_items())
+        if not items:
+            return 'No se encontraron mensajes.', []
+        return '', items
+
+    admin_username = current_app.config.get('ADMIN_USER', 'admin')
+    is_admin = user.username == admin_username and user.parent_id is None
+    if not is_admin and not user.enabled:
+        return 'Tu cuenta está inhabilitada. No puedes realizar búsquedas.', []
+    if not is_admin:
+        if not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
+            return 'No tienes permiso para consultar este correo específico.', []
+        if not user.can_search_any and not _user_has_allowed_email(user, email_normalized):
+            linked = search_linked_projects_only(email_raw, user, service_id=service['id'])
+            items = _items_from_mail(linked) if linked else []
+            if items:
+                return '', items
+            return 'No tienes permiso para consultar este correo específico.', []
+
+    mail = search_and_apply_filters(email_raw, service['id'], user=user)
+    items = _items_from_mail(mail) if mail else []
+    if not items:
+        return 'No se encontraron resultados.', []
+    return '', items
+
+
+def _send_code_items(token: str, chat_id, items: list) -> None:
+    blocks = []
+    plain_lines = []
+    for item in items:
+        code = item['code']
+        shown = code if len(code) <= 50 else code[:47] + '...'
+        block = f'<h2>{_html_text(shown)}</h2>'
+        buttons = ''
+        if len(code) <= 256:
+            buttons += f'<tg-button type="copy_text" text="{_html_text(code)}">Copiar</tg-button>'
+        link = item.get('link') or ''
+        if link and len(link) <= 2000:
+            buttons += f'<tg-button type="url" url="{_html_text(link)}">Abrir Enlace</tg-button>'
+        if buttons:
+            block += f'<tg-button-row align="center">{buttons}</tg-button-row>'
+        if item.get('date'):
+            block += f'<p>Fecha: {_html_text(item["date"])}</p>'
+        blocks.append(block)
+        line = code
+        if item.get('date'):
+            line += f"\nFecha: {item['date']}"
+        plain_lines.append(line)
+    sent = _telegram_call(token, 'sendRichMessage', {
+        'chat_id': chat_id,
+        'rich_message': {'html': ''.join(blocks), 'skip_entity_detection': True},
+    })
+    if not sent.get('ok'):
+        _send_text(token, chat_id, '\n\n'.join(plain_lines))
+
+
+def _begin_code_service_search(token: str, chat_id, service_id: int) -> None:
+    """Pide el correo solo si el chat está en un usuario encendido. Si no, no responde."""
+    button = _menu_button(f'svc:{int(service_id)}')
+    if button is None or not button['enabled']:
+        return
+    if _enabled_user_for_chat(chat_id) is None:
+        return
+    service = _code_service_by_id(service_id)
+    if service is None:
+        return
+    sent = _send_text(token, chat_id, button['label'], reply_markup={
+        'force_reply': True,
+        'input_field_placeholder': _CODE_FIELD,
+        'selective': True,
+    })
+    if not sent.get('ok'):
+        sent = _send_text(token, chat_id, service['name'], reply_markup={'force_reply': True})
+    if not sent.get('ok'):
+        return
+    result = sent.get('result') if isinstance(sent.get('result'), dict) else {}
+    prompt_id = result.get('message_id')
+    with _pending_code_lock:
+        previous = _pending_code_search.get(str(chat_id))
+        _pending_code_search[str(chat_id)] = {
+            'service_id': int(service_id),
+            'prompt_id': prompt_id,
+        }
+    if isinstance(previous, dict) and previous.get('prompt_id') and previous.get('prompt_id') != prompt_id:
+        _telegram_call(token, 'deleteMessage', {
+            'chat_id': chat_id,
+            'message_id': previous['prompt_id'],
+        })
+
+
+def _finish_code_search(token: str, chat_id, email: str) -> None:
+    entry = _take_pending_code_search(chat_id)
+    if not isinstance(entry, dict):
+        return
+    prompt_id = entry.get('prompt_id')
+    user = _enabled_user_for_chat(chat_id)
+    service = _code_service_by_id(int(entry.get('service_id') or 0))
+    if user is None or service is None:
+        if prompt_id:
+            _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
+        return
+    try:
+        message, items = _lookup_code(user, service, email)
+    except Exception:
+        db.session.rollback()
+        logger.exception('telegram code search')
+        message, items = 'No se pudo completar esa opción. Intentalo de nuevo.', []
+    if prompt_id:
+        _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
+    if items:
+        _send_code_items(token, chat_id, items)
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    _send_long_text(token, chat_id, message or 'No se encontraron resultados.')
+
+
 def _handle_menu_callback(token: str, callback: dict) -> None:
     query_id = callback.get('id')
-    if query_id:
-        _telegram_call(token, 'answerCallbackQuery', {'callback_query_id': query_id})
+
+    def answer(text: str | None = None) -> None:
+        if not query_id:
+            return
+        payload = {'callback_query_id': query_id}
+        if text:
+            payload['text'] = text
+        _telegram_call(token, 'answerCallbackQuery', payload)
+
     action = str(callback.get('data') or '').strip()
-    if action not in ('id', 'prices', 'codes', 'ad'):
+    service_match = re.fullmatch(r'svc:(\d+)', action)
+    if service_match is None and action not in ('id', 'prices', 'codes', 'pantallas', 'pagos', 'trabajo', 'ad'):
+        answer()
         return
     sender = callback.get('from') if isinstance(callback.get('from'), dict) else {}
     message = callback.get('message') if isinstance(callback.get('message'), dict) else {}
     chat = message.get('chat') if isinstance(message.get('chat'), dict) else {}
     if sender.get('is_bot') or chat.get('type') != 'private':
+        answer()
         return
     chat_id = chat.get('id')
     if chat_id is None:
+        answer()
+        return
+    if service_match is not None:
+        _begin_code_service_search(token, chat_id, int(service_match.group(1)))
+        answer()
         return
     clicked_id = message.get('message_id')
-    _dispatch_private_menu(token, chat_id, action)
+    outcome = _dispatch_private_menu(token, chat_id, action)
+    if outcome == 'repeat':
+        answer('Ya te lo envié. Espera un par de minutos para pedirlo otra vez.')
+        return
+    answer()
+    if outcome != 'sent':
+        return
     current_id = _last_menu_message.get(str(chat_id))
     if clicked_id and clicked_id != current_id:
         _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': clicked_id})
 
 
-def _dispatch_private_menu(token: str, chat_id, text: str) -> None:
-    action = text if text in ('start', 'id', 'prices', 'codes', 'ad') else _menu_action(text)
+def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
+    known = ('start', 'id', 'prices', 'codes', 'pantallas', 'pagos', 'trabajo', 'ad')
+    action = text if text in known or str(text).startswith('svc:') else _menu_action(text)
     if not action:
-        return
+        return 'skip'
+    if not _menu_key_enabled(action):
+        return 'skip'
+    if str(action).startswith('svc:'):
+        try:
+            _begin_code_service_search(token, chat_id, int(str(action).split(':', 1)[1]))
+        except Exception:
+            logger.exception('telegram menu %s', action)
+            _telegram_call(
+                token,
+                'sendMessage',
+                {'chat_id': chat_id, 'text': 'No se pudo completar esa opción. Intentalo de nuevo.'},
+            )
+        return 'sent'
+    if _button_sent_recently(chat_id, action):
+        return 'repeat'
     try:
         if action == 'start':
             _send_start_menu(token, chat_id)
@@ -1279,16 +2862,33 @@ def _dispatch_private_menu(token: str, chat_id, text: str) -> None:
         elif action == 'prices':
             _send_price_list(token, chat_id)
         elif action == 'codes':
-            _send_long_text(token, chat_id, _codes_help_text())
+            _send_codigos_image(token, chat_id)
+        elif action == 'pantallas':
+            if _pantallas_menu_ready():
+                _send_pantallas_image(token, chat_id)
+            else:
+                _send_with_menu(token, chat_id, 'Elige una opción:')
+        elif action == 'pagos':
+            if _medios_pago_menu_ready():
+                _send_medios_pago_image(token, chat_id)
+            else:
+                _send_with_menu(token, chat_id, 'Elige una opción:')
+        elif action == 'trabajo':
+            if _como_trabajo_menu_ready():
+                _send_como_trabajo_image(token, chat_id)
+            else:
+                _send_with_menu(token, chat_id, 'Elige una opción:')
         elif action == 'ad':
             _send_ad_invite(token, chat_id)
     except Exception:
+        _forget_button_send(chat_id, action)
         logger.exception('telegram menu %s', action)
         _telegram_call(
             token,
             'sendMessage',
             {'chat_id': chat_id, 'text': 'No se pudo completar esa opción. Intentalo de nuevo.'},
         )
+    return 'sent'
 
 
 def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
@@ -1339,12 +2939,20 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
         chat = msg.get('chat') if isinstance(msg.get('chat'), dict) else {}
         if sender.get('is_bot') or chat.get('type') != 'private':
             continue
-        if not _menu_action(str(msg.get('text') or '')):
-            continue
+        text = str(msg.get('text') or '')
         chat_id = chat.get('id')
         if chat_id is None:
             continue
-        _dispatch_private_menu(token, chat_id, str(msg.get('text') or ''))
+        if _menu_action(text):
+            _drop_pending_code_prompt(token, chat_id)
+            _dispatch_private_menu(token, chat_id, text)
+            continue
+        pending_text = text.strip()
+        if pending_text and not pending_text.startswith('/'):
+            with _pending_code_lock:
+                waiting = str(chat_id) in _pending_code_search
+            if waiting:
+                _finish_code_search(token, chat_id, pending_text)
     if saved_through is not None:
         fresh = get_telegram_bot_config()
         if fresh is not None:

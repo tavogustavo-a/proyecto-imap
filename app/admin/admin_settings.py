@@ -195,19 +195,51 @@ def parrafos_page():
     """
     paragraph_item = SiteSettings.query.filter_by(key="search_message").first()
     paragraph = paragraph_item.value if paragraph_item else ""
-    paragraph_mode = get_site_setting("search_message_mode", "off")
+    paragraph_mode = _normalize_paragraph_mode(
+        1, get_site_setting("search_message_mode", "off")
+    )
 
     paragraph2_item = SiteSettings.query.filter_by(key="search_message2").first()
     paragraph2 = paragraph2_item.value if paragraph2_item else ""
-    paragraph2_mode = get_site_setting("search_message2_mode", "off")
+    paragraph2_mode = _normalize_paragraph_mode(
+        2, get_site_setting("search_message2_mode", "off")
+    )
+
+    p1_btn_class, p1_btn_text = _paragraph_cycle_button_ui(1, paragraph_mode)
+    p2_btn_class, p2_btn_text = _paragraph_cycle_button_ui(2, paragraph2_mode)
 
     return render_template(
         "parrafos.html",
         paragraph=paragraph,
         paragraph_mode=paragraph_mode,
         paragraph2=paragraph2,
-        paragraph2_mode=paragraph2_mode
+        paragraph2_mode=paragraph2_mode,
+        p1_btn_class=p1_btn_class,
+        p1_btn_text=p1_btn_text,
+        p2_btn_class=p2_btn_class,
+        p2_btn_text=p2_btn_text,
     )
+
+
+def _normalize_paragraph_mode(num_paragraph, mode):
+    """Solo 'guests' (P1) o 'users' (P2) cuentan como encendido."""
+    raw = (mode or "off").strip().lower()
+    if num_paragraph == 1:
+        return "guests" if raw == "guests" else "off"
+    if num_paragraph == 2:
+        return "users" if raw == "users" else "off"
+    return "off"
+
+
+def _paragraph_cycle_button_ui(num_paragraph, mode):
+    """Clase CSS y etiqueta del botón de alternar modo por párrafo (estado actual)."""
+    if num_paragraph not in (1, 2):
+        return None, None
+    normalized = _normalize_paragraph_mode(num_paragraph, mode)
+    if normalized == "off":
+        return "btn-red", "Apagado"
+    return "btn-green", "Prendido"
+
 
 @admin_bp.route("/update_paragraph/<int:num_paragraph>", methods=["POST"])
 @admin_required
@@ -220,6 +252,8 @@ def update_paragraph(num_paragraph):
     elif num_paragraph == 2:
         key = "search_message2"
     else:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "error": "Número de párrafo inválido."}), 400
         flash("Número de párrafo inválido.", "error")
         return redirect(url_for("admin_bp.parrafos_page"))
 
@@ -231,6 +265,8 @@ def update_paragraph(num_paragraph):
         item.value = new_paragraph
     db.session.commit()
 
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"success": True, "message": f"Párrafo {num_paragraph} actualizado."})
     flash(f"Párrafo {num_paragraph} actualizado.", "success")
     return redirect(url_for("admin_bp.parrafos_page"))
 
@@ -241,25 +277,32 @@ def cycle_paragraph_mode(num_paragraph):
     Párrafo 1 => alterna entre [off, guests]
     Párrafo 2 => alterna entre [off, users]
     """
+    new_mode = None
     if num_paragraph == 1:
         mode_key = "search_message_mode"
-        current_mode = get_site_setting(mode_key, "off")
-        # Toggle: 'off' <-> 'guests'
-        if current_mode == "off":
-            new_mode = "guests"
-        else:
-            new_mode = "off"
+        current_mode = _normalize_paragraph_mode(1, get_site_setting(mode_key, "off"))
+        new_mode = "guests" if current_mode == "off" else "off"
         set_site_setting(mode_key, new_mode)
 
     elif num_paragraph == 2:
         mode_key = "search_message2_mode"
-        current_mode = get_site_setting(mode_key, "off")
-        # Toggle: 'off' <-> 'users'
-        if current_mode == "off":
-            new_mode = "users"
-        else:
-            new_mode = "off"
+        current_mode = _normalize_paragraph_mode(2, get_site_setting(mode_key, "off"))
+        new_mode = "users" if current_mode == "off" else "off"
         set_site_setting(mode_key, new_mode)
+    else:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"success": False, "error": "Número de párrafo inválido."}), 400
+        flash("Número de párrafo inválido.", "error")
+        return redirect(url_for("admin_bp.parrafos_page"))
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        btn_class, btn_text = _paragraph_cycle_button_ui(num_paragraph, new_mode)
+        return jsonify({
+            "success": True,
+            "mode": new_mode,
+            "button_class": btn_class,
+            "button_text": btn_text,
+        })
 
     return redirect(url_for("admin_bp.parrafos_page"))
 

@@ -1,0 +1,30 @@
+{% set mdp_icon_current = mdp_icon_current if mdp_icon_current is defined else (medios_pago.main_icon if medios_pago is defined and medios_pago.main_icon is defined else '👑') %}
+{% set mdp_icon_name = mdp_icon_name if mdp_icon_name is defined else 'mdp_main_icon' %}
+{% set mdp_icon_choices = mdp_icon_choices if mdp_icon_choices is defined else medios_pago_main_icons %}
+<div class="mdp-icon-picker-wrap" data-mdp-icon-picker>
+  <input type="hidden" name="{{ mdp_icon_name }}" value="{{ mdp_icon_current }}" data-mdp-icon-input>
+  <button type="button" class="mdp-icon-picker-trigger" data-mdp-icon-trigger aria-label="Elegir icono del título" aria-expanded="false" aria-haspopup="listbox">
+    <span class="mdp-icon-picker-preview" data-mdp-icon-preview aria-hidden="true">
+      {% if mdp_icon_current[:3] == 'fa:' %}
+        <i class="fas fa-{{ mdp_icon_current[3:] }}"></i>
+      {% else %}
+        {{ mdp_icon_current }}
+      {% endif %}
+    </span>
+  </button>
+  <div class="mdp-icon-picker-panel hidden" data-mdp-icon-panel role="listbox" aria-label="Iconos disponibles">
+    {% for icon_value, icon_label in mdp_icon_choices %}
+      <button type="button"
+              class="mdp-icon-picker-option{% if icon_value == mdp_icon_current %} is-selected{% endif %}"
+              data-mdp-icon-value="{{ icon_value }}"
+              title="{{ icon_label }}"
+              aria-label="{{ icon_label }}">
+        {% if icon_value[:3] == 'fa:' %}
+          <i class="fas fa-{{ icon_value[3:] }}"></i>
+        {% else %}
+          {{ icon_value }}
+        {% endif %}
+      </button>
+    {% endfor %}
+  </div>
+</div>

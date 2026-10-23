@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261020-tg-temas">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261022-botfather-modal9">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 {% block content %}
@@ -44,7 +44,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="mb-1">
         <label for="drive-credentials-json" class="form-label">Pega aquí el JSON de credenciales de Google:</label>
-        <textarea id="drive-credentials-json" name="drive_credentials_json" class="form-control" rows="8" placeholder="{\n  \"type\": \"service_account\", ...\n}" required autocomplete="off"></textarea>
+        <textarea id="drive-credentials-json" name="drive_credentials_json" class="form-control" rows="8" placeholder="{\n  \"type\": \"service_account\", ...\n}" required autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other"></textarea>
       </div>
       <div class="mb-1">
         <label for="drive-original-id" class="form-label">ID de Drive original:</label>
@@ -314,53 +314,114 @@
 </div>
 
 <div id="telegram-botfather-modal" class="modal d-none whatsapp-pruebas-modal telegram-botfather-modal" tabindex="-1" role="dialog" aria-labelledby="telegramBotFatherTitle" aria-modal="true" aria-hidden="true" hidden>
-  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-420 br-8 rel">
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-480 br-8 rel telegram-botfather-modal-content">
+    <button type="button" id="telegram-botfather-close-x" class="telegram-botfather-close-x" aria-label="Cerrar">&times;</button>
     <h4 id="telegramBotFatherTitle" class="whatsapp-user-phone-modal-title">Datos BotFather</h4>
-    <label for="telegram-bot-username" class="telegram-botfather-label">Nombre del bot</label>
-    <input type="text" id="telegram-bot-username" class="form-control telegram-botfather-field" placeholder="MiBot" autocomplete="off" spellcheck="false">
-    <label for="telegram-bot-token" class="telegram-botfather-label">Token</label>
-    <input type="password" id="telegram-bot-token" class="form-control telegram-botfather-field" placeholder="123456:ABC..." autocomplete="off" spellcheck="false">
-    <p id="telegram-botfather-status" class="telegram-botfather-status" role="status"></p>
-    <div class="telegram-group-extract">
-      <div class="telegram-group-extract-head">
-        <p class="telegram-group-extract-title">Extraer ID de grupo</p>
-        <span class="purchase-history-cleanup-info-wrap">
-          <button
-            type="button"
-            id="telegramGroupExtractInfoBtn"
-            class="info-icon info-icon-square"
-            aria-expanded="false"
-            aria-controls="telegramGroupExtractInfoBox"
-            aria-label="Información sobre extraer ID de grupo"
-            title="Más información"
-          >i</button>
-          <div id="telegramGroupExtractInfoBox" class="purchase-history-cleanup-info-box telegram-group-extract-info-box" hidden>
-            Nombre, cantidad de miembros e ID. Si el grupo tiene temas, salen debajo de una vez: tema1-nombre, tema2-nombre. Cuando se acaban, sigue el otro grupo. El ícono copia el ID.
-            <br><br>
-            Solo aparecen los grupos y canales de los que Telegram avisó al bot. La lista de la ficha del bot en Telegram no se puede pedir.
-            <br><br>
-            El bot se entera cuando lo agregan o cuando alguien lo menciona. Un tema entra cuando escriben en ese tema y mencionan al bot. Si falta, mencionalo ahí y tocá Extraer grupos otra vez.
-          </div>
-        </span>
+    <div id="telegram-botfather-form" class="telegram-botfather-form" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other">
+      <div class="telegram-botfather-row">
+        <label id="telegram-bot-alias-label" class="telegram-botfather-label">Nombre del bot</label>
+        <div
+          id="telegram-bot-alias"
+          class="telegram-botfather-field"
+          role="textbox"
+          aria-labelledby="telegram-bot-alias-label"
+          contenteditable="false"
+          spellcheck="false"
+          tabindex="0"
+          data-placeholder="MiBot"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          autocomplete="off"
+        ></div>
       </div>
-      <button type="button" id="telegram-group-extract-load-btn" class="telegram-group-extract-load">Extraer grupos</button>
-      <div id="telegram-group-extract-table-wrap" class="telegram-group-extract-table-wrap" hidden>
-        <table class="telegram-group-extract-table">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Miembros</th>
-              <th>ID</th>
-            </tr>
-          </thead>
-          <tbody id="telegram-group-extract-body"></tbody>
-        </table>
+      <div class="telegram-botfather-row">
+        <label id="telegram-bot-value-label" class="telegram-botfather-label">Token</label>
+        <div
+          id="telegram-bot-value"
+          class="telegram-botfather-field telegram-botfather-token-field"
+          role="textbox"
+          aria-labelledby="telegram-bot-value-label"
+          contenteditable="false"
+          spellcheck="false"
+          tabindex="0"
+          data-placeholder="123456:ABC..."
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          autocomplete="off"
+        ></div>
       </div>
-      <p id="telegram-group-extract-status" class="telegram-botfather-status" role="status"></p>
+      <div class="telegram-group-extract">
+        <div class="telegram-group-extract-field">
+          <button type="button" id="telegram-group-extract-load-btn" class="telegram-group-extract-load">Extraer id de los grupos</button>
+          <span class="purchase-history-cleanup-info-wrap telegram-group-extract-info-wrap">
+            <button
+              type="button"
+              id="telegramGroupExtractInfoBtn"
+              class="info-icon info-icon-square"
+              aria-expanded="false"
+              aria-controls="telegramGroupExtractInfoBox"
+              aria-label="Información sobre extraer id de los grupos"
+              title="Más información"
+            >i</button>
+            <div id="telegramGroupExtractInfoBox" class="purchase-history-cleanup-info-box telegram-group-extract-info-box" hidden>
+              Nombre, cantidad de miembros e ID. Si el grupo tiene temas, salen debajo de una vez: tema1-nombre, tema2-nombre. Cuando se acaban, sigue el otro grupo. El ícono copia el ID.
+              <br><br>
+              Solo aparecen los grupos y canales de los que Telegram avisó al bot. La lista de la ficha del bot en Telegram no se puede pedir.
+              <br><br>
+              El bot se entera cuando lo agregan o cuando alguien lo menciona. Un tema entra cuando escriben en ese tema y mencionan al bot. Si falta, mencionalo ahí y tocá Extraer id de los grupos otra vez.
+            </div>
+          </span>
+        </div>
+        <div id="telegram-group-extract-table-wrap" class="telegram-group-extract-table-wrap" hidden>
+          <table class="telegram-group-extract-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Miembros</th>
+                <th>ID</th>
+              </tr>
+            </thead>
+            <tbody id="telegram-group-extract-body"></tbody>
+          </table>
+        </div>
+        <p id="telegram-group-extract-status" class="telegram-botfather-status" role="status"></p>
+      </div>
     </div>
-    <div class="whatsapp-user-phone-modal-actions">
+    <p id="telegram-botfather-status" class="telegram-botfather-status" role="status"></p>
+    <div class="whatsapp-user-phone-modal-actions telegram-botfather-save-row">
       <button type="button" id="telegram-botfather-save-btn" class="btn-panel btn-green">Guardar</button>
-      <button type="button" id="telegram-botfather-close-btn" class="btn-panel btn-red">Cerrar</button>
+    </div>
+    <div class="telegram-bot-menu-block">
+      <p class="telegram-bot-menu-title">Botones del bot</p>
+      <div id="telegram-bot-menu-list" class="telegram-bot-menu-list" role="list"></div>
+      <p id="telegram-bot-menu-status" class="telegram-botfather-status" role="status"></p>
+    </div>
+  </div>
+</div>
+
+<div id="telegram-bot-menu-edit-modal" class="modal d-none telegram-bot-menu-edit-modal" tabindex="-1" role="dialog" aria-labelledby="telegramBotMenuEditTitle" aria-modal="true" aria-hidden="true" hidden>
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-400 br-8 rel telegram-bot-menu-edit-panel">
+    <h4 id="telegramBotMenuEditTitle" class="whatsapp-user-phone-modal-title">Editar nombre del botón</h4>
+    <input type="hidden" id="telegram-bot-menu-edit-key" value="">
+    <label for="telegram-bot-menu-edit-input" class="sr-only">Nombre del botón</label>
+    <input
+      type="text"
+      id="telegram-bot-menu-edit-input"
+      class="form-control"
+      maxlength="64"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="Nombre del botón"
+      aria-labelledby="telegramBotMenuEditTitle"
+    >
+    <p id="telegram-bot-menu-edit-hint" class="telegram-bot-menu-edit-hint text-muted small"></p>
+    <div class="whatsapp-user-phone-modal-actions">
+      <button type="button" id="telegram-bot-menu-edit-save-btn" class="btn-panel btn-green">Guardar</button>
+      <button type="button" id="telegram-bot-menu-edit-cancel-btn" class="btn-panel btn-red">Cancelar</button>
     </div>
   </div>
 </div>
@@ -459,7 +520,7 @@
       <input type="hidden" id="edit-drive-id" name="edit_drive_id">
       <div class="mb-1">
         <label for="edit-drive-credentials-json" class="form-label">Credenciales JSON:</label>
-        <textarea id="edit-drive-credentials-json" name="drive_credentials_json" class="form-control" rows="6" required autocomplete="off"></textarea>
+        <textarea id="edit-drive-credentials-json" name="drive_credentials_json" class="form-control" rows="6" required autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other"></textarea>
       </div>
       <div class="mb-1">
         <label for="edit-drive-original-id" class="form-label">ID de Drive original:</label>
@@ -567,5 +628,5 @@
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261019-drive-telegram" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261020-tg-temas" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261022-botfather-modal8" defer></script>
 {% endblock %}

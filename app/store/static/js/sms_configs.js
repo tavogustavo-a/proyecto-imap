@@ -98,15 +98,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="font-weight-bold mb-05">${escapeHtml(config.name)}</div>
                         <div class="text-secondary">${escapeHtml(config.phone_number)}${numberTypeBadge}</div>
                     </div>
-                    <div class="d-flex gap-05 ml-2">
+                    <div class="d-flex gap-05 ml-2 align-items-center twofa-list-row-actions">
                         <button type="button" class="btn-blue btn-sm reg-sms-config" data-config-id="${config.id}" title="Regex">
                             Reg
                         </button>
                         <button type="button" class="btn-orange edit-sms-config row-icon-btn" data-config-id="${config.id}" title="Editar" aria-label="Editar">
                             <i class="fas fa-pen" aria-hidden="true"></i>
                         </button>
-                        <button type="button" class="btn-red btn-sm delete-sms-config btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar">
-                            <i class="fas fa-trash"></i>
+                        <button type="button" class="btn-red btn-sm delete-sms-config btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar" aria-label="Eliminar">
+                            <i class="fas fa-trash" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
@@ -268,12 +268,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <br><small class="text-secondary">${escapeHtml(regex.pattern || 'Sin patrón')}</small>
                             </span>
                         </div>
-                        <div class="d-flex gap-05">
+                        <div class="d-flex gap-05 align-items-center twofa-list-row-actions">
                             <button type="button" class="btn-orange edit-sms-regex-btn row-icon-btn" data-regex-id="${regex.id}" title="Editar" aria-label="Editar">
                                 <i class="fas fa-pen" aria-hidden="true"></i>
                             </button>
-                            <button type="button" class="btn-red btn-sm delete-sms-regex-btn" data-regex-id="${regex.id}" title="Eliminar">
-                                <i class="fas fa-trash"></i>
+                            <button type="button" class="btn-red btn-sm delete-sms-regex-btn btn-imap-action btn-imap-small" data-regex-id="${regex.id}" title="Eliminar" aria-label="Eliminar">
+                                <i class="fas fa-trash" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>

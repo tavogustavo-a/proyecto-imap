@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}?v=20261018-labels">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}?v=20261021-html-toolbar">
 <script src="{{ url_for('store_bp.static', filename='js/vendor/iconify-icon.min.js') }}" defer></script>
   <meta name="html-tools-static-images" content="{{ url_for('static', filename='images/') }}">
 {% endblock %}
@@ -48,8 +48,12 @@
 
   <div class="html-tools-panels">
   <div class="html-tools-panel">
-    <span id="editorLabel" class="html-panel-label">Editor visual</span>
     <div class="html-toolbar">
+      <button type="button" id="btnUndo" title="Deshacer (Ctrl+Z)"><i class="fas fa-undo" aria-hidden="true"></i></button>
+      <button type="button" id="btnRedo" title="Rehacer (Ctrl+Y)"><i class="fas fa-redo" aria-hidden="true"></i></button>
+      <span class="html-toolbar-sep"></span>
+      <button type="button" id="btnRemoveFormat" title="Quitar formato"><i class="fas fa-eraser" aria-hidden="true"></i></button>
+      <span class="html-toolbar-sep"></span>
       <button type="button" id="btnBold" title="Negrita"><i class="fas fa-bold"></i></button>
       <button type="button" id="btnItalic" title="Cursiva"><i class="fas fa-italic"></i></button>
       <button type="button" id="btnUnderline" title="Subrayado"><i class="fas fa-underline"></i></button>
@@ -85,7 +89,10 @@
       </span>
       <span class="html-toolbar-sep"></span>
       <button type="button" id="btnParagraph" title="Párrafo"><i class="fas fa-paragraph"></i> Párrafo</button>
-      <button type="button" id="btnList" title="Lista"><i class="fas fa-list"></i> Lista</button>
+      <button type="button" id="btnHeading2" class="html-toolbar-text-btn" title="Título H2">H2</button>
+      <button type="button" id="btnHeading3" class="html-toolbar-text-btn" title="Título H3" type="button">H3</button>
+      <button type="button" id="btnList" title="Lista con viñetas"><i class="fas fa-list"></i> Lista</button>
+      <button type="button" id="btnOrderedList" title="Lista numerada"><i class="fas fa-list-ol" aria-hidden="true"></i> 1,2,3</button>
       <button type="button" id="btnLink" title="Enlace"><i class="fas fa-link"></i> Enlace</button>
       <button type="button" id="btnImage" title="Imagen por URL"><i class="fas fa-image"></i> Imagen</button>
       <span class="html-toolbar-icon-wrap">
@@ -112,7 +119,7 @@
       </span>
     </div>
     <div class="html-editor-wrap" id="htmlEditorWrap">
-      <div id="htmlEditor" contenteditable="true" role="textbox" aria-labelledby="editorLabel"></div>
+      <div id="htmlEditor" contenteditable="true" role="textbox" aria-label="Editor de contenido HTML"></div>
       <div id="htmlImageResizeOverlay" class="html-resize-overlay hidden">
         <span class="html-resize-handle" data-handle="nw" title="Redimensionar"></span>
         <span class="html-resize-handle" data-handle="n" title="Recortar"></span>
@@ -147,6 +154,7 @@
     </div>
     <div class="html-modal-body">
       <p>Escribe en el editor visual y el código HTML se genera en tiempo real. También puedes editar el HTML directamente y se aplica al editor automáticamente.</p>
+      <p>Deshacer / Rehacer, quitar formato, títulos H2/H3, lista numerada y limpieza al pegar (sin fragmentos ni clases de WhatsApp).</p>
       <p>Imágenes: se normalizan URLs de GitHub, Drive, Dropbox, etc.</p>
     </div>
     <div class="html-modal-footer">
@@ -212,5 +220,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20261018-limpiar" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20261021-html-toolbar" defer></script>
 {% endblock %}

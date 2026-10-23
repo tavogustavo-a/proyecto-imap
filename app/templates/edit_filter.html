@@ -4,8 +4,8 @@
 {% block title %}Editar Filtro{% endblock %}
 
 {% block content %}
-<div class="admin-card">
-  <h2 class="text-center">Editar Filtro</h2>
+<div class="admin-card form-container-medium admin-edit-regex-filter-page">
+  <h2 class="m-0 mb-1 text-center w-100">Editar Filtro</h2>
   
   <form method="POST">
     <!-- Campo oculto para el CSRF Token (SeaSurf) -->
@@ -13,17 +13,12 @@
 
     <div class="form-group">
       <label for="editFilterSender">Remitente (Sender):</label>
-      <input type="text" id="editFilterSender" name="sender" value="{{ filter.sender or '' }}" placeholder="Varios correos separados por coma: correo1, correo2" class="mb-1" autocomplete="off">
+      <input type="text" id="editFilterSender" name="sender" value="{{ filter.sender or '' }}" placeholder="Varios correos separados por coma: correo1, correo2" class="edit-regex-filter-field" autocomplete="off">
     </div>
 
     <div class="form-group">
       <label for="editFilterKeyword">Clave (Keyword):</label>
-      <input type="text" id="editFilterKeyword" name="keyword" value="{{ filter.keyword }}" class="mb-1" autocomplete="off">
-    </div>
-
-    <div class="edit-filter-enabled-row">
-      <label for="editFilterEnabled">¿Habilitado?</label>
-      <input type="checkbox" name="enabled" id="editFilterEnabled" {% if filter.enabled %}checked{% endif %}>
+      <input type="text" id="editFilterKeyword" name="keyword" value="{{ filter.keyword }}" class="edit-regex-filter-field" autocomplete="off">
     </div>
 
     <!-- Campo para "cortar HTML desde arriba" -->
@@ -34,7 +29,7 @@
         id="editFilterCutHtml"
         name="cut_after_html"
         value="{{ filter.cut_after_html if filter.cut_after_html else '' }}"
-        class="mb-1"
+        class="edit-regex-filter-field"
         autocomplete="off"
       >
     </div>
@@ -47,7 +42,7 @@
         id="editFilterCutHtmlBefore"
         name="cut_before_html"
         value="{{ filter.cut_before_html if filter.cut_before_html else '' }}"
-        class="mb-1"
+        class="edit-regex-filter-field"
         autocomplete="off"
       >
     </div>
@@ -59,19 +54,20 @@
         id="editFilterDescription"
         name="description"
         value="{{ filter.description if filter.description else '' }}"
-        class="mb-1"
+        class="edit-regex-filter-field"
         required
         autocomplete="off"
       >
     </div>
 
-    <div class="text-center">
+    <div class="edit-regex-filter-footer-actions">
+      <label for="editFilterEnabled">¿Habilitado?</label>
+      <input type="checkbox" name="enabled" id="editFilterEnabled" {% if filter.enabled %}checked{% endif %}>
       <button type="submit" class="btn-green">Guardar</button>
-      <!-- Botón para volver a la lista de Filtros (Refactorizado) -->
       <button
         type="button"
         id="btnVolverFilters"
-        class="btn-blue ml-05"
+        class="btn-blue"
         data-url="{{ url_for('admin_bp.filters_page') }}"
       >
         Volver

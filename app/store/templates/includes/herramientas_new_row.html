@@ -1,0 +1,42 @@
+{% from 'includes/state_switch.html' import state_switch %}
+<tr data-title="{{ title|lower }}">
+  {% if kind == 'tool' %}
+  <td><strong>{{ title }}</strong></td>
+  <td class="text-primary"><strong>{{ percent }}</strong></td>
+  <td>
+    <div class="action-stack">
+      {% call state_switch(true, 'btn-toggle-tool') %}data-id="{{ item_id }}"{% endcall %}
+      <a href="{{ url_for('store_bp.edit_tool', tool_id=item_id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+      <button class="btn-panel btn-red btn-sm btn-delete-tool" data-id="{{ item_id }}" title="Eliminar" type="button"><i class="fas fa-trash"></i></button>
+    </div>
+  </td>
+  {% elif kind == 'html' %}
+  <td><strong>{{ title }}</strong></td>
+  <td class="text-primary"><strong>{{ preview }}</strong></td>
+  <td>
+    <div class="action-stack">
+      {% call state_switch(true, 'btn-toggle-html') %}data-id="{{ item_id }}"{% endcall %}
+      <a href="{{ url_for('store_bp.edit_html', html_id=item_id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+      <button class="btn-panel btn-red btn-sm btn-delete-html" data-id="{{ item_id }}" title="Eliminar" type="button"><i class="fas fa-trash"></i></button>
+    </div>
+  </td>
+  {% elif kind == 'youtube' %}
+  <td><strong>{{ title }}</strong></td>
+  <td>
+    <div class="action-stack">
+      {% call state_switch(true, 'btn-toggle-youtube') %}data-id="{{ item_id }}"{% endcall %}
+      <a href="{{ url_for('store_bp.edit_youtube_listing', listing_id=item_id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+      <button class="btn-panel btn-red btn-sm btn-delete-youtube" data-id="{{ item_id }}" title="Eliminar" type="button"><i class="fas fa-trash"></i></button>
+    </div>
+  </td>
+  {% elif kind == 'api' %}
+  <td><strong>{{ title }}</strong></td>
+  <td>
+    <div class="action-stack">
+      {% call state_switch(true, 'btn-toggle-api') %}data-id="{{ item_id }}"{% endcall %}
+      <a href="{{ url_for('store_bp.edit_api', api_id=item_id) }}" class="btn-orange row-icon-btn" title="Editar" aria-label="Editar"><i class="fas fa-pen" aria-hidden="true"></i></a>
+      <button class="btn-panel btn-red btn-sm btn-delete-api" data-id="{{ item_id }}" title="Eliminar" type="button"><i class="fas fa-trash"></i></button>
+    </div>
+  </td>
+  {% endif %}
+</tr>

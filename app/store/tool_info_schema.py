@@ -48,3 +48,26 @@ def ensure_tool_info_is_public_column() -> None:
         'api_info',
     ):
         ensure_is_public_column(table_name)
+
+
+def ensure_html_preset_key_column() -> None:
+    """Añade preset_key en html_info para plantillas preconfiguradas."""
+    table_name = 'html_info'
+    try:
+        insp = inspect(db.engine)
+        if table_name not in insp.get_table_names():
+            return
+        cols = {c['name'].lower() for c in insp.get_columns(table_name)}
+        if 'preset_key' in cols:
+            return
+        db.session.execute(
+            text('ALTER TABLE html_info ADD COLUMN preset_key VARCHAR(64)')
+        )
+        db.session.commit()
+        logger.info('Esquema: columna preset_key añadida a %s', table_name)
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        logger.warning('ensure_html_preset_key_column: %s', exc)

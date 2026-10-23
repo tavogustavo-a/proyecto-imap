@@ -2695,6 +2695,11 @@ def get_or_create_role_for_user(user_id):
 @store_bp.route('/admin/herramientas')
 @admin_required
 def admin_tools():
+    from app.store.html_presets import HTML_PRESET_CHOICES
+    from app.store.tool_info_schema import ensure_html_preset_key_column
+
+    ensure_html_preset_key_column()
+    html_preset_titles = dict(HTML_PRESET_CHOICES)
     tools = ToolInfo.query.order_by(ToolInfo.id.desc()).all()
     htmls = HtmlInfo.query.order_by(HtmlInfo.id.desc()).all()
     youtube_listings = YouTubeListing.query.order_by(YouTubeListing.id.desc()).all()
@@ -2713,7 +2718,9 @@ def admin_tools():
                            tools=tools, 
                            htmls=htmls, 
                            youtube_listings=youtube_listings,
-                           apis=apis)
+                           apis=apis,
+                           html_preset_choices=HTML_PRESET_CHOICES,
+                           html_preset_titles=html_preset_titles)
 
 # --- Rutas para Importar/Exportar Configuración de Herramientas ---
 
@@ -2769,6 +2776,7 @@ def export_tools_config():
             html_dict = {
                 "title": html.title,
                 "text": html.text,
+                "preset_key": getattr(html, 'preset_key', None),
                 "enabled": html.enabled,
                 "is_public": bool(getattr(html, 'is_public', False)),
                 "user_usernames": user_usernames
@@ -2913,7 +2921,8 @@ def import_tools_config():
             for html_data in htmls_data:
                 new_html = HtmlInfo(
                     title=html_data.get('title'),
-                    text=html_data.get('text'),
+                    text=html_data.get('text') or '',
+                    preset_key=html_data.get('preset_key'),
                     enabled=html_data.get('enabled', True),
                     is_public=bool(html_data.get('is_public', False)),
                 )
@@ -2994,6 +3003,28 @@ def import_tools_config():
     
     return redirect(url_for('store_bp.admin_tools'))
 
+def _create_wants_json() -> bool:
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+
+def _create_response(ok: bool, message: str, row_html: str = '', status: int = 200):
+    if _create_wants_json():
+        return jsonify({'ok': ok, 'message': message, 'row_html': row_html}), status
+    flash(message, 'success' if ok else 'error')
+    return redirect(url_for('store_bp.admin_tools'))
+
+
+def _new_row_html(kind: str, item_id: int, title: str, percent='', preview: str = '') -> str:
+    return render_template(
+        'includes/herramientas_new_row.html',
+        kind=kind,
+        item_id=item_id,
+        title=title,
+        percent=percent,
+        preview=preview,
+    )
+
+
 @store_bp.route('/admin/herramientas', methods=['POST'], endpoint='create_tool')
 @admin_required
 def create_tool():
@@ -3004,17 +3035,19 @@ def create_tool():
     except Exception:
         percent = 0
     if not title or not text:
-        flash('Todos los campos son requeridos.', 'error')
-        return redirect(url_for('store_bp.admin_tools'))
+        return _create_response(False, 'Todos los campos son requeridos.', status=400)
     tool = ToolInfo(title=title, text=text, percent=percent, enabled=True)
     db.session.add(tool)
     try:
         db.session.commit()
-        flash('Herramienta creada correctamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash('Error al crear la herramienta: ' + str(e), 'error')
-    return redirect(url_for('store_bp.admin_tools'))
+        return _create_response(False, 'Error al crear la herramienta: ' + str(e), status=400)
+    return _create_response(
+        True,
+        'Herramienta creada correctamente.',
+        _new_row_html('tool', tool.id, tool.title, tool.percent),
+    )
 
 @store_bp.route('/admin/api/create', methods=['POST'])
 @admin_required
@@ -3024,8 +3057,7 @@ def create_api():
     api_type = request.form.get('api_type')
 
     if not title or not api_key:
-        flash('El título y la clave de API son obligatorios.', 'danger')
-        return redirect(url_for('store_bp.admin_tools'))
+        return _create_response(False, 'El título y la clave de API son obligatorios.', status=400)
 
     # Guardar el ID de carpeta y subtítulos solo si es Drive
     api_url = None
@@ -3050,10 +3082,16 @@ def create_api():
         drive_subtitle_videos=drive_subtitle_videos
     )
     db.session.add(new_api)
-    db.session.commit()
-
-    flash('API creada correctamente.', 'success')
-    return redirect(url_for('store_bp.admin_tools'))
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return _create_response(False, 'Error al crear la API: ' + str(e), status=400)
+    return _create_response(
+        True,
+        'API creada correctamente.',
+        _new_row_html('api', new_api.id, new_api.title),
+    )
 
 @store_bp.route('/admin/api/<int:api_id>/edit', methods=['GET'])
 @admin_required
@@ -3184,18 +3222,20 @@ def create_youtube_listing():
     title = request.form.get('title')
     content = request.form.get('youtube_content', '').strip() or None
     if not title:
-        flash('El título es requerido.', 'error')
-        return redirect(url_for('store_bp.admin_tools'))
+        return _create_response(False, 'El título es requerido.', status=400)
     
     new_listing = YouTubeListing(title=title, content=content, enabled=True)
     db.session.add(new_listing)
     try:
         db.session.commit()
-        flash('Listado de YouTube creado correctamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al crear el listado de YouTube: {e}', 'error')
-    return redirect(url_for('store_bp.admin_tools'))
+        return _create_response(False, f'Error al crear el listado de YouTube: {e}', status=400)
+    return _create_response(
+        True,
+        'Listado de YouTube creado correctamente.',
+        _new_row_html('youtube', new_listing.id, new_listing.title),
+    )
 
 @store_bp.route('/admin/youtube_listing/<int:listing_id>/toggle', methods=['POST'])
 @admin_required
@@ -3432,6 +3472,51 @@ def _proxy_image_url_allowed(url):
         return True
     except Exception:
         return False
+
+
+@store_bp.route('/site-favicon')
+@csrf_exempt_route
+def site_favicon():
+    """Favicon público de la página oficial. Solo consulta el servicio de iconos, no el sitio escrito."""
+    from app.store.html_presets import favicon_url_for
+
+    target = favicon_url_for(request.args.get('page'))
+    if not target:
+        return Response(status=404)
+    try:
+        resp = requests.get(
+            target,
+            timeout=8,
+            allow_redirects=False,
+            headers={'User-Agent': 'IMAP-Store-Favicon/1.0'},
+        )
+    except requests.RequestException:
+        return Response(status=404)
+    content_type = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+    if resp.status_code != 200 or not content_type.startswith('image/') or len(resp.content) > 200_000:
+        return Response(status=404)
+    out = Response(resp.content, mimetype=content_type)
+    out.headers['Cache-Control'] = 'public, max-age=86400'
+    return out
+
+
+@store_bp.route('/stream-icon/<name>')
+@csrf_exempt_route
+def stream_icon(name):
+    """Icono de streaming sin fondo blanco, para placas oscuras (tabla de pantallas)."""
+    from app.store.html_presets import _clean_screen_icon
+    from app.store.icon_tools import dark_screen_icon_png
+
+    clean = _clean_screen_icon(name)
+    if not clean:
+        return Response(status=404)
+    path = os.path.join(current_app.static_folder, 'images', clean)
+    data = dark_screen_icon_png(path, 160)
+    if not data:
+        return Response(status=404)
+    out = Response(data, mimetype='image/png')
+    out.headers['Cache-Control'] = 'public, max-age=86400'
+    return out
 
 
 @store_bp.route('/proxy-image')
@@ -3790,23 +3875,36 @@ def get_tool_users(tool_id):
 @store_bp.route('/admin/html', methods=['POST'])
 @admin_required
 def add_html():
-    if not request.form.get('title') or not request.form.get('text'):
-        flash('Todos los campos son requeridos.', 'error')
-        return redirect(url_for('store_bp.admin_tools'))
-    
+    from app.store.html_presets import parse_html_form_fields
+    from app.store.tool_info_schema import ensure_html_preset_key_column
+
+    ensure_html_preset_key_column()
+    fields, err = parse_html_form_fields(request.form)
+    if err:
+        return _create_response(False, err, status=400)
+
     html = HtmlInfo(
-        title=request.form.get('title'),
-        text=request.form.get('text')
+        title=fields['title'],
+        text=fields['text'],
+        preset_key=fields['preset_key'],
     )
     db.session.add(html)
     try:
         db.session.commit()
-        flash('HTML agregado correctamente.', 'success')
-    except:
+    except Exception:
         db.session.rollback()
-        flash('Error al agregar el HTML.', 'error')
-    
-    return redirect(url_for('store_bp.admin_tools'))
+        return _create_response(False, 'Error al agregar el HTML.', status=400)
+    from app.store.html_presets import html_preset_label
+    preview = html_preset_label(fields['preset_key']) or ''
+    if not preview:
+        plain = re.sub(r'<[^>]+>', '', fields['text'] or '')
+        plain = ' '.join(plain.split())
+        preview = plain[:20] + ('…' if len(plain) > 20 else '')
+    return _create_response(
+        True,
+        'HTML agregado correctamente.',
+        _new_row_html('html', html.id, html.title, preview=preview),
+    )
 
 @store_bp.route('/admin/html/<int:html_id>/toggle', methods=['POST'])
 @admin_required
@@ -3840,15 +3938,33 @@ def delete_html(html_id):
 @store_bp.route('/admin/html/<int:html_id>/edit', methods=['GET', 'POST'])
 @admin_required
 def edit_html(html_id):
-    from app.store.tool_info_schema import ensure_tool_info_is_public_column
+    from app.store.html_presets import (
+        HTML_PRESET_CHOICES,
+        MEDIOS_PAGO_MAIN_ICONS,
+        medios_pago_editor_data,
+        COMO_TRABAJO_ICONS,
+        como_trabajo_editor_data,
+        codigos_editor_data,
+        pantallas_editor_data,
+        screen_icon_choices,
+        parse_html_form_fields,
+    )
+    from app.store.tool_info_schema import ensure_html_preset_key_column, ensure_tool_info_is_public_column
 
     ensure_tool_info_is_public_column()
+    ensure_html_preset_key_column()
+    html_preset_titles = dict(HTML_PRESET_CHOICES)
     html = HtmlInfo.query.get_or_404(html_id)
     admin_username = current_app.config.get('ADMIN_USER')
 
     if request.method == 'POST':
-        html.title = request.form.get('title', html.title)
-        html.text = request.form.get('text', html.text)
+        fields, err = parse_html_form_fields(request.form)
+        if err:
+            flash(err, 'error')
+            return redirect(url_for('store_bp.edit_html', html_id=html.id))
+        html.title = fields['title']
+        html.text = fields['text']
+        html.preset_key = fields['preset_key']
         html.is_public = request.form.get('is_public') in ('1', 'on', 'true', 'yes')
         
         user_ids_str = request.form.getlist('user_ids')
@@ -3883,18 +3999,33 @@ def edit_html(html_id):
                            pagination=pagination,
                            search_query=search_query,
                            per_page=per_page,
+                           html_preset_choices=HTML_PRESET_CHOICES,
+                           html_preset_titles=html_preset_titles,
+        medios_pago=medios_pago_editor_data(html.text),
+        medios_pago_main_icons=MEDIOS_PAGO_MAIN_ICONS,
+        como_trabajo=como_trabajo_editor_data(html.text if html.preset_key == 'como_trabajo' else ''),
+        como_trabajo_icons=COMO_TRABAJO_ICONS,
+        codigos_resumen=codigos_editor_data(html.text),
+        pantallas=pantallas_editor_data(html.text),
+        screen_icons=screen_icon_choices(),
                            public_url=url_for('store_bp.html_public_one', html_id=html.id, _external=True))
 
 @store_bp.route('/admin/html/<int:html_id>/update', methods=['POST'])
 @admin_required
 def update_html(html_id):
+    from app.store.html_presets import parse_html_form_fields
+    from app.store.tool_info_schema import ensure_html_preset_key_column
+
+    ensure_html_preset_key_column()
     html = HtmlInfo.query.get_or_404(html_id)
-    if not request.form.get('title') or not request.form.get('text'):
-        flash('Todos los campos son requeridos.', 'error')
+    fields, err = parse_html_form_fields(request.form)
+    if err:
+        flash(err, 'error')
         return redirect(url_for('store_bp.edit_html', html_id=html_id))
-    
-    html.title = request.form.get('title')
-    html.text = request.form.get('text')
+
+    html.title = fields['title']
+    html.text = fields['text']
+    html.preset_key = fields['preset_key']
     try:
         db.session.commit()
         flash('HTML actualizado correctamente.', 'success')

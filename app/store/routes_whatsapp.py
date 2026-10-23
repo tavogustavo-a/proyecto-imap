@@ -683,6 +683,43 @@ def telegram_bot_health():
     })
 
 
+@store_bp.route('/admin/telegram_bot/menu_buttons', methods=['GET'])
+@admin_required
+def telegram_bot_menu_buttons():
+    from app.store.telegram_bot_service import menu_button_catalog
+
+    try:
+        buttons = menu_button_catalog()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('No se pudieron leer los botones del bot')
+        return jsonify({'success': False, 'buttons': [], 'error': 'No se pudieron leer los botones.'}), 500
+    return jsonify({'success': True, 'buttons': buttons})
+
+
+@store_bp.route('/admin/telegram_bot/menu_buttons', methods=['POST'])
+@admin_required
+def save_telegram_bot_menu_button():
+    from app.store.telegram_bot_service import update_menu_button
+
+    data = request.get_json(silent=True) or {}
+    enabled = data.get('enabled', None)
+    label = data.get('label', None)
+    if 'enabled' not in data:
+        enabled = None
+    if 'label' not in data:
+        label = None
+    try:
+        buttons = update_menu_button(data.get('key'), enabled=enabled, label=label)
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Ese botón no está en el bot.'}), 400
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('No se pudo guardar un botón del bot')
+        return jsonify({'success': False, 'error': 'No se pudo guardar el botón.'}), 500
+    return jsonify({'success': True, 'buttons': buttons})
+
+
 @store_bp.route('/admin/telegram_bot/groups', methods=['GET'])
 @admin_required
 def telegram_bot_groups():

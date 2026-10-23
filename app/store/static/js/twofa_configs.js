@@ -306,12 +306,12 @@
                     <div class="flex-grow-1">
                         <div class="font-weight-bold">${escapeHtml(emailsDisplay)}</div>
                     </div>
-                    <div class="d-flex gap-05 ml-2">
+                    <div class="d-flex gap-05 ml-2 align-items-center twofa-list-row-actions">
                         <button type="button" class="btn-orange edit-twofa-config row-icon-btn" data-config-id="${config.id}" title="Editar" aria-label="Editar">
                             <i class="fas fa-pen" aria-hidden="true"></i>
                         </button>
-                        <button type="button" class="btn-red btn-sm delete-twofa-config btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar">
-                            <i class="fas fa-trash"></i>
+                        <button type="button" class="btn-red btn-sm delete-twofa-config btn-imap-action btn-imap-small" data-id="${config.id}" title="Eliminar" aria-label="Eliminar">
+                            <i class="fas fa-trash" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>

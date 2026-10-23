@@ -23,7 +23,7 @@
     <!-- CSS exactamente igual que el admin work_sheets.html -->
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
+    <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261022-crear-modal">
     <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.min.css') }}">
     
 
@@ -80,10 +80,10 @@
     
     <!-- Modal para crear plantilla de hojas de cálculo -->
     <div id="modalCrearPlantilla" class="modal-overlay d-none">
-        <div class="modal-content worksheet-modal">
+        <div class="modal-content worksheet-modal worksheet-crear-plantilla-modal">
             <div class="modal-header">
                 <h3 class="modal-title">Crear plantilla hojas de cálculo</h3>
-                <button id="closeModalCrearPlantilla" class="btn-close">&times;</button>
+                <button id="closeModalCrearPlantilla" class="btn-close worksheet-modal-close-x" type="button" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
@@ -91,31 +91,31 @@
                     <input type="text" class="form-control" id="tituloPlantillaInput" name="tituloPlantillaInput" placeholder="Título de la plantilla..." autocomplete="off">
                 </div>
                 <div class="worksheet-fields-grid">
-                    <button class="worksheet-field-btn" data-field="correo">
+                    <button class="worksheet-field-btn" data-field="correo" type="button">
                         <i class="fas fa-envelope"></i>
                         <span>Correo</span>
                     </button>
-                    <button class="worksheet-field-btn" data-field="contraseña">
+                    <button class="worksheet-field-btn" data-field="contraseña" type="button">
                         <i class="fas fa-key"></i>
                         <span>Contraseña</span>
                     </button>
-                    <button class="worksheet-field-btn" data-field="links">
+                    <button class="worksheet-field-btn" data-field="links" type="button">
                         <i class="fas fa-link"></i>
                         <span>Links</span>
                     </button>
-                    <button class="worksheet-field-btn" data-field="letras">
+                    <button class="worksheet-field-btn" data-field="letras" type="button">
                         <i class="fas fa-font"></i>
                         <span>Letras</span>
                     </button>
-                    <button class="worksheet-field-btn" data-field="informacion-adicional">
+                    <button class="worksheet-field-btn" data-field="informacion-adicional" type="button">
                         <i class="fas fa-info-circle"></i>
                         <span>Información adicional</span>
                     </button>
-                    <button class="worksheet-field-btn" data-field="numero">
+                    <button class="worksheet-field-btn" data-field="numero" type="button">
                         <i class="fas fa-hashtag"></i>
                         <span>Número</span>
                     </button>
-                    <button class="worksheet-field-btn" data-field="otro-campo">
+                    <button class="worksheet-field-btn" data-field="otro-campo" type="button">
                         <i class="fas fa-ellipsis-h"></i>
                         <span>Otro campo</span>
                     </button>
@@ -127,11 +127,11 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button id="btnGenerarPlantilla" class="btn-panel btn-green" disabled>
+            <div class="modal-footer worksheet-crear-plantilla-footer">
+                <button id="btnGenerarPlantilla" class="btn-panel btn-green" disabled type="button">
                     <i class="fas fa-file-excel"></i> Generar plantilla
                 </button>
-                <button id="btnCancelarPlantilla" class="btn-panel btn-red">
+                <button id="btnCancelarPlantilla" class="btn-panel btn-red" type="button">
                     Cancelar
                 </button>
             </div>
@@ -176,6 +176,6 @@
     <div hidden class="shared-worksheet-embedded-json" data-shared-worksheet-data="{{ {'id': worksheet.id, 'title': worksheet.title, 'fields': worksheet.fields, 'data': data, 'dataTotal': data|length, 'formato': formato, 'last_edit_time': last_edit_time|default(none)} | tojson | e }}"></div>
     
     <!-- Scripts necesarios -->
-    <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}?v=correos-unicos" defer></script>
+    <script src="{{ url_for('store_bp.static', filename='js/admin_work_sheets.js') }}?v=20261022-modos-unificados" defer></script>
 </body>
 </html> 

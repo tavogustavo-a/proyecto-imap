@@ -277,27 +277,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function createLinkRow(link) {
         const div = document.createElement('div');
-        div.className = 'production-link-item d-flex align-items-center justify-content-between gap-2 mb-1';
+        div.className = 'production-link-item d-flex flex-column gap-1 mb-1';
         div.dataset.linkId = link.id;
 
-        const linkInfo = document.createElement('div');
-        linkInfo.className = 'link-info flex-grow-1';
-        
         if (link.title) {
             const titleDiv = document.createElement('div');
             titleDiv.className = 'link-title';
             const strong = document.createElement('strong');
             strong.textContent = link.title;
             titleDiv.appendChild(strong);
-            linkInfo.appendChild(titleDiv);
+            div.appendChild(titleDiv);
         }
-        
+
+        const urlRow = document.createElement('div');
+        urlRow.className = 'link-url-row d-flex align-items-center gap-2';
+
         const urlDiv = document.createElement('div');
         urlDiv.className = 'link-url';
         urlDiv.title = link.url;
-        const truncatedUrl = link.url.length > 15 ? link.url.substring(0, 15) + '...' : link.url;
-        urlDiv.textContent = truncatedUrl;
-        linkInfo.appendChild(urlDiv);
+        urlDiv.textContent = link.url;
+        urlRow.appendChild(urlDiv);
         
         const linkActions = document.createElement('div');
         linkActions.className = 'link-actions';
@@ -315,13 +314,14 @@ document.addEventListener('DOMContentLoaded', function () {
         
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
-        removeBtn.className = 'btn-panel btn-red btn-small remove-link-btn';
+        removeBtn.className = 'btn-red remove-link-btn row-icon-btn';
         removeBtn.setAttribute('data-link-id', link.id);
-        removeBtn.textContent = '-';
+        removeBtn.title = 'Eliminar';
+        removeBtn.setAttribute('aria-label', 'Eliminar');
+        removeBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
         linkActions.appendChild(removeBtn);
-        
-        div.appendChild(linkInfo);
-        div.appendChild(linkActions);
+        urlRow.appendChild(linkActions);
+        div.appendChild(urlRow);
         return div;
     }
 

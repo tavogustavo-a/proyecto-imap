@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}?v=20261015-sms-nopad">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}?v=20261021-sms-pagination-snug">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -80,13 +80,13 @@
         <p>Cargando correos...</p>
       </div>
       <div id="allowedNumbersPagination" class="d-flex justify-content-between align-items-center">
-        <span id="paginationInfoNumbers"></span>
         <button id="deleteAllNumbersBtn" class="btn-red" title="Eliminar todos los correos permitidos" aria-label="Eliminar todos los correos permitidos">
           <i class="fas fa-trash" aria-hidden="true"></i> Todo
         </button>
-        <div class="ml-auto">
-          <button id="prevPageBtnNumbers" class="btn-blue" disabled>&lt; Anterior</button>
-          <button id="nextPageBtnNumbers" class="btn-blue ml-05" disabled>Siguiente &gt;</button>
+        <div class="allowed-emails-page-nav d-flex align-items-center sms-numbers-page-nav">
+          <button id="prevPageBtnNumbers" class="btn-blue" type="button" disabled>&lt; Anterior</button>
+          <span id="paginationInfoNumbers"></span>
+          <button id="nextPageBtnNumbers" class="btn-blue" type="button" disabled>Siguiente &gt;</button>
         </div>
       </div>
       
@@ -286,8 +286,14 @@
       <button type="button" id="btn-refresh-messages" class="btn-blue">
         <i class="fas fa-search"></i> Buscar
       </button>
-      <button type="button" id="btn-cleanup-sms" class="btn-red" title="Eliminar mensajes antiguos (más de 15 minutos) y huérfanos">
-        <i class="fas fa-trash"></i>
+      <button
+        type="button"
+        id="btn-cleanup-sms"
+        class="btn-red btn-sm btn-imap-action btn-imap-small"
+        title="Eliminar mensajes antiguos (más de 15 minutos) y huérfanos"
+        aria-label="Eliminar mensajes antiguos"
+      >
+        <i class="fas fa-trash" aria-hidden="true"></i>
       </button>
     </div>
     
@@ -336,7 +342,7 @@
           class="d-none"
         >
         <button type="button" id="twofa-upload-qr-btn" class="btn-blue">
-          <i class="fas fa-qrcode"></i> QR
+          <i class="fas fa-qrcode" aria-hidden="true"></i><span class="twofa-qr-btn-label"> QR</span>
         </button>
         <button type="submit" id="twofa-save-btn" class="btn-green">Agregar</button>
         <button type="button" id="twofa-cancel-btn" class="btn-blue d-none">Cancelar</button>
@@ -430,7 +436,7 @@
           class="d-none"
         >
         <button type="button" id="edit-twofa-upload-qr-btn" class="btn-blue">
-          <i class="fas fa-qrcode"></i> QR
+          <i class="fas fa-qrcode" aria-hidden="true"></i><span class="twofa-qr-btn-label"> QR</span>
         </button>
       </div>
       
@@ -665,10 +671,10 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}?v=20261021-sms-pagination-snug" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_list.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}?v=20261015-sms-todo" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}?v=20260710-totp-mask" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}?v=20261021-sms-pagination-snug" defer></script>
 {% endblock %}
 
 

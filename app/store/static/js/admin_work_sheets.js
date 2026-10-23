@@ -24,12 +24,21 @@ let worksheetDataFetchSeq = 0;
 let worksheetRemotePollAllowed = false;
 let selectedTemplateId = localStorage.getItem('selectedWorksheetTemplateId') || null;
 let searchQuery = '';
-let worksheetMode = (() => {
-    const m = localStorage.getItem('worksheetMode') || 'standard';
-    if (m === 'copiar') return 'standard'; // Modo copiar removido
-    if (m === 'filtro') return 'agregar'; // Modo filtro unificado en agregar
-    return m;
-})();
+// Modos Standard/Agregar unificados: una sola vista con agregar filas, filtros y engranajes
+let worksheetMode = 'agregar';
+try { localStorage.setItem('worksheetMode', 'agregar'); } catch (e) {}
+
+function canShowWorksheetAgregarFilas() {
+    return !window.isSharedMode || !window.isReadonly;
+}
+
+function canShowWorksheetFilterTools() {
+    return !window.isSharedMode;
+}
+
+function canShowWorksheetColumnGears() {
+    return canShowWorksheetAgregarFilas();
+}
 
 // NOTA: Sistema de campos fijados removido por completo
 
@@ -99,6 +108,39 @@ function saveCurrentPage(page) {
 function saveActiveCellPosition(row, col) {
     const position = { row: row, col: col };
     localStorage.setItem('worksheetActiveCell', JSON.stringify(position));
+}
+
+// Enfocar celda sin que el navegador mueva el scroll (clic / teclado)
+function focusWorksheetCellWithoutScroll(el) {
+    if (!el || typeof el.focus !== 'function') return;
+    try {
+        el.focus({ preventScroll: true });
+    } catch (e) {
+        el.focus();
+    }
+}
+
+// Congelar scroll de ventana y tabla durante un clic en celda
+function freezeWorksheetScrollDuringClick() {
+    const container = document.getElementById('worksheetTableContainer');
+    const tr = container ? container.querySelector('.table-responsive') : null;
+    const snap = {
+        windowX: window.scrollX || 0,
+        windowY: window.scrollY || 0,
+        tableLeft: tr ? tr.scrollLeft : 0,
+        tableTop: tr ? tr.scrollTop : 0
+    };
+    const restore = () => {
+        window.scrollTo(snap.windowX, snap.windowY);
+        if (tr) {
+            tr.scrollLeft = snap.tableLeft;
+            tr.scrollTop = snap.tableTop;
+        }
+    };
+    restore();
+    requestAnimationFrame(restore);
+    setTimeout(restore, 0);
+    setTimeout(restore, 50);
 }
 
 // Obtiene posición de celda activa guardada
@@ -271,7 +313,7 @@ function restoreActiveCellFocus() {
                 
                 const cellInput = getCellElement(position.row, position.col);
                 if (cellInput) {
-                    cellInput.focus();
+                    focusWorksheetCellWithoutScroll(cellInput);
                     // Selecciona la celda para feedback visual
                     clearAllSelections();
                     addCellToSelection(position.row, position.col);
@@ -1185,9 +1227,18 @@ function mostrarModalFiltrosPersonalizado(campo, colIndex) {
                     #worksheetTable td.col-numeracion,
                     #worksheetTable th[data-col-index]:first-child,
                     #worksheetTable td[data-row-header="true"] {
-                        min-width: 60px !important;
-                        max-width: 60px !important;
-                        width: 60px !important;
+                        min-width: 40px !important;
+                        max-width: 40px !important;
+                        width: 40px !important;
+                        position: sticky !important;
+                        left: 0 !important;
+                        z-index: 4 !important;
+                        background: #f8f9fa !important;
+                    }
+
+                    #worksheetTable thead th.col-numeracion {
+                        z-index: 6 !important;
+                        background: #e9ecef !important;
                     }
                 }
                 
@@ -6786,22 +6837,11 @@ function navigateToCell(row, col, extendSelection = false) {
         selectionStartCell = { row, col };
     }
     
-    // Hacer scroll a la celda
-    try {
-    targetCell.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } catch (error) {
-        // Error de scroll, continuar
-    }
-    
-    // Enfocar la celda
+    // Enfocar sin forzar scroll (el usuario controla el desplazamiento)
     if (targetCell) {
-        // Verificar si es campo de información adicional
         const plantilla = optimizedFunctions.getCurrentPlantilla();
-        if (plantilla && plantilla.campos[col] === 'informacion-adicional') {
-            // Para información adicional, solo actualizar la selección visual
-        } else {
-            // Para campos normales, enfocar el elemento
-            targetCell.focus();
+        if (!(plantilla && plantilla.campos[col] === 'informacion-adicional')) {
+            focusWorksheetCellWithoutScroll(targetCell);
         }
     }
 }
@@ -6957,8 +6997,8 @@ function editSelectedCell() {
     
     const cellInput = getCellElement(currentCell.row, currentCell.col);
     if (cellInput) {
-        cellInput.focus();
-        cellInput.select();
+        focusWorksheetCellWithoutScroll(cellInput);
+        if (typeof cellInput.select === 'function') cellInput.select();
     }
 }
 
@@ -7650,12 +7690,7 @@ function renderEditableCell(campo, valor, filaIdx, colIdx) {
         const extraAttrs = campo === 'links' ? `title="${valor || ''}" style="width:85px;"` : '';
         const inputHtml = generateCellInput(campo, valor, filaIdx, colIdx, extraAttrs);
         
-        // No mostrar icono de copiar en modo agregar
-        if (worksheetMode === 'agregar') {
-            return inputHtml;
-        }
-        
-        // En otros modos, mostrar icono de copiar
+        // Icono de copiar siempre (modos unificados)
         let copyIcon = `<span class='copy-icon' id='copy-input-${filaIdx}-${colIdx}' data-valor="${valor || ''}" title="Copiar"><i class="fas fa-copy"></i></span>`;
         return `<div class='cell-copy-flex' style='display:flex;align-items:center;gap:2px;'>${inputHtml}${copyIcon}</div>`;
     }
@@ -7663,11 +7698,7 @@ function renderEditableCell(campo, valor, filaIdx, colIdx) {
         return generateCellInput(campo, valor, filaIdx, colIdx, 'title="Número del 1 al 6 u 8"');
     }
     if (campo === 'informacion-adicional') {
-        // SOLO en modo agregar, mostrar input normal y ancho
-        if (worksheetMode === 'agregar') {
-            return generateCellInput(campo, valor, filaIdx, colIdx, 'style="width:200px;"');
-        }
-        // En modo standard, mostrar icono de información
+        // Icono / modal (vista compacta unificada)
         if (valor && valor.trim() !== '') {
             const escapedValor = (valor || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
             return `<div class='cell-info-adicional' tabindex="0" data-action="show-info-modal" data-row="${filaIdx}" data-col="${colIdx}" data-value="${escapedValor}" title="Editar información adicional">
@@ -8064,33 +8095,27 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
             <button type="button" class="search-clear-btn" id="clearMainSearch" style="display: none;"><i class="fas fa-times"></i></button>
         </div>`;
 
-    // Elementos, centrados y más largos (sin selector Mostrar - siempre todos)
-    // Modo compartido: Standard siempre; Agregar solo si tiene acceso de edición (!isReadonly)
-    const canShowAgregar = !window.isSharedMode || !window.isReadonly;
-    const agregarFilasBtn = (worksheetMode === 'agregar' || worksheetMode === 'standard') && canShowAgregar
-        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue btn-sm" style="margin-left:1.25rem;min-width:140px;padding:0.5rem 1.25rem" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
+    // Controles unificados (sin selector Standard/Agregar)
+    const canShowAgregar = canShowWorksheetAgregarFilas();
+    const agregarFilasBtn = canShowAgregar
+        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue worksheet-mode-action" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
         : '';
-    let selectorHtml = `<div class='d-flex justify-content-center align-items-center mb-4'>
-        <select id="modeSelect" class="form-select form-select-sm" style="min-width:160px">
-            <option value="standard" ${worksheetMode === 'standard' ? 'selected' : ''}>Modo Standard</option>
-            ${(canShowAgregar && !window.isSharedMode) ? `<option value="agregar" ${worksheetMode === 'agregar' ? 'selected' : ''}>Modo Agregar</option>` : ''}
-        </select>
+    const filtrosBtns = canShowWorksheetFilterTools()
+        ? `<button id="btnLimpiarFiltros" class="btn-panel btn-blue worksheet-mode-action worksheet-filtro-icon-btn" type="button" title="Limpiar filtros"><i class="fas fa-broom"></i></button>
+           <button id="btnGuardarFiltros" class="btn-panel btn-green worksheet-mode-action" type="button">guardar filtro</button>`
+        : '';
+    let selectorHtml = (agregarFilasBtn || filtrosBtns)
+        ? `<div class="d-flex justify-content-center align-items-center worksheet-mode-row">
         ${agregarFilasBtn}
-    </div>`;
+        ${filtrosBtns}
+    </div>`
+        : '';
 
     // inicializar HTML
     let html = '';
 
     // Renderizar en el orden correcto: controles generales arriba, herramientas específicas abajo, título al final
     html += crearBtnHtml + searchHtml + selectorHtml;
-
-    // En modo agregar: filtros y cambios filtros (NO en modo compartido - solo admin)
-    if (worksheetMode === 'agregar' && canShowAgregar && !window.isSharedMode) {
-        html += `<div id="filtroTablasHeader" class="d-flex justify-content-center align-items-center gap-2 mb-2" style='width:100%'>
-            <button id="btnLimpiarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-broom"></i> filtros</button>
-            <button id="btnGuardarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-save"></i> cambios filtros</button>
-        </div>`;
-    }
 
     // Plantilla DESPUÉS de las herramientas (solo si existe título)
     if (plantilla.titulo && plantilla.titulo.trim()) {
@@ -8103,7 +8128,7 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
         
     html += `<div class="plantilla-titulo-container mb-3 text-center">
             <h4 class="plantilla-titulo-header">
-                ${plantilla.titulo}
+                <span class="plantilla-titulo-text">${plantilla.titulo}</span>
                 ${viewersAndLogsIcons}
             </h4>
     </div>`;
@@ -8116,8 +8141,8 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
         let thContent = dynamicFieldNames[campo] || campo;
         // NOTA: No cambiar automáticamente 'letras' por 'let'
         // Los nombres se manejan correctamente en optimizedFunctions.getStandardFieldNames()
-        // Engranaje: en modo agregar (admin) o en modo compartido editable (para añadir campo)
-        if (worksheetMode === 'agregar' || (window.isSharedMode && !window.isReadonly)) {
+        // Engranaje de columna (admin / compartido editable)
+        if (canShowWorksheetColumnGears()) {
             thContent += ` <span class='th-gear-icon' id='th-gear-${colIdx}' title='Opciones'><i class='fas fa-cog'></i></span>`;
         }
         
@@ -8191,27 +8216,8 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
         }
     }
 
-    // Asignar valor y listener al select de modo después de renderizar el HTML
-    const modeSelect = document.getElementById('modeSelect');
-    if (modeSelect) {
-        modeSelect.value = worksheetMode || 'standard';
-        modeSelect.onchange = function() {
-            worksheetMode = modeSelect.value;
-            localStorage.setItem('worksheetMode', worksheetMode);
-            
-            // Invalidar cache de nombres de campos cuando cambie el modo
-            if (optimizedFunctions.invalidateAll) {
-                optimizedFunctions.invalidateAll();
-            }
-            
-            optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
-            // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
-            setTimeout(() => updateDuplicateStyles(plantilla), 100);
-            
-        };
-    }
-    // Body según el modo
-    document.body.classList.toggle('worksheet-mode-agregar', worksheetMode === 'agregar');
+    // Estilos de herramientas de columna (engranajes / anchos)
+    document.body.classList.toggle('worksheet-mode-agregar', canShowWorksheetColumnGears());
     // Listeners a los inputs usando funciones helper
     plantilla.campos.forEach((campo, colIdx) => {
         paginatedRows.forEach((fila, filaIdx) => {
@@ -8349,38 +8355,28 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
 
     }
 
-    // nas (Agregar filas en modo standard y agregar)
-    if (worksheetMode === 'agregar' || worksheetMode === 'standard') {
-        const btnAbrirAgregarTabla = document.getElementById('btnAbrirAgregarTabla');
-        if (btnAbrirAgregarTabla) btnAbrirAgregarTabla.onclick = openAgregarFilasModal;
-        // NOTA: Dividir texto disponible solo en menú contextual (clic derecho)
-    }
+    const btnAbrirAgregarTabla = document.getElementById('btnAbrirAgregarTabla');
+    if (btnAbrirAgregarTabla) btnAbrirAgregarTabla.onclick = openAgregarFilasModal;
 
-    // Event listeners para filtros (en modo agregar)
-    if (worksheetMode === 'agregar') {
-        // Asegurar que los elementos estén en el DOM
+    if (canShowWorksheetFilterTools()) {
         setTimeout(() => {
-        // Botón Limpiar filtros
             const btnLimpiarFiltros = document.getElementById('btnLimpiarFiltros');
-        if (btnLimpiarFiltros) {
-            btnLimpiarFiltros.onclick = function() {
-                limpiarTodosFiltros();
-            };
-        }
-
-        // Botón Guardar cambios
-        const btnGuardarFiltros = document.getElementById('btnGuardarFiltros');
-        if (btnGuardarFiltros) {
-            btnGuardarFiltros.onclick = function() {
-                guardarFiltrosAplicados();
-            };
-        }
-        }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
+            if (btnLimpiarFiltros) {
+                btnLimpiarFiltros.onclick = function() {
+                    limpiarTodosFiltros();
+                };
+            }
+            const btnGuardarFiltros = document.getElementById('btnGuardarFiltros');
+            if (btnGuardarFiltros) {
+                btnGuardarFiltros.onclick = function() {
+                    guardarFiltrosAplicados();
+                };
+            }
+        }, 50);
     }
     
-    // OPTIMIZADO: setupSelectionEvents se llama automáticamente en initializeAllSystems
-    
-    // NUEVO: Agregar eventos de drag selection para filas
+    // Reenganchar selección y clic derecho tras cada render (el DOM se reemplaza)
+    setupSelectionEvents();
     setupRowDragSelection();
     
     // Inicializar sistemas después de renderizar
@@ -8402,6 +8398,9 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
             // PASO 6: Inicialización unificada
             initializeAllSystems();
         }
+        // Por si initializeAllSystems no reengancha (ya inicializado), asegurar clic derecho
+        setupSelectionEvents();
+        setupRowDragSelection();
     }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
     
     // nderizado con delay más largo
@@ -8426,12 +8425,9 @@ window.globalSelectionEventsSetup = false;
 function setupSelectionEvents() {
     const table = document.getElementById('worksheetTable');
     if (!table) return;
-    
-    // Remover listeners anteriores para evitar duplicados
-    const existingListeners = table.querySelectorAll('[data-selection-listener]');
-    existingListeners.forEach(el => {
-        el.removeAttribute('data-selection-listener');
-    });
+
+    // No quitar data-selection-listener: al re-render el DOM es nuevo;
+    // quitar el atributo sin remover listeners duplicaba handlers.
     
     // Configurar eventos globales solo una vez
     if (!globalSelectionEventsSetup) {
@@ -8499,6 +8495,46 @@ function setupSelectionEvents() {
                     }
                 }
             }
+        });
+    }
+
+    // Clic derecho delegado: sobrevive a re-renders del tbody/tabla
+    const worksheetContainer = document.getElementById('worksheetTableContainer');
+    if (worksheetContainer && !worksheetContainer.hasAttribute('data-worksheet-contextmenu')) {
+        worksheetContainer.setAttribute('data-worksheet-contextmenu', 'true');
+        worksheetContainer.addEventListener('contextmenu', function(e) {
+            const rowHeader = e.target.closest && e.target.closest('td[data-row-header="true"]');
+            if (rowHeader && worksheetContainer.contains(rowHeader)) {
+                // Los handlers de fila (setupRowDragSelection) ya muestran su menú
+                return;
+            }
+
+            const cellTd = e.target.closest && e.target.closest('td[data-row-index][data-col-index]');
+            if (!cellTd || !worksheetContainer.contains(cellTd)) {
+                return;
+            }
+
+            e.preventDefault();
+            const rowIndex = parseInt(cellTd.getAttribute('data-row-index'), 10);
+            const colIndex = parseInt(cellTd.getAttribute('data-col-index'), 10);
+            if (isNaN(rowIndex) || isNaN(colIndex)) {
+                return;
+            }
+
+            const cellKey = `${rowIndex}-${colIndex}`;
+            if (!selectedCells.has(cellKey) && selectedRows.size === 0 && selectedColumns.size === 0) {
+                clearAllSelections();
+                addCellToSelection(rowIndex, colIndex);
+                saveActiveCellPosition(rowIndex, colIndex);
+                lastSelectedCell = [rowIndex, colIndex];
+            } else if (!getSelectionInfo().hasSelection) {
+                clearAllSelections();
+                addCellToSelection(rowIndex, colIndex);
+                saveActiveCellPosition(rowIndex, colIndex);
+                lastSelectedCell = [rowIndex, colIndex];
+            }
+
+            showContextMenu(e.clientX, e.clientY);
         });
     }
     
@@ -8604,7 +8640,8 @@ function setupSelectionEvents() {
             td.setAttribute('data-selection-listener', 'true');
             // Selección de celda
             td.addEventListener('mousedown', function(e) {
-                if (e.button !== 0) return; 
+                if (e.button !== 0) return;
+                freezeWorksheetScrollDuringClick();
                 
                 const rowIndex = parseInt(this.getAttribute('data-row-index'));
                 const colIndex = parseInt(this.getAttribute('data-col-index'));
@@ -8644,13 +8681,10 @@ function setupSelectionEvents() {
             lastSelectedCell = [rowIndex, colIndex];
         });
         
-        // Hover y persistencia de hover
+        // Hover solo para arrastre de selección (no guardar celda: evitaba saltos de scroll)
         td.addEventListener('mouseenter', function(e) {
             const rowIndex = parseInt(this.getAttribute('data-row-index'));
             const colIndex = parseInt(this.getAttribute('data-col-index'));
-            
-            // Celda activa para persistencia cuando haces hover sobre una celda
-            saveActiveCellPosition(rowIndex, colIndex);
             
             if (isDragging && dragStartCell) {
                 const [startRow, startCol] = dragStartCell;
@@ -8659,30 +8693,27 @@ function setupSelectionEvents() {
                 selectRange(startRow, startCol, rowIndex, colIndex);
             }
         });
-        
-        // Menú contextual
-        td.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            const rowIndex = parseInt(this.getAttribute('data-row-index'));
-            const colIndex = parseInt(this.getAttribute('data-col-index'));
-            
-            // Si la celda no está seleccionada, seleccionarla
-            const cellKey = `${rowIndex}-${colIndex}`;
-            if (!selectedCells.has(cellKey) && selectedRows.size === 0 && selectedColumns.size === 0) {
-                clearAllSelections();
-                addCellToSelection(rowIndex, colIndex);
-                
-                // Guardar celda activa para persistencia
-                saveActiveCellPosition(rowIndex, colIndex);
-            }
-            
-            showContextMenu(e.clientX, e.clientY);
-            });
+
+        // Clic derecho: delegado en #worksheetTableContainer (setupSelectionEvents)
         }
     });
     
     // Event listeners para inputs dentro de celdas con sistema de historial como Excel
     table.querySelectorAll('input[id^="cell-"]').forEach(input => {
+        if (input.hasAttribute('data-selection-listener')) {
+            return;
+        }
+        input.setAttribute('data-selection-listener', 'true');
+
+        // Clic en input: congelar scroll (el focus nativo no debe mover la página)
+        input.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+            freezeWorksheetScrollDuringClick();
+        });
+        input.addEventListener('focus', function() {
+            freezeWorksheetScrollDuringClick();
+        }, true);
+
         // NUEVO: Variable local para cada input para evitar conflictos
         let cellPreviousValue = '';
         let cellInitialValue = '';
@@ -8773,28 +8804,7 @@ function setupSelectionEvents() {
             }
         });
         
-        // NUEVO: Event listener para clic derecho en inputs
-        input.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            const match = this.id.match(/cell-(\d+)-(\d+)/);
-            if (match) {
-                const rowIndex = parseInt(match[1]);
-                const colIndex = parseInt(match[2]);
-                
-                // Si la celda no está seleccionada, seleccionarla
-                const cellKey = `${rowIndex}-${colIndex}`;
-                if (!selectedCells.has(cellKey) && selectedRows.size === 0 && selectedColumns.size === 0) {
-                    clearAllSelections();
-                    addCellToSelection(rowIndex, colIndex);
-                    
-                    // Guardar celda activa para persistencia
-                    saveActiveCellPosition(rowIndex, colIndex);
-                }
-                
-
-                showContextMenu(e.clientX, e.clientY);
-            }
-        });
+        // Clic derecho en inputs: delegado en #worksheetTableContainer
         
         // NUEVO: Event listener para blur para capturar cuando terminas de escribir (como Excel)
         input.addEventListener('blur', function() {
@@ -8842,10 +8852,11 @@ function setupRowDragSelection() {
     const rowHeaders = table.querySelectorAll('td[data-row-header="true"]');
     
     rowHeaders.forEach(header => {
-        // Eventos anteriores
+        // Eventos anteriores (incl. contextmenu para no apilar al re-render)
         header.removeEventListener('mousedown', handleRowMouseDown);
         header.removeEventListener('mouseenter', handleRowMouseEnter);
         header.removeEventListener('mouseleave', handleRowMouseLeave);
+        header.removeEventListener('contextmenu', handleRowContextMenu);
         
         // Nuevos eventos
         header.addEventListener('mousedown', handleRowMouseDown);
@@ -8857,37 +8868,36 @@ function setupRowDragSelection() {
         header.style.cursor = 'pointer';
         header.style.userSelect = 'none';
         header.setAttribute('title', 'Mantén presionado y arrastra para seleccionar múltiples filas');
-        
-        // NUEVO: Prevenir que el clic en celdas de datos limpie la selección
-        header.addEventListener('click', function(e) {
-            e.stopPropagation(); // Prevenir que el clic se propague
-        });
-        
-        // NUEVO: Prevenir que el clic derecho en celdas de datos limpie la selección
-        header.addEventListener('contextmenu', function(e) {
-            e.stopPropagation(); // Prevenir que el clic se propague
-        });
-        
-        // NUEVO: Prevenir que otros event listeners interfieran con la selección
-        header.addEventListener('mousedown', function(e) {
-            if (e.button === 2) { 
+
+        if (!header.hasAttribute('data-row-drag-extra')) {
+            header.setAttribute('data-row-drag-extra', 'true');
+            // Prevenir que el clic en numeración limpie la selección
+            header.addEventListener('click', function(e) {
                 e.stopPropagation();
-            }
-        });
-        
-        // NUEVO: Manejar touch en móviles para evitar conflictos
-        header.addEventListener('touchstart', function(e) {
-            e.stopPropagation();
-        }, { passive: true });
-        
-        header.addEventListener('touchend', function(e) {
-            e.stopPropagation();
-        }, { passive: true });
+            });
+            header.addEventListener('contextmenu', function(e) {
+                e.stopPropagation();
+            });
+            header.addEventListener('mousedown', function(e) {
+                if (e.button === 2) {
+                    e.stopPropagation();
+                }
+            });
+            header.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
+            header.addEventListener('touchend', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
+        }
     });
     
-    // Event listeners globales para el drag
-    document.addEventListener('mouseup', handleRowMouseUp);
-    document.addEventListener('mousemove', handleRowMouseMove);
+    // Event listeners globales para el drag (una sola vez)
+    if (!window._rowDragGlobalListeners) {
+        window._rowDragGlobalListeners = true;
+        document.addEventListener('mouseup', handleRowMouseUp);
+        document.addEventListener('mousemove', handleRowMouseMove);
+    }
 }
 
 // NUEVO: Manejar mouse down en celdas de numeración
@@ -8962,14 +8972,14 @@ function handleRowContextMenu(e) {
     e.preventDefault(); // Prevenir menú contextual del navegador
     e.stopPropagation(); // Prevenir que se propague a otros event listeners
     
-    // Detectar móvil
-    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
-    
     // Si no hay filas seleccionadas, seleccionar la fila actual
     if (selectedRowsForDrag.size === 0) {
-        const rowIndex = parseInt(e.target.getAttribute('data-row-index'));
-        selectedRowsForDrag.add(rowIndex);
-        updateRowSelectionStyles();
+        const header = (e.target.closest && e.target.closest('td[data-row-header="true"]')) || e.currentTarget;
+        const rowIndex = parseInt(header && header.getAttribute('data-row-index'), 10);
+        if (!isNaN(rowIndex)) {
+            selectedRowsForDrag.add(rowIndex);
+            updateRowSelectionStyles();
+        }
     }
     
     // Mostrar menú contextual
@@ -9453,25 +9463,20 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
     const { totalRows, totalPages, paginatedRows } = calculatePagination(filteredRows);
     // Mantener los selectores con el mismo estilo que en renderTablaEditable (sin Mostrar - siempre todos)
     // Modo compartido: Standard siempre; Agregar solo si tiene acceso de edición (!isReadonly)
-    const canShowAgregar = !window.isSharedMode || !window.isReadonly;
-    const agregarFilasBtn = (worksheetMode === 'agregar' || worksheetMode === 'standard') && canShowAgregar
-        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue btn-sm" style="margin-left:1.25rem;min-width:140px;padding:0.5rem 1.25rem" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
+    const canShowAgregar = canShowWorksheetAgregarFilas();
+    const agregarFilasBtn = canShowAgregar
+        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue worksheet-mode-action" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
         : '';
-    let html = `<div class='d-flex justify-content-center align-items-center mb-4'>
-        <select id="modeSelect" class="form-select form-select-sm" style="min-width:160px">
-            <option value="standard" ${worksheetMode === 'standard' ? 'selected' : ''}>Modo Standard</option>
-            ${(canShowAgregar && !window.isSharedMode) ? `<option value="agregar" ${worksheetMode === 'agregar' ? 'selected' : ''}>Modo Agregar</option>` : ''}
-        </select>
+    const filtrosBtns = canShowWorksheetFilterTools()
+        ? `<button id="btnLimpiarFiltros" class="btn-panel btn-blue worksheet-mode-action worksheet-filtro-icon-btn" type="button" title="Limpiar filtros"><i class="fas fa-broom"></i></button>
+           <button id="btnGuardarFiltros" class="btn-panel btn-green worksheet-mode-action" type="button">guardar filtro</button>`
+        : '';
+    let html = (agregarFilasBtn || filtrosBtns)
+        ? `<div class="d-flex justify-content-center align-items-center worksheet-mode-row">
         ${agregarFilasBtn}
-    </div>`;
-    
-    // En modo agregar: filtros y cambios filtros (NO en modo compartido - solo admin)
-    if (worksheetMode === 'agregar' && canShowAgregar && !window.isSharedMode) {
-        html += `<div id="filtroTablasHeader" class="d-flex justify-content-center align-items-center gap-2 mb-2" style='width:100%'>
-            <button id="btnLimpiarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-broom"></i> filtros</button>
-            <button id="btnGuardarFiltros" class="btn-panel btn-blue" type="button"><i class="fas fa-save"></i> cambios filtros</button>
-        </div>`;
-    }
+        ${filtrosBtns}
+    </div>`
+        : '';
     
     // Mostrar plantilla también durante la búsqueda (solo si existe título)
     if (plantilla.titulo && plantilla.titulo.trim()) {
@@ -9484,7 +9489,7 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         
     html += `<div class="plantilla-titulo-container mb-3 text-center">
             <h4 class="plantilla-titulo-header">
-                ${plantilla.titulo}
+                <span class="plantilla-titulo-text">${plantilla.titulo}</span>
                 ${viewersAndLogsIcons}
             </h4>
     </div>`;
@@ -9498,8 +9503,8 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         // NOTA: No cambiar automáticamente 'letras' por 'let'
         // Los nombres se manejan correctamente en optimizedFunctions.getStandardFieldNames()
         
-        // Engranaje: en modo agregar (admin) o en modo compartido editable (para añadir campo)
-        if (worksheetMode === 'agregar' || (window.isSharedMode && !window.isReadonly)) {
+        // Engranaje de columna (admin / compartido editable)
+        if (canShowWorksheetColumnGears()) {
             thContent += ` <span class='th-gear-icon' id='th-gear-${colIdx}' title='Opciones'><i class='fas fa-cog'></i></span>`;
         }
         
@@ -9595,42 +9600,21 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         }
     });
     
-    // Listener para el selector de modo
-    const modeSelect = document.getElementById('modeSelect');
-    if (modeSelect) {
-        modeSelect.value = worksheetMode;
-        modeSelect.addEventListener('change', function() {
-            worksheetMode = modeSelect.value;
-            localStorage.setItem('worksheetMode', worksheetMode);
-            
-            // Invalidar cache de nombres de campos cuando cambie el modo
-            if (optimizedFunctions.invalidateAll) {
-                optimizedFunctions.invalidateAll();
-            }
-            
-            // Re-renderizar la tabla completa con el nuevo modo
-            optimizedFunctions.renderTablaEditable(plantilla, optimizedFunctions.getStandardFieldNames(), container, optimizedFunctions.getPlantillaIndex(plantilla));
-            // CORREGIDO: Aplicar estilos de duplicados después de renderizar la tabla
-            setTimeout(() => updateDuplicateStyles(plantilla), 100);
-            
-        });
-    }
-    
-    // Botón Agregar filas (en modo standard y agregar)
-    if (worksheetMode === 'agregar' || worksheetMode === 'standard') {
-        const btnAbrirAgregarTabla = document.getElementById('btnAbrirAgregarTabla');
-        if (btnAbrirAgregarTabla) btnAbrirAgregarTabla.onclick = openAgregarFilasModal;
-    }
-    
-    // Botones de filtros (en modo agregar)
-    if (worksheetMode === 'agregar') {
+    document.body.classList.toggle('worksheet-mode-agregar', canShowWorksheetColumnGears());
+
+    const btnAbrirAgregarTabla = document.getElementById('btnAbrirAgregarTabla');
+    if (btnAbrirAgregarTabla) btnAbrirAgregarTabla.onclick = openAgregarFilasModal;
+
+    if (canShowWorksheetFilterTools()) {
         const btnLimpiarFiltros = document.getElementById('btnLimpiarFiltros');
         if (btnLimpiarFiltros) btnLimpiarFiltros.onclick = limpiarTodosFiltros;
         const btnGuardarFiltros = document.getElementById('btnGuardarFiltros');
         if (btnGuardarFiltros) btnGuardarFiltros.onclick = guardarFiltrosAplicados;
     }
     
-    // OPTIMIZADO: setupSelectionEvents se llama automáticamente en initializeAllSystems
+    // Reenganchar selección y clic derecho tras filtrar/re-renderizar
+    setupSelectionEvents();
+    setupRowDragSelection();
     
     // NOTA: Funcionalidad de fijar campos removida según solicitud del usuario
     
@@ -9645,6 +9629,7 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
             worksheetContainer.style.outline = 'none';
             // Configurar eventos de teclado
         }
+        setupSelectionEvents();
     }, 50); // Optimizado para hojas de cálculo - reducido de 100ms a 50ms
 } 
 
@@ -12218,7 +12203,7 @@ function setupInfoAdicionalDelegatedListeners() {
             e.stopPropagation();
             
             
-            target.focus();
+            focusWorksheetCellWithoutScroll(target);
             
             const parentCell = safeClosest(target, 'td');
             if (parentCell) {
@@ -12232,9 +12217,9 @@ function setupInfoAdicionalDelegatedListeners() {
                     clearAllSelections();
                     addCellToSelection(rowIndex, colIndex);
                     
-                    // mantener el foco
+                    // mantener el foco sin mover scroll
                     setTimeout(() => {
-                        target.focus();
+                        focusWorksheetCellWithoutScroll(target);
                     }, 50);
                 }
             }
@@ -12766,14 +12751,19 @@ let contextMenuPreservedSelection = null;
 function showContextMenu(x, y) {
     hideContextMenu();
     
-    const selection = getSelectionInfo();
+    let selection = getSelectionInfo();
+    // Si no hay selección pero hay celda activa, usarla (evita menú vacío tras re-render)
+    if (!selection.hasSelection && lastSelectedCell) {
+        const row = Array.isArray(lastSelectedCell) ? lastSelectedCell[0] : lastSelectedCell.row;
+        const col = Array.isArray(lastSelectedCell) ? lastSelectedCell[1] : lastSelectedCell.col;
+        if (row != null && col != null && !isNaN(row) && !isNaN(col)) {
+            addCellToSelection(row, col);
+            selection = getSelectionInfo();
+        }
+    }
     contextMenuPreservedSelection = selection.hasSelection ? { ...selection, cells: [...(selection.cells || [])], rows: [...(selection.rows || [])], columns: [...(selection.columns || [])] } : null;
-    
 
-
-    
     if (!selection.hasSelection) {
-
         return;
     }
     
@@ -19424,7 +19414,7 @@ function doInitializeSharedWorksheetEditable(sw) {
     window.currentPlantilla = plantilla; // Para sincronización bidireccional
     rowsPerPage = 'todos'; // Forzar todas las filas en modo compartido (sin límite de 50)
     currentPage = 1;
-    worksheetMode = 'standard'; // En compartido solo Standard (sin filtros)
+    worksheetMode = 'agregar'; // Vista unificada; filtros solo en admin
     if (typeof plantillaCache !== 'undefined' && plantillaCache.clearAll) plantillaCache.clearAll();
     const container = document.getElementById('worksheetTableContainer');
     if (!container) {

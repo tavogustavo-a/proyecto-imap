@@ -10,12 +10,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const apiForm = document.getElementById('apiForm');
     const apiKeyTextarea = document.getElementById('api_key');
 
+    var apiKeyPlaceholderGeneric = 'Campo de API o HTML';
+    var apiKeyPlaceholderShort = 'Campo de API';
+
     function toggleDriveField() {
         if (tipoApi.value === 'Drive') {
             driveField.classList.remove('herramientas-drive-field');
             if(driveSubtitlesFields) driveSubtitlesFields.classList.remove('herramientas-drive-subtitles');
             if(apiKeyTextarea) {
                 apiKeyTextarea.rows = 3;
+                apiKeyTextarea.placeholder = apiKeyPlaceholderShort;
             }
         } else if (tipoApi.value === '' || tipoApi.value === null) {
             // API Genérica / Ninguno - permitir HTML
@@ -24,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if(driveSubtitlesFields) driveSubtitlesFields.classList.add('herramientas-drive-subtitles');
             if(apiKeyTextarea) {
                 apiKeyTextarea.rows = 10;
+                apiKeyTextarea.placeholder = apiKeyPlaceholderGeneric;
             }
         } else {
             // Búsqueda de Medios u otros
@@ -32,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if(driveSubtitlesFields) driveSubtitlesFields.classList.add('herramientas-drive-subtitles');
             if(apiKeyTextarea) {
                 apiKeyTextarea.rows = 3;
+                apiKeyTextarea.placeholder = apiKeyPlaceholderShort;
             }
         }
     }
