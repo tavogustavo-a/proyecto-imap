@@ -537,11 +537,11 @@ def create_app(config_class_passed=None):
             ensure_license_account_refund_schema()
             from app.store.announcements import ensure_store_announcements_schema
             from app.store.email_notify_prefs import ensure_user_email_notify_enabled_column
-            from app.store.tool_info_schema import ensure_tool_info_is_public_column
+            from app.store.tool_info_schema import ensure_herramientas_public_schema
 
             ensure_store_announcements_schema()
             ensure_user_email_notify_enabled_column()
-            ensure_tool_info_is_public_column()
+            ensure_herramientas_public_schema()
             from app.store.whatsapp_user_notify_prefs import ensure_user_whatsapp_notify_enabled_column
             from app.store.drive_manager import ensure_drive_telegram_columns
             from app.store.whatsapp_daily_sales import ensure_whatsapp_daily_sales_columns

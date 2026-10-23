@@ -71,3 +71,35 @@ def ensure_html_preset_key_column() -> None:
         except Exception:
             pass
         logger.warning('ensure_html_preset_key_column: %s', exc)
+
+
+def ensure_api_info_drive_subtitle_columns() -> None:
+    """Añade subtítulos de Drive en api_info si faltan."""
+    table_name = 'api_info'
+    try:
+        insp = inspect(db.engine)
+        if table_name not in insp.get_table_names():
+            return
+        cols = {c['name'].lower() for c in insp.get_columns(table_name)}
+        for col in ('drive_subtitle_photos', 'drive_subtitle_videos'):
+            if col in cols:
+                continue
+            db.session.execute(
+                text(f'ALTER TABLE {table_name} ADD COLUMN {col} VARCHAR(100)')
+            )
+            db.session.commit()
+            cols.add(col)
+            logger.info('Esquema: columna %s añadida a %s', col, table_name)
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        logger.warning('ensure_api_info_drive_subtitle_columns: %s', exc)
+
+
+def ensure_herramientas_public_schema() -> None:
+    """Parches de esquema usados por /tienda/herramientas-public."""
+    ensure_tool_info_is_public_column()
+    ensure_html_preset_key_column()
+    ensure_api_info_drive_subtitle_columns()

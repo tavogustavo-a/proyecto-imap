@@ -4,11 +4,11 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261022-tv-fullwidth">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261023-tv-icons-center">
 {% endblock %}
 
 {% block content %}
-<div class="store-light maxw-800 mx-auto mt-3 br-8 public-tools-container public-tools-wide">
+<div class="store-light mx-auto mt-3 br-8 public-tools-container public-tools-wide">
   {% set blocked_users = ['soporte','soporte1','soporte2','soporte3'] %}
   {% if session.get('logged_in') and (not session.get('username') or session.get('username').lower() not in blocked_users) %}
     <div class="d-flex justify-content-start menu-toggle-container">

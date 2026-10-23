@@ -45,24 +45,22 @@
         <div class="container-max-width-900 mt-2 store-light worksheet-panel">
         
         <!-- Menú móvil (oculto en compartido pero necesario para estructura) -->
-        <div id="mobileMenu" class="mobile-menu-store hidden">
-            <div class="menu-user-info-row menu-user-info-row--name-only menu-sidebar-heading-name">
-              <span class="menu-user-name">{{ current_username or session.get('username', 'Usuario') }}</span>
-            </div>
-            <div class="menu-search-row px-2 py-2">
+        <div id="mobileMenu" class="mobile-menu-store hidden worksheet-tablas-menu">
+            <div class="menu-search-row">
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-search"></i></span>
                     <label for="menuSearchInput" class="sr-only">Buscar en menú</label>
-                    <input type="text" class="form-control text-center" placeholder="Buscar..." id="menuSearchInput" name="menuSearchInput" autocomplete="off">
+                    <input type="text" class="form-control text-center worksheet-tablas-menu-search" placeholder="Buscar..." id="menuSearchInput" name="menuSearchInput" autocomplete="off">
                 </div>
             </div>
-            <div id="plantillasMenuList" class="mt-2 px-2"></div>
+            <div id="plantillasMenuList"></div>
         </div>
         <div id="menuOverlay" class="menu-overlay"></div>
 
 
-        <!-- Barra de búsqueda (igual que admin) -->
-        <div class="d-flex flex-column align-items-center justify-content-center mb-4 w-100">
+        <div id="worksheetModeRowHost" class="worksheet-mode-row-host"></div>
+        <!-- Barra de búsqueda debajo de los iconos -->
+        <div class="d-flex flex-column align-items-center justify-content-center w-100 worksheet-main-search-wrap">
             <div class="d-flex flex-wrap align-items-center worksheet-search-container worksheet-search-centered">
                 <div class="search-container search-container-relative">
                     <label for="mainSearchInput" class="sr-only">Buscar hojas de cálculo</label>
@@ -73,7 +71,7 @@
         </div>
 
         <!-- Contenedor de la tabla (igual que admin) -->
-        <div id="worksheetTableContainer" class="mt-4"></div>
+        <div id="worksheetTableContainer" class="mt-0"></div>
     </div>
 
     <!-- Modales necesarios (ocultos en modo compartido pero requeridos por JavaScript) -->
@@ -82,7 +80,7 @@
     <div id="modalCrearPlantilla" class="modal-overlay d-none">
         <div class="modal-content worksheet-modal worksheet-crear-plantilla-modal">
             <div class="modal-header">
-                <h3 class="modal-title">Crear plantilla hojas de cálculo</h3>
+                <h3 class="modal-title">crear plantillas de calculo</h3>
                 <button id="closeModalCrearPlantilla" class="btn-close worksheet-modal-close-x" type="button" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body">
@@ -120,7 +118,7 @@
                         <span>Otro campo</span>
                     </button>
                 </div>
-                <div class="selected-fields-container mt-3">
+                <div class="selected-fields-container">
                     <h5>Campos seleccionados:</h5>
                     <div id="selectedFieldsList" class="selected-fields-list">
                         <p class="text-muted">Ningún campo seleccionado</p>
@@ -140,10 +138,10 @@
 
     <!-- Modal para plantillas rápidas -->
     <div id="modalHojasCreadas" class="modal-overlay d-none">
-        <div class="modal-content worksheet-modal">
+        <div class="modal-content worksheet-modal worksheet-plantilla-rapida-modal">
             <div class="modal-header">
                 <h3 class="modal-title">Crear plantilla rápida</h3>
-                <button id="closeModalHojasCreadas" class="btn-close">&times;</button>
+                <button id="closeModalHojasCreadas" class="btn-close worksheet-modal-close-x" type="button" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
@@ -151,8 +149,8 @@
                     <input type="text" class="form-control" id="tituloPlantillaRapidaInput" name="tituloPlantillaRapidaInput" placeholder="Título de la plantilla..." autocomplete="off">
                 </div>
                 <div class="mb-3">
-                    <label for="comboPlantillaRapida" class="form-label">Selecciona una combinación:</label>
-                    <select id="comboPlantillaRapida" class="form-select" autocomplete="off">
+                    <label for="comboPlantillaRapida" class="sr-only">Combinación de campos</label>
+                    <select id="comboPlantillaRapida" class="form-select" autocomplete="off" aria-label="Combinación de campos">
                         <option value="correo:contraseña:correo:contraseña:numero">correo:contraseña:correo:contraseña:numero</option>
                         <option value="correo:contraseña:letras:correo:contraseña:numero">correo:contraseña:letras:correo:contraseña:numero</option>
                         <option value="correo:contraseña:links:correo:contraseña:numero">correo:contraseña:links:correo:contraseña:numero</option>
@@ -161,11 +159,11 @@
                     </select>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button id="btnCrearPlantillaRapida" class="btn-panel btn-blue">
+            <div class="modal-footer worksheet-plantilla-rapida-footer">
+                <button id="btnCrearPlantillaRapida" class="btn-panel btn-blue" type="button">
                     <i class="fas fa-bolt"></i> Crear plantilla rápida
                 </button>
-                <button id="btnCancelarPlantillaRapida" class="btn-panel btn-red">
+                <button id="btnCancelarPlantillaRapida" class="btn-panel btn-red" type="button">
                     Cancelar
                 </button>
             </div>

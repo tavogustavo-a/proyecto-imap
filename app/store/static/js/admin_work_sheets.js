@@ -13,7 +13,7 @@
  ***************************************************/
 
 // CONFIGURACIÓN
-const DEFAULT_ROWS_FOR_NEW_TABLE = 10;
+const DEFAULT_ROWS_FOR_NEW_TABLE = 100;
 
 // Variables principales de plantillas y datos
 let selectedFields = [];
@@ -38,6 +38,26 @@ function canShowWorksheetFilterTools() {
 
 function canShowWorksheetColumnGears() {
     return canShowWorksheetAgregarFilas();
+}
+
+/** Iconos (filtros / logs) encima del Buscar, debajo de crear/hojas */
+function renderWorksheetModeRowHost() {
+    const connectionLogsBtn = (window.isAdmin && !window.isSharedMode)
+        ? `<button id="connectionLogsBtn" class="connection-logs-btn worksheet-mode-action" type="button" title="Registro de conexiones"><i class="fas fa-history"></i><span id="logsCount">0</span></button>`
+        : '';
+    const filtrosBtns = canShowWorksheetFilterTools()
+        ? `<button id="btnLimpiarFiltros" class="btn-panel btn-blue worksheet-mode-action worksheet-filtro-icon-btn" type="button" title="Limpiar filtros"><i class="fas fa-broom"></i></button>
+           <button id="btnGuardarFiltros" class="btn-panel btn-green worksheet-mode-action" type="button">guardar filtro</button>`
+        : '';
+    const selectorHtml = (filtrosBtns || connectionLogsBtn)
+        ? `<div class="d-flex justify-content-center align-items-center worksheet-mode-row">${filtrosBtns}${connectionLogsBtn}</div>`
+        : '';
+    const host = document.getElementById('worksheetModeRowHost');
+    if (host) {
+        host.innerHTML = selectorHtml;
+        return '';
+    }
+    return selectorHtml;
 }
 
 // NOTA: Sistema de campos fijados removido por completo
@@ -4464,10 +4484,10 @@ function openAgregarFilasModal() {
     modal.innerHTML = `
         <div style='background:#fff;padding:24px 32px;border-radius:10px;min-width:260px;box-shadow:0 2px 16px #0002;text-align:center;position:relative;'>
             <h4 style='margin-bottom:18px;'>Agregar filas</h4>
-            <input id='inputCantidadColumnas' type='number' min='1' value='10' class='form-control' placeholder='Cantidad de filas' style='margin-bottom:16px;width:90%;'>
-            <div style='display:flex;gap:10px;justify-content:center;'>
-                <button id='btnGuardarTabla' class='btn-panel btn-green'>Guardar</button>
-                <button id='btnCancelarTabla' class='btn-panel btn-gray'>Cancelar</button>
+            <input id='inputCantidadColumnas' type='number' min='1' value='10' class='form-control' placeholder='Cantidad de filas' style='margin:0 auto 16px;width:90%;display:block;border:1px solid #ced4da;border-radius:6px;padding:6px 10px;box-shadow:none;outline:none;background:#fff;'>
+            <div style='display:flex;gap:10px;justify-content:center;align-items:center;width:100%;'>
+                <button id='btnGuardarTabla' class='btn-panel btn-green' type='button'>Guardar</button>
+                <button id='btnCancelarTabla' class='btn-panel btn-red' type='button'>Cancelar</button>
             </div>
         </div>
     `;
@@ -7049,7 +7069,6 @@ const btnCancelarPlantillaRapida = document.getElementById('btnCancelarPlantilla
 const btnCrearPlantillaRapida = document.getElementById('btnCrearPlantillaRapida');
 const tituloPlantillaRapidaInput = document.getElementById('tituloPlantillaRapidaInput');
 const comboPlantillaRapida = document.getElementById('comboPlantillaRapida');
-    
     // Funcionalidad del menú móvil
     var menuBtn = document.getElementById('menu1ToggleBtn');
     var mobileMenu = document.getElementById('mobileMenu');
@@ -7301,20 +7320,14 @@ function renderPlantillasMenu() {
             // Contenedor para los iconos de acción
             const iconContainer = document.createElement('span');
             iconContainer.className = 'plantilla-icon-container';
-            iconContainer.style.position = 'absolute';
-            iconContainer.style.right = '12px';
-            iconContainer.style.top = '50%';
-            iconContainer.style.transform = 'translateY(-50%';
-            iconContainer.style.display = 'flex';
-            iconContainer.style.alignItems = 'center';
-            iconContainer.style.gap = '48px';
+            iconContainer.style.cssText = 'display:inline-flex;align-items:center;gap:2px;margin-left:auto;flex:0 0 auto;position:static;';
 
-            // Botón de eliminar (X)
+            // Botón de eliminar (X) — pegado al editar, ambos a la derecha
             const xBtn = document.createElement('span');
             xBtn.className = 'btn-x-eliminar-plantilla';
             xBtn.innerHTML = '&times;';
             xBtn.title = 'Eliminar plantilla';
-            xBtn.removeAttribute('style');
+            xBtn.style.cssText = 'position:static;margin:0;padding:0;width:16px;height:16px;';
             xBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 if (!confirm('¿Seguro que deseas eliminar esta plantilla?')) return;
@@ -7355,7 +7368,7 @@ function renderPlantillasMenu() {
             editBtn.className = 'btn-edit-plantilla';
             editBtn.innerHTML = '<i class="fas fa-edit"></i>';
             editBtn.title = 'Renombrar plantilla';
-            editBtn.removeAttribute('style');
+            editBtn.style.cssText = 'position:static;margin:0;padding:0;width:16px;height:16px;';
             editBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 // Cerrar input de edición abierto antes de abrir uno nuevo
@@ -8082,55 +8095,40 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
     if (!document.getElementById('btnCrearPlantilla')) {
         crearBtnHtml = `<div class="d-flex justify-content-center mb-2">
             <button id="btnCrearPlantilla" class="btn-panel btn-green">
-                <i class="fas fa-plus"></i> Crear plantilla hojas de cálculo
+                <i class="fas fa-plus"></i> crear plantillas de calculo
             </button>
         </div>`;
     }
 
+    // Iconos arriba (host); Buscar queda debajo en el HTML
+    renderWorksheetModeRowHost();
+
     // No limpiar (solo si no existe ya en el HTML principal)
     const existingSearchInput = document.getElementById('mainSearchInput');
     const searchHtml = existingSearchInput ? '' :
-        `<div class="d-flex gap-05 mb-4" id="searchRowCustom" style="position: relative;">
+        `<div class="d-flex gap-05 mb-3" id="searchRowCustom" style="position: relative;">
             <input type="text" id="mainSearchInput" name="mainSearchInput" class="form-control" placeholder="Buscar...">
             <button type="button" class="search-clear-btn" id="clearMainSearch" style="display: none;"><i class="fas fa-times"></i></button>
         </div>`;
 
-    // Controles unificados (sin selector Standard/Agregar)
-    const canShowAgregar = canShowWorksheetAgregarFilas();
-    const agregarFilasBtn = canShowAgregar
-        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue worksheet-mode-action" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
-        : '';
-    const filtrosBtns = canShowWorksheetFilterTools()
-        ? `<button id="btnLimpiarFiltros" class="btn-panel btn-blue worksheet-mode-action worksheet-filtro-icon-btn" type="button" title="Limpiar filtros"><i class="fas fa-broom"></i></button>
-           <button id="btnGuardarFiltros" class="btn-panel btn-green worksheet-mode-action" type="button">guardar filtro</button>`
-        : '';
-    let selectorHtml = (agregarFilasBtn || filtrosBtns)
-        ? `<div class="d-flex justify-content-center align-items-center worksheet-mode-row">
-        ${agregarFilasBtn}
-        ${filtrosBtns}
-    </div>`
-        : '';
-
-    // inicializar HTML
+    // inicializar HTML (sin iconos: van en worksheetModeRowHost)
     let html = '';
-
-    // Renderizar en el orden correcto: controles generales arriba, herramientas específicas abajo, título al final
-    html += crearBtnHtml + searchHtml + selectorHtml;
+    html += crearBtnHtml + searchHtml;
 
     // Plantilla DESPUÉS de las herramientas (solo si existe título)
     if (plantilla.titulo && plantilla.titulo.trim()) {
-        // Optimización aplicada
-        const viewersAndLogsIcons = (window.isAdmin && !window.isSharedMode) ?
-            `<button id="connectionLogsBtn" class="connection-logs-btn" title="Registro de conexiones">
-                <i class="fas fa-history"></i>
-                <span id="logsCount">0</span>
-            </button>` : '';
+        const agregarFilasIcon = canShowWorksheetAgregarFilas()
+            ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue worksheet-agregar-filas-icon-btn" type="button" title="agregar filas" aria-label="agregar filas"><i class="fas fa-plus"></i></button>`
+            : '';
         
-    html += `<div class="plantilla-titulo-container mb-3 text-center">
-            <h4 class="plantilla-titulo-header">
-                <span class="plantilla-titulo-text">${plantilla.titulo}</span>
-                ${viewersAndLogsIcons}
-            </h4>
+    html += `<div class="plantilla-titulo-container">
+            <div class="plantilla-titulo-bar">
+                <div class="plantilla-titulo-left">${agregarFilasIcon}</div>
+                <h4 class="plantilla-titulo-header">
+                    <span class="plantilla-titulo-text">${plantilla.titulo}</span>
+                </h4>
+                <div class="plantilla-titulo-right"></div>
+            </div>
     </div>`;
     }
 
@@ -8198,7 +8196,7 @@ function renderTablaEditable(plantilla, fieldNames, container, idx) {
     html += `</tbody></table></div>`;
 
     // Paginación debajo de la tabla
-    html += `<div class="d-flex justify-content-between align-items-center mt-2 mb-2 worksheet-table-pagination">
+    html += `<div class="d-flex justify-content-center align-items-center mt-2 mb-2 worksheet-table-pagination">
         <div>
             <button type="button" class="btn btn-sm btn-outline-secondary worksheet-pagination-btn" id="btnPrevPage" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
             <span class="mx-2 worksheet-pagination-label">Página ${currentPage} de ${totalPages}</span>
@@ -9463,35 +9461,23 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
     const { totalRows, totalPages, paginatedRows } = calculatePagination(filteredRows);
     // Mantener los selectores con el mismo estilo que en renderTablaEditable (sin Mostrar - siempre todos)
     // Modo compartido: Standard siempre; Agregar solo si tiene acceso de edición (!isReadonly)
-    const canShowAgregar = canShowWorksheetAgregarFilas();
-    const agregarFilasBtn = canShowAgregar
-        ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue worksheet-mode-action" type="button"><i class="fas fa-plus"></i> Agregar filas</button>`
-        : '';
-    const filtrosBtns = canShowWorksheetFilterTools()
-        ? `<button id="btnLimpiarFiltros" class="btn-panel btn-blue worksheet-mode-action worksheet-filtro-icon-btn" type="button" title="Limpiar filtros"><i class="fas fa-broom"></i></button>
-           <button id="btnGuardarFiltros" class="btn-panel btn-green worksheet-mode-action" type="button">guardar filtro</button>`
-        : '';
-    let html = (agregarFilasBtn || filtrosBtns)
-        ? `<div class="d-flex justify-content-center align-items-center worksheet-mode-row">
-        ${agregarFilasBtn}
-        ${filtrosBtns}
-    </div>`
-        : '';
-    
+    renderWorksheetModeRowHost();
+    let html = '';
+
     // Mostrar plantilla también durante la búsqueda (solo si existe título)
     if (plantilla.titulo && plantilla.titulo.trim()) {
-        // Optimización aplicada
-        const viewersAndLogsIcons = (window.isAdmin && !window.isSharedMode) ?
-            `<button id="connectionLogsBtn" class="connection-logs-btn" title="Registro de conexiones">
-                <i class="fas fa-history"></i>
-                <span id="logsCount">0</span>
-            </button>` : '';
+        const agregarFilasIcon = canShowWorksheetAgregarFilas()
+            ? `<button id="btnAbrirAgregarTabla" class="btn-panel btn-blue worksheet-agregar-filas-icon-btn" type="button" title="agregar filas" aria-label="agregar filas"><i class="fas fa-plus"></i></button>`
+            : '';
         
-    html += `<div class="plantilla-titulo-container mb-3 text-center">
-            <h4 class="plantilla-titulo-header">
-                <span class="plantilla-titulo-text">${plantilla.titulo}</span>
-                ${viewersAndLogsIcons}
-            </h4>
+    html += `<div class="plantilla-titulo-container">
+            <div class="plantilla-titulo-bar">
+                <div class="plantilla-titulo-left">${agregarFilasIcon}</div>
+                <h4 class="plantilla-titulo-header">
+                    <span class="plantilla-titulo-text">${plantilla.titulo}</span>
+                </h4>
+                <div class="plantilla-titulo-right"></div>
+            </div>
     </div>`;
     }
     
@@ -9560,7 +9546,7 @@ function filtrarFilasTabla(query, plantilla, fieldNames, container, idx) {
         html += `</tr>`;
     });
     html += `</tbody></table></div>`;
-    html += `<div class="d-flex justify-content-between align-items-center mt-2 mb-2 worksheet-table-pagination">
+    html += `<div class="d-flex justify-content-center align-items-center mt-2 mb-2 worksheet-table-pagination">
         <div>
             <button type="button" class="btn btn-sm btn-outline-secondary worksheet-pagination-btn" id="btnPrevPage" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
             <span class="mx-2 worksheet-pagination-label">Página ${currentPage} de ${totalPages}</span>
@@ -19203,7 +19189,7 @@ function renderSimpleTable(dataToShow) {
     }
     
     let html = `
-        <div class="plantilla-titulo-container mb-3 text-center">
+        <div class="plantilla-titulo-container text-center">
             <h4 class="plantilla-titulo-header">
                 📊 ${window.sharedWorksheetData.title}
             </h4>

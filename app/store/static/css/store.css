@@ -15696,10 +15696,86 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     }
   }
 
-  /* Fila Modo + Agregar filas: misma altura compacta */
+  /* Icono agregar filas a la izquierda del título */
+  .plantilla-titulo-bar {
+    display: grid;
+    grid-template-columns: 36px 1fr 36px;
+    align-items: center;
+    width: 100%;
+    gap: 0.35rem;
+  }
+
+  .plantilla-titulo-left {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .plantilla-titulo-right {
+    min-width: 36px;
+  }
+
+  .plantilla-titulo-bar .plantilla-titulo-header {
+    justify-self: center;
+    text-align: center;
+  }
+
+  .worksheet-agregar-filas-icon-btn {
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    height: 30px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 6px !important;
+    margin: 0 !important;
+  }
+
+  .worksheet-agregar-filas-icon-btn i {
+    margin: 0 !important;
+    font-size: 0.85rem;
+  }
+
+  /* Menú / Menú2 más junto a crear plantillas / hojas */
+  .worksheet-hojas-page .worksheet-top-menus-row {
+    margin: 0 0 0.25rem !important;
+    padding: 0.15rem 1.2rem 0 !important;
+  }
+
+  .worksheet-hojas-page .worksheet-crear-hojas-row {
+    margin: 0 0 0.3rem !important;
+  }
+
+  /* Iconos debajo de crear/hojas y encima del Buscar (mismo aire que entre botones) */
+  .worksheet-mode-row-host {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 0 0 0.22rem;
+  }
+
+  .worksheet-mode-row-host:empty {
+    display: none;
+    margin: 0;
+  }
+
+  .worksheet-panel .worksheet-main-search-wrap {
+    margin: 0 0 0.22rem !important;
+    padding: 0 !important;
+  }
+
+  .worksheet-panel #worksheetTableContainer.mt-0,
+  .worksheet-panel #worksheetTableContainer.mt-2,
+  .worksheet-panel #worksheetTableContainer.mt-4 {
+    margin-top: 0 !important;
+  }
+
+  /* Fila de filtros: misma altura compacta */
   .worksheet-panel .worksheet-mode-row {
     gap: 0.55rem;
-    margin-bottom: 1.25rem !important;
+    margin-bottom: 0 !important;
     flex-wrap: wrap;
   }
 
@@ -15732,10 +15808,18 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     padding-right: 1.6rem !important;
   }
 
-  .worksheet-panel .worksheet-mode-row .worksheet-mode-action,
-  .worksheet-panel .worksheet-mode-row #btnAbrirAgregarTabla {
-    min-width: 118px !important;
+  .worksheet-panel .worksheet-mode-row .worksheet-mode-action {
     white-space: nowrap;
+  }
+
+  .worksheet-panel .worksheet-mode-row #btnAbrirAgregarTabla {
+    min-width: 32px !important;
+    width: 32px !important;
+    padding: 0 !important;
+  }
+
+  .worksheet-panel .worksheet-mode-row #btnAbrirAgregarTabla i {
+    margin: 0 !important;
   }
 
   .worksheet-panel .worksheet-mode-row #btnGuardarFiltros {
@@ -15760,7 +15844,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
 
   .worksheet-panel .plantilla-titulo-container {
-    margin-bottom: 1rem;
+    margin-bottom: 0;
+    padding: 4px 12px;
   }
 
   /* Campos Mostrar (si existen) */
@@ -15798,10 +15883,15 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
       flex: 1 1 auto;
     }
 
-    .worksheet-panel .worksheet-mode-row .worksheet-mode-action,
-    .worksheet-panel .worksheet-mode-row #btnAbrirAgregarTabla {
-      min-width: 100px !important;
+    .worksheet-panel .worksheet-mode-row .worksheet-mode-action {
       flex: 0 0 auto;
+    }
+
+    .worksheet-panel .worksheet-mode-row #btnAbrirAgregarTabla {
+      min-width: 30px !important;
+      width: 30px !important;
+      flex: 0 0 30px !important;
+      padding: 0 !important;
     }
 
     .worksheet-panel .worksheet-mode-row #btnGuardarFiltros {
@@ -15817,7 +15907,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
     .worksheet-panel .plantilla-titulo-container {
       margin-top: 0.25rem;
-      margin-bottom: 1rem;
+      margin-bottom: 0;
+      padding: 4px 10px;
     }
   }
 
@@ -16560,6 +16651,11 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   .worksheet-hojas-page.store-light {
     color: #111 !important;
+  }
+
+  #worksheetTableContainer .worksheet-table-pagination {
+    justify-content: center !important;
+    width: 100%;
   }
 
   #worksheetTableContainer .worksheet-table-pagination,
@@ -18881,8 +18977,38 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     color: #b02a37 !important;
   }
 
+  /* Título, grilla y seleccionados: mismo ancho (lado a lado con Correo–Letras) */
+  #modalCrearPlantilla .modal-body {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  #modalCrearPlantilla .worksheet-crear-plantilla-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    gap: 0.45rem;
+  }
+
+  #modalCrearPlantilla .worksheet-crear-plantilla-title-wrap,
+  #modalCrearPlantilla .worksheet-fields-grid,
+  #modalCrearPlantilla .selected-fields-container,
+  #modalCrearPlantilla .selected-fields-list {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
   #modalCrearPlantilla #tituloPlantillaInput,
   #modalCrearPlantilla .form-control {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
     border: 2px solid #000 !important;
     box-shadow: none !important;
     outline: none !important;
@@ -18933,26 +19059,61 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     color: #155724 !important;
   }
 
+  #modalCrearPlantilla .worksheet-fields-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    margin-bottom: 0;
+    gap: 6px;
+  }
+
+  #modalCrearPlantilla .worksheet-field-btn {
+    min-height: 52px !important;
+    max-width: none !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 6px 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  #modalCrearPlantilla .worksheet-field-btn i {
+    font-size: 15px !important;
+    margin-bottom: 3px !important;
+  }
+
+  #modalCrearPlantilla .worksheet-field-btn span {
+    font-size: 11px !important;
+    line-height: 1.15 !important;
+  }
+
   #modalCrearPlantilla .selected-fields-container {
     text-align: center;
+    margin-top: 0;
   }
 
   #modalCrearPlantilla .selected-fields-container h5 {
     text-align: center;
+    margin: 0 0 0.35rem;
+    font-size: 0.92rem;
   }
 
   #modalCrearPlantilla .selected-fields-list {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     gap: 6px;
-    text-align: center;
+    text-align: left;
+    min-height: 44px;
+    padding: 8px 10px;
+    border: 2px solid #000;
+    border-radius: 6px;
+    background: #fff;
   }
 
   #modalCrearPlantilla .selected-fields-list p {
     width: 100%;
     text-align: center;
+    margin: 0;
   }
 
   #modalCrearPlantilla .selected-field-tag {
@@ -18970,6 +19131,92 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
 
   #modalCrearPlantilla .modal-footer .btn-panel {
+    margin: 0 !important;
+  }
+
+  /* Modal Crear plantilla rápida: título centrado, bordes negros, botones centrados */
+  #modalHojasCreadas .worksheet-plantilla-rapida-modal {
+    position: relative;
+    max-width: 480px;
+    width: min(92vw, 480px);
+    margin: 0 auto;
+  }
+
+  #modalHojasCreadas .modal-header {
+    position: relative;
+    justify-content: center;
+    text-align: center;
+    border-bottom: none !important;
+    padding: 0.5rem 2.5rem 0.35rem;
+    margin-bottom: 0.15rem;
+  }
+
+  #modalHojasCreadas .modal-title {
+    text-align: center;
+    width: 100%;
+    margin: 0;
+  }
+
+  #modalHojasCreadas .modal-body .mb-3 {
+    margin-bottom: 0.85rem !important;
+  }
+
+  #modalHojasCreadas .modal-body .mb-3:last-child {
+    margin-bottom: 0.25rem !important;
+  }
+
+  #modalHojasCreadas .worksheet-modal-close-x,
+  #modalHojasCreadas #closeModalHojasCreadas {
+    position: absolute !important;
+    top: 0.15rem;
+    right: 0.15rem;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    color: #dc3545 !important;
+    font-size: 1.65rem !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer;
+    z-index: 2;
+  }
+
+  #modalHojasCreadas #tituloPlantillaRapidaInput,
+  #modalHojasCreadas .form-control,
+  #modalHojasCreadas #comboPlantillaRapida,
+  #modalHojasCreadas .form-select {
+    border: 1px solid #333 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  #modalHojasCreadas #tituloPlantillaRapidaInput:focus,
+  #modalHojasCreadas .form-control:focus,
+  #modalHojasCreadas #comboPlantillaRapida:focus,
+  #modalHojasCreadas .form-select:focus {
+    border: 1px solid #333 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  #modalHojasCreadas .worksheet-plantilla-rapida-footer,
+  #modalHojasCreadas .modal-footer {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+  }
+
+  #modalHojasCreadas .modal-footer .btn-panel {
     margin: 0 !important;
   }
   
@@ -18990,25 +19237,25 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .worksheet-fields-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 20px;
-    max-width: 360px;
+    gap: 6px;
+    margin-bottom: 0.5rem;
+    max-width: 100%;
+    width: 100%;
     margin-left: auto;
     margin-right: auto;
   }
   
-  /* En pantallas grandes, mantener grilla con espacio para botones más grandes */
   @media (min-width: 768px) {
     .worksheet-fields-grid {
-      max-width: 450px;
-      gap: 15px;
+      max-width: 100%;
+      gap: 7px;
     }
   }
   
   @media (min-width: 1024px) {
     .worksheet-fields-grid {
-      max-width: 420px;
-      gap: 12px;
+      max-width: 100%;
+      gap: 7px;
     }
   }
   
@@ -19017,35 +19264,34 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px 8px;
+    padding: 6px 4px;
     border: 2px solid #ddd;
     border-radius: 6px;
     background: #fff;
     color: #333;
     cursor: pointer;
-    transition: color 0.1s ease; /* Optimizado para hojas de cálculo */
-    min-height: 80px;
-    max-width: 90px;
-    width: 90px;
+    transition: color 0.1s ease;
+    min-height: 52px;
+    max-width: none;
+    width: 100%;
     box-sizing: border-box;
   }
   
-  /* En pantallas grandes, mantener botones con buen tamaño para iconos */
   @media (min-width: 768px) {
     .worksheet-field-btn {
-      padding: 14px 8px;
-      min-height: 95px;
-      max-width: 105px;
-      width: 105px;
+      padding: 7px 4px;
+      min-height: 56px;
+      max-width: none;
+      width: 100%;
     }
   }
   
   @media (min-width: 1024px) {
     .worksheet-field-btn {
-      padding: 12px 7px;
-      min-height: 90px;
-      max-width: 100px;
-      width: 100px;
+      padding: 7px 4px;
+      min-height: 56px;
+      max-width: none;
+      width: 100%;
     }
   }
   
@@ -19062,8 +19308,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
   
   .worksheet-field-btn i {
-    font-size: 22px;
-    margin-bottom: 6px;
+    font-size: 15px;
+    margin-bottom: 3px;
     color: #666;
   }
   
@@ -19088,46 +19334,62 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
   
   .worksheet-field-btn span {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 500;
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.15;
     word-wrap: break-word;
     hyphens: auto;
   }
   
-  /* En pantallas grandes, mantener iconos grandes y texto legible */
   @media (min-width: 768px) {
     .worksheet-field-btn i {
-      font-size: 26px;
-      margin-bottom: 8px;
+      font-size: 16px;
+      margin-bottom: 3px;
     }
     
     .worksheet-field-btn span {
-      font-size: 14px;
+      font-size: 11px;
     }
   }
   
   @media (min-width: 1024px) {
     .worksheet-field-btn i {
-      font-size: 24px;
-      margin-bottom: 7px;
+      font-size: 16px;
+      margin-bottom: 3px;
     }
     
     .worksheet-field-btn span {
-      font-size: 13px;
+      font-size: 11px;
     }
   }
   
   .selected-fields-container {
-    border-top: 1px solid #eee;
-    padding-top: 16px;
+    border-top: none;
+    padding-top: 0;
   }
   
   .selected-fields-container h5 {
-    margin-bottom: 12px;
+    margin-bottom: 0.35rem;
     color: #333;
-    font-size: 16px;
+    font-size: 0.92rem;
+  }
+
+  #modalCrearPlantilla .selected-fields-container {
+    border-top: none !important;
+    padding-top: 0 !important;
+  }
+
+  @media (min-width: 768px) {
+    #modalCrearPlantilla .selected-fields-container {
+      padding-top: 0 !important;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    #modalCrearPlantilla .selected-fields-container {
+      padding-top: 0 !important;
+    }
   }
   
   /* En pantallas grandes, hacer el contenedor más compacto */
@@ -19313,162 +19575,125 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
   
   .plantilla-menu-item {
-    background: linear-gradient(145deg, #1e1e1e 0%, #2a2a2a 50%, #1e1e1e 100%) !important;
+    background: #222 !important;
     color: #fff !important;
-    padding: 8px 18px 8px 18px !important;
-    margin-bottom: 10px !important;
-    border-radius: 16px !important;
-    font-size: 1.05rem;
+    padding: 4px 8px 4px 10px !important;
+    margin-bottom: 5px !important;
+    border-radius: 8px !important;
+    font-size: 0.92rem;
     font-weight: 600;
-    box-shadow: 
-      0 8px 32px rgba(0,0,0,0.2),
-      0 4px 16px rgba(0,0,0,0.1),
-      inset 0 1px 0 rgba(255,255,255,0.1),
-      0 0 0 1px rgba(255,255,255,0.05) !important;
-    letter-spacing: 0.4px;
-    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    box-shadow: none !important;
+    letter-spacing: 0.2px;
+    transition: none !important;
     text-align: left !important;
     position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     overflow: hidden;
     cursor: pointer;
-    backdrop-filter: blur(10px);
-    filter: drop-shadow(0 0 20px rgba(0,0,0,0.3));
-    min-height: 36px;
-    height: 38px;
+    backdrop-filter: none;
+    filter: none;
+    min-height: 30px;
+    height: 30px;
     display: flex;
     align-items: center;
+    justify-content: flex-start;
+    gap: 0.35rem;
+  }
+
+  .plantilla-menu-item > span:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   
-  .plantilla-menu-item::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
-    transition: left 0.6s ease-out;
-  }
-  
+  .plantilla-menu-item::before,
   .plantilla-menu-item::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.1) 0%, transparent 70%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    content: none !important;
+    display: none !important;
   }
   
   .plantilla-menu-item:hover {
-    /* ✅ Quitado transform para evitar agrandamiento/flotación - solo mantener brillo */
-    box-shadow: 
-      0 12px 40px rgba(0,0,0,0.25),
-      0 6px 20px rgba(0,0,0,0.15),
-      inset 0 1px 0 rgba(255,255,255,0.2) !important;
-    background: linear-gradient(145deg, #2d2d2d 0%, #3a3a3a 50%, #2d2d2d 100%) !important;
-    border-color: rgba(255, 255, 255, 0.15);
-  }
-  
-  .plantilla-menu-item:hover::before {
-    left: 100%;
-  }
-  
-  .plantilla-menu-item:hover::after {
-    opacity: 1;
+    background: #2c2c2c !important;
+    box-shadow: none !important;
+    border-color: rgba(255, 255, 255, 0.16);
   }
   
   .plantilla-menu-item:active {
-    /* ✅ Quitado transform para evitar agrandamiento/flotación */
-    transition: all 0.1s ease;
+    transition: none !important;
   }
   
-  .plantilla-menu-item i {
+  .plantilla-menu-item > span:first-child i {
     color: #4CAF50 !important;
-    margin-right: 10px !important;
-    font-size: 1em !important;
+    margin-right: 6px !important;
+    font-size: 0.9em !important;
     opacity: 0.9;
-    transition: background-color 0.1s ease; /* Optimizado - solo color */
-    text-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+    text-shadow: none;
   }
   
-  .plantilla-menu-item:hover i {
+  .plantilla-menu-item:hover > span:first-child i {
     color: #66BB6A !important;
-    opacity: 1;
-    /* ✅ Quitado transform scale para evitar agrandamiento del icono */
-    text-shadow: 0 0 15px rgba(102, 187, 106, 0.5);
+    text-shadow: none;
   }
   
   .plantilla-menu-item.active {
-    background: linear-gradient(145deg, #2E7D32 0%, #388E3C 50%, #2E7D32 100%) !important;
-    border-color: rgba(76, 175, 80, 0.6) !important;
-    box-shadow: 
-      0 8px 32px rgba(46, 125, 50, 0.4),
-      0 4px 16px rgba(46, 125, 50, 0.2),
-      inset 0 1px 0 rgba(255,255,255,0.2) !important;
+    background: #2E7D32 !important;
+    border-color: rgba(76, 175, 80, 0.55) !important;
+    box-shadow: none !important;
     position: relative;
   }
   
-  .plantilla-menu-item.active::before {
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  }
-  
-  .plantilla-menu-item.active i {
+  .plantilla-menu-item.active > span:first-child i {
     color: #A5D6A7 !important;
-    text-shadow: 0 0 15px rgba(165, 214, 167, 0.6);
-    /* ✅ Quitado transform scale para evitar agrandamiento del icono */
+    text-shadow: none;
   }
   
   .plantilla-menu-item.active:hover {
-    background: linear-gradient(145deg, #388E3C 0%, #43A047 50%, #388E3C 100%) !important;
-    /* ✅ Quitado transform para evitar agrandamiento/flotación - solo mantener brillo */
-    box-shadow: 
-      0 10px 35px rgba(46, 125, 50, 0.5),
-      0 5px 18px rgba(46, 125, 50, 0.3),
-      inset 0 1px 0 rgba(255,255,255,0.25) !important;
+    background: #388E3C !important;
+    box-shadow: none !important;
   }
   
-  .btn-x-eliminar-plantilla {
-    position: absolute !important;
-    top: 50% !important;
-    right: 18px !important;
-    transform: translateY(-50%) !important;
-    background: rgba(255, 255, 255, 0.08) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    color: #fff !important;
-    font-size: 14px !important;
+  .plantilla-icon-container .btn-x-eliminar-plantilla {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    transform: none !important;
+    background: transparent !important;
+    border: none !important;
+    color: #ff6b6b !important;
+    font-size: 15px !important;
     font-weight: bold !important;
     cursor: pointer !important;
     padding: 0 !important;
-    width: 26px !important;
-    height: 26px !important;
-    display: flex !important;
+    margin: 0 !important;
+    width: 16px !important;
+    height: 16px !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    border-radius: 50% !important;
-    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
-    backdrop-filter: blur(15px) !important;
+    border-radius: 0 !important;
+    transition: color 0.1s !important;
+    backdrop-filter: none !important;
     z-index: 2 !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    box-shadow: none !important;
+    flex: 0 0 16px !important;
   }
   
-  .btn-x-eliminar-plantilla:hover {
-    background: rgba(255, 255, 255, 0.2) !important;
-    border-color: rgba(255, 255, 255, 0.3) !important;
-    transform: translateY(-50%) scale(1.15) !important;
-    box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(255, 255, 255, 0.1) !important;
-    color: #ff6b6b !important;
+  .plantilla-icon-container .btn-x-eliminar-plantilla:hover {
+    background: transparent !important;
+    border: none !important;
+    transform: none !important;
+    box-shadow: none !important;
+    color: #ff8a8a !important;
   }
   
-  .btn-x-eliminar-plantilla:active {
-    transform: translateY(-50%) scale(0.9) !important;
-    transition: all 0.1s ease !important;
-    background: rgba(255, 107, 107, 0.2) !important;
+  .plantilla-icon-container .btn-x-eliminar-plantilla:active {
+    transform: none !important;
+    background: transparent !important;
+    color: #ff5252 !important;
   }
   
   .plantilla-menu-item:last-child {
@@ -19538,9 +19763,9 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     opacity: 0.8;
   }
   
-  /* Reducir espacio entre controles y tabla de hojas de cálculo */
+  /* Título junto a la tabla */
   #worksheetTableContainer.mt-4 {
-    margin-top: 0.5rem !important;
+    margin-top: 0 !important;
   }
   
   #worksheetTableContainer .table-responsive {
@@ -20397,9 +20622,17 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     gap: 2px;
     width: 100%;
     min-width: 0;
-    justify-content: space-between;
+    justify-content: flex-start;
     flex-wrap: nowrap;
     padding: 0 !important;
+  }
+  .cell-copy-flex > input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .cell-copy-flex > .copy-icon {
+    flex: 0 0 16px;
+    margin-left: 0;
   }
   
   /* ⭐ NUEVO: Asegurar que el icono de copiar sea visible en pantallas reducidas */
@@ -20592,22 +20825,33 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     font-size: 12px !important;
   }
   
-  /* ⭐ NUEVO: Inputs al 100% en modo agregar (sin iconos de copiar) */
+  /* Inputs con espacio para icono de copiar (modos unificados) */
   body.worksheet-mode-agregar #worksheetTableContainer td.col-correo input,
   body.worksheet-mode-agregar #worksheetTableContainer td.col-contraseña input,
   body.worksheet-mode-agregar #worksheetTableContainer td.col-links input,
   body.worksheet-mode-agregar #worksheetTableContainer td.col-informacion-adicional input,
   body.worksheet-mode-agregar #worksheetTableContainer td input[type="text"],
   body.worksheet-mode-agregar #worksheetTableContainer td input[type="number"] {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 100% !important;
+    width: calc(100% - 20px) !important;
+    max-width: calc(100% - 20px) !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
     box-sizing: border-box !important;
     border: none !important;
     padding: 0 4px !important;
     margin: 0 !important;
     height: 26px !important;
     line-height: 26px !important;
+  }
+
+  body.worksheet-mode-agregar #worksheetTableContainer td .cell-copy-flex {
+    justify-content: flex-start !important;
+    gap: 2px !important;
+  }
+
+  body.worksheet-mode-agregar #worksheetTableContainer td .cell-copy-flex .copy-icon {
+    margin-left: 0 !important;
+    flex: 0 0 16px !important;
   }
   
   /* ⭐ NUEVO: Celdas con padding mínimo en modo agregar */
@@ -20661,7 +20905,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     font-size: 12px !important;
   }
   
-  /* ⭐ NUEVO: Inputs optimizados en modo standard (con iconos de copiar) */
+  /* Inputs con espacio para icono de copiar */
   body.worksheet-mode-standard #worksheetTableContainer td.col-correo input,
   body.worksheet-mode-standard #worksheetTableContainer td.col-contraseña input,
   body.worksheet-mode-standard #worksheetTableContainer td.col-links input,
@@ -20670,7 +20914,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   body.worksheet-mode-standard #worksheetTableContainer td input[type="number"] {
     width: calc(100% - 20px) !important;
     max-width: calc(100% - 20px) !important;
-    min-width: calc(100% - 20px) !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
     box-sizing: border-box !important;
     border: none !important;
     padding: 0 4px !important;
@@ -20817,41 +21062,85 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     }
   }
   
-  /* Iconos de acción en el menú de plantillas */
-  .plantilla-icon-container {
-    display: flex;
-    align-items: center;
-    gap: 48px;
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 2;
+  /* Menú de tablas: buscar simétrico y listado cerca */
+  .worksheet-tablas-menu {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
-  .btn-x-eliminar-plantilla {
-    color: #e53935;
-    font-size: 20px;
-    cursor: pointer;
-    /* margin-left: 6px; */
-    /* margin-right: 8px; */
-    transition: color 0.1s; /* Optimizado para hojas de cálculo */
-    border-radius: 0 !important;
-    background: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    width: auto !important;
-    height: auto !important;
+
+  /* Solo el campo Buscar (no el listado): más bajo y márgenes simétricos */
+  .worksheet-tablas-menu .menu-search-row {
+    padding: 0.25rem 1rem 0.15rem 1rem !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .worksheet-tablas-menu .menu-search-row .input-group {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
     padding: 0 !important;
-    display: flex !important;
+    box-sizing: border-box !important;
+  }
+
+  .worksheet-tablas-menu .worksheet-tablas-menu-search {
+    min-height: 26px !important;
+    height: 26px !important;
+    max-height: 26px !important;
+    padding: 0.1rem 0.5rem !important;
+    font-size: 0.85rem !important;
+    line-height: 1.15 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  /* Iconos X + editar pegados a la derecha */
+  .plantilla-icon-container {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-direction: row !important;
+    flex: 0 0 auto !important;
+    gap: 2px !important;
+    position: static !important;
+    margin-left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: none !important;
+    z-index: 3 !important;
+    pointer-events: auto;
+  }
+
+  .plantilla-icon-container .btn-edit-plantilla {
+    position: static !important;
+    color: #90caf9 !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 16px !important;
+    height: 16px !important;
+    display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
+    flex: 0 0 16px !important;
+    transition: color 0.1s;
   }
-  .btn-edit-plantilla {
-    color: #1976d2;
-    font-size: 18px;
-    cursor: pointer;
-    /* margin-left: 16px; */
-    transition: color 0.1s; /* Optimizado para hojas de cálculo */
+
+  .plantilla-icon-container .btn-edit-plantilla i {
+    margin: 0 !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    font-size: 12px !important;
+  }
+
+  .plantilla-icon-container .btn-edit-plantilla:hover {
+    color: #bbdefb !important;
   }
   
   #worksheetTableContainer th.col-letras,
@@ -21363,93 +21652,88 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     animation: duplicateHighlight 2s ease-in-out;
   }
   
-  /* Estilos para título de plantilla */
+  /* Título de plantilla (junto al Buscar y a la tabla) */
   .plantilla-titulo-container {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 16px 24px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border-radius: 6px;
+    padding: 4px 10px;
+    box-shadow: none;
     position: relative;
     overflow: hidden;
-    margin-top: 0.5rem;
-    margin-bottom: 1.25rem !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    text-align: center;
   }
   
   .plantilla-titulo-container::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #007bff, #28a745, #ffc107, #dc3545);
-    border-radius: 8px 8px 0 0;
+    content: none;
   }
   
   .plantilla-titulo-header {
     margin: 0;
     color: #495057;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     text-transform: capitalize;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
     position: relative;
     z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 0.85rem 1.15rem;
+    gap: 0.45rem 0.75rem;
     max-width: 100%;
+    line-height: 1.25;
   }
 
   .plantilla-titulo-header .plantilla-titulo-text {
     display: inline-block;
-    line-height: 1.35;
-    padding: 0 0.15rem;
+    line-height: 1.25;
+    padding: 0;
   }
 
   .plantilla-titulo-header .connection-logs-btn {
     margin-left: 0 !important;
     flex-shrink: 0;
-    padding: 7px 14px;
-    gap: 8px;
+    padding: 4px 10px;
+    gap: 6px;
   }
 
   .plantilla-titulo-header .connection-logs-btn #logsCount {
-    padding: 2px 8px;
-    min-width: 22px;
+    padding: 1px 6px;
+    min-width: 18px;
   }
   
   /* Responsive para título de plantilla */
   @media (max-width: 768px) {
     .plantilla-titulo-container {
-      padding: 14px 18px;
-      margin-bottom: 1.15rem !important;
+      padding: 4px 10px;
+      margin-bottom: 0 !important;
     }
     
     .plantilla-titulo-header {
-      font-size: 16px;
-      gap: 0.7rem 1rem;
+      font-size: 15px;
+      gap: 0.4rem 0.65rem;
     }
 
     .plantilla-titulo-header .connection-logs-btn {
-      padding: 6px 12px;
-      gap: 7px;
+      padding: 4px 9px;
+      gap: 5px;
     }
   }
   
   @media (max-width: 480px) {
     .plantilla-titulo-container {
-      padding: 12px 14px;
-      margin-bottom: 1.1rem !important;
+      padding: 3px 8px;
+      margin-bottom: 0 !important;
     }
     
     .plantilla-titulo-header {
-      font-size: 14px;
+      font-size: 13px;
       letter-spacing: 0.3px;
-      gap: 0.6rem 0.85rem;
+      gap: 0.35rem 0.55rem;
     }
   }
   
@@ -22160,17 +22444,26 @@ html, body {
 .connection-logs-btn {
     background: linear-gradient(135deg, #6f42c1, #5a37a3);
     border: none;
-    border-radius: 20px;
+    border-radius: 6px;
     color: white;
-    padding: 7px 14px;
-    margin-left: 12px;
-    font-size: 12px;
+    padding: 0.2rem 0.7rem;
+    margin-left: 0;
+    font-size: 0.82rem;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     box-shadow: 0 2px 8px rgba(111, 66, 193, 0.3);
     vertical-align: middle;
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    box-sizing: border-box;
+}
+
+.worksheet-panel .worksheet-mode-row .connection-logs-btn {
+    margin: 0 !important;
+    flex: 0 0 auto;
 }
 
 .connection-logs-btn:hover {
@@ -48987,11 +49280,41 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
   box-sizing: border-box !important;
 }
 
-/* Página pública: más ancho útil para la tabla de pantallas */
+/* Página pública: ancho uniforme (acordeones + tabla abarcan todo) */
 .public-tools-container.public-tools-wide {
   width: 100% !important;
   max-width: min(1200px, 98vw) !important;
   box-sizing: border-box;
+}
+
+.public-tools-container .d-flex.flex-column.gap-3,
+.public-tools-container .d-flex.flex-column {
+  width: 100% !important;
+  max-width: 100% !important;
+  align-items: stretch !important;
+  box-sizing: border-box !important;
+}
+
+.public-tools-container .herramienta-accordion,
+.public-tools-container .herramienta-accordion.card,
+.public-tools-container .d-flex.flex-column.gap-3 > .card.herramienta-accordion,
+.public-tools-container .d-flex.flex-column > .herramienta-accordion,
+.public-tools-container .nested-accordion {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  align-self: stretch !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.public-tools-container .accordion-body,
+.public-tools-container .api-key-html-content,
+.public-tools-container .tool-calculator-form-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .public-tools-container .accordion-body:has(.tv-table),
@@ -49005,10 +49328,38 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
   overflow: hidden;
 }
 
-.public-tools-container .tv-table-scroll {
-  width: 100%;
-  max-width: 100%;
+.public-tools-container .tv-table-scroll,
+.public-tools-container .tv-wrap,
+.public-tools-container .tv-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   border-radius: 10px;
+}
+
+.public-tools-container table.tv-table,
+.public-tools-container .accordion-body table.tv-table,
+.public-tools-container .accordion-body table {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+  box-sizing: border-box !important;
+}
+
+/* Bloques/botones del HTML interno: mismo ancho que el resto */
+.public-tools-container .accordion-body > a,
+.public-tools-container .accordion-body > button,
+.public-tools-container .accordion-body > .btn,
+.public-tools-container .accordion-body > .btn-panel,
+.public-tools-container .api-key-html-content > a,
+.public-tools-container .api-key-html-content > button,
+.public-tools-container .api-key-html-content > .btn,
+.public-tools-container .mdp-section {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: block !important;
+  box-sizing: border-box !important;
 }
 
 .accordion-body table.tv-table {
@@ -49036,10 +49387,18 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
   .store-dark table.tv-table,
   .store-light table.tv-table,
   table.tv-table {
-    width: max-content !important;
-    min-width: 40rem !important;
+    width: max(100%, 40rem) !important;
+    min-width: 100% !important;
     max-width: none !important;
     table-layout: auto !important;
+  }
+
+  .public-tools-container table.tv-table,
+  .public-tools-container .accordion-body table.tv-table {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
   }
 }
 
@@ -49068,11 +49427,11 @@ table.tv-table {
   border: 0 !important;
   border-right: 1px solid #c9d6ee !important;
   border-bottom: 1px solid #c9d6ee !important;
-  padding: 0.55rem 0.5rem !important;
+  padding: 0.16rem 0.28rem !important;
   vertical-align: middle;
-  font-size: 0.98rem !important;
+  font-size: 0.95rem !important;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.2;
   text-align: center;
   color: #0f1b33 !important;
   overflow: visible;
@@ -49128,52 +49487,69 @@ table.tv-table {
 }
 
 .tv-th-icon {
-  width: 5.6rem;
-  min-width: 5.6rem;
+  width: 5.85rem;
+  min-width: 5.85rem;
+  text-align: center !important;
+}
+
+.tv-table td.tv-icons {
+  text-align: center !important;
+  vertical-align: middle !important;
 }
 
 .tv-icons {
   white-space: normal;
+  text-align: center !important;
 }
 
 .tv-icon-stack {
-  display: inline-flex;
+  display: flex !important;
   flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.08rem;
+  margin: 0 auto !important;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .accordion-body .tv-favicon,
 .tv-favicon,
 .tv-favicon-title {
-  width: 60px !important;
-  height: 60px !important;
+  width: 64px !important;
+  height: 64px !important;
   max-width: none;
-  padding: 9px;
+  padding: 3px;
   box-sizing: border-box;
   object-fit: contain;
   background: #0f172a;
-  border-radius: 14px;
+  border-radius: 11px;
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .tv-logos {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.3rem;
+  justify-content: center;
+  gap: 0.14rem;
+  margin: 0 auto;
+  width: auto;
 }
 
 .accordion-body .tv-logo,
 .tv-logo {
-  width: 44px !important;
-  height: 44px !important;
+  width: 46px !important;
+  height: 46px !important;
   max-width: none;
-  padding: 6px;
+  padding: 2px;
   box-sizing: border-box;
   object-fit: contain;
   background: #0f172a;
-  border-radius: 11px;
+  border-radius: 9px;
   vertical-align: middle;
   box-shadow: 0 3px 8px rgba(15, 23, 42, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }

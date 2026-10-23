@@ -136,6 +136,8 @@ def format_colombia_time_range(log):
 
 api_bp = Blueprint('store_api', __name__)
 
+DEFAULT_WORKSHEET_ROWS = 100
+
 @api_bp.route('/worksheet_templates', methods=['POST'])
 def create_worksheet_template():
     data = request.get_json()
@@ -149,6 +151,10 @@ def create_worksheet_template():
         return jsonify({'error': 'Ya existe una plantilla con ese título'}), 400
     template = WorksheetTemplate(title=title, fields=fields)
     db.session.add(template)
+    db.session.flush()
+    num_cols = max(len(fields), 1)
+    empty_rows = [[''] * num_cols for _ in range(DEFAULT_WORKSHEET_ROWS)]
+    db.session.add(WorksheetData(template_id=template.id, data=empty_rows, formato={}))
     db.session.commit()
     return jsonify({'id': template.id, 'title': template.title, 'fields': template.fields}), 201
 
