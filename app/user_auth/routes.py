@@ -70,7 +70,7 @@ def check_session_revocation_user():
     NOTA: La verificación global session_revocation_count ahora se maneja en app/__init__.py
     """
     # Excluir rutas de login y logout para evitar loops infinitos
-    if request.endpoint in ['user_auth_bp.login', 'user_auth_bp.logout']:
+    if request.endpoint in ['user_auth_bp.login', 'user_auth_bp.logout', 'user_auth_bp.forgot_password']:
         return None
     
     is_ajax = _user_request_is_ajax()
@@ -223,6 +223,67 @@ def logout():
         flash("Sesión de usuario cerrada.", "info")
     # Redirigir a login con ?from=logout para forzar pantalla de login (evita redirect a Códigos)
     return redirect(url_for("user_auth_bp.login", from_logout=1))
+
+
+@user_auth_bp.route("/forgot_password", methods=["GET", "POST"])
+def forgot_password():
+    """Recuperación para usuarios. El enlace se envía al correo guardado en la cuenta."""
+    from datetime import timedelta
+    from secrets import token_urlsafe
+
+    from sqlalchemy import func, or_
+
+    from app.forms import ForgotPasswordForm
+
+    form = ForgotPasswordForm(request.form)
+    if request.method == "GET":
+        return render_template("user_forgot_password.html", form=form)
+
+    if not form.validate():
+        flash("Ingresa tu usuario o el correo de la cuenta.", "danger")
+        return render_template("user_forgot_password.html", form=form)
+
+    user_input = (form.user_input.data or "").strip()
+    admin_username = current_app.config.get("ADMIN_USER", "admin")
+    generic = "Si la cuenta tiene un correo registrado, enviamos el enlace para restablecer la contraseña."
+
+    user = None
+    if user_input and user_input.lower() != admin_username.lower():
+        user = User.query.filter(
+            or_(
+                func.lower(User.username) == user_input.lower(),
+                func.lower(User.email) == user_input.lower(),
+            )
+        ).first()
+
+    recovery_email = (user.email or "").strip() if user else ""
+    if not user or not user.enabled or not recovery_email or "@" not in recovery_email:
+        flash(generic, "info")
+        return redirect(url_for("user_auth_bp.login"))
+
+    now = datetime.utcnow()
+    window_10min = now - timedelta(minutes=10)
+    if user.forgot_token_time is None or user.forgot_token_time < window_10min:
+        user.forgot_count = 0
+        user.forgot_token_time = now
+    if user.forgot_count is None:
+        user.forgot_count = 0
+    if user.forgot_count >= 3:
+        flash("Has superado el límite de 3 solicitudes en 10 minutos.", "danger")
+        return redirect(url_for("user_auth_bp.login"))
+
+    user.forgot_count += 1
+    reset_tok = token_urlsafe(32)
+    user.forgot_token = reset_tok
+    db.session.commit()
+
+    from app.auth.routes import _send_reset_email
+
+    reset_link = url_for("auth_bp.reset_password", token=reset_tok, _external=True)
+    _send_reset_email(recovery_email, reset_link)
+    flash(generic, "info")
+    return redirect(url_for("user_auth_bp.login"))
+
 
 @user_auth_bp.route("/manage_my_page/<int:server_id>", methods=["GET"])
 @login_required

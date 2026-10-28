@@ -9032,25 +9032,34 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
       z-index: 1 !important;
   }
 
+  .public-tools-container .production-links-stack > .nested-accordion > .accordion-header > .d-flex.align-items-center {
+      right: 0 !important;
+  }
+
   .public-tools-container .nested-accordion > .accordion-header > span {
       text-align: center !important;
-      padding-right: 2.4rem !important;
+      padding-right: 1.55rem !important;
   }
 
   .public-tools-container .btn-copy-link {
-      width: 1.7rem;
-      height: 1.7rem;
-      min-width: 1.7rem;
+      width: 1.35rem !important;
+      min-width: 1.35rem !important;
+      max-width: 1.35rem !important;
+      height: 1.35rem !important;
+      min-height: 1.35rem !important;
+      max-height: 1.35rem !important;
       padding: 0 !important;
+      margin: 0 !important;
       display: inline-flex !important;
       align-items: center;
       justify-content: center;
-      border-radius: 6px;
+      border-radius: 4px;
       line-height: 1;
+      flex: 0 0 1.35rem;
   }
 
   .public-tools-container .btn-copy-link i {
-      font-size: 0.78rem;
+      font-size: 0.68rem;
       pointer-events: none;
   }
 
@@ -9524,7 +9533,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .public-tools-container .production-links-stack > .nested-accordion.card {
       width: 100% !important;
       margin-bottom: 0 !important;
-      padding: 0.08rem 0.35rem !important;
+      padding: 0.06rem 0.12rem 0.06rem 0.35rem !important;
   }
   
   .edit-html-container .table-responsive {

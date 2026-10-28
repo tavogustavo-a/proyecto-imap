@@ -1257,7 +1257,7 @@ class DriveGallery {
         const escapedName = escapeHtml(photo.name);
         return `
             <div class="photo-item drive-media-item" data-type="photo" data-index="${index}" data-api-id="${apiId}" data-file-id="${photo.id}" data-full-url="${escapeHtml(fullUrl)}" data-name="${escapedName}">
-                <img src="${escapeHtml(thumbnailUrl)}" alt="${escapedName}" width="400" height="220" loading="lazy" decoding="async" class="drive-photo-thumbnail">
+                <img src="${escapeHtml(thumbnailUrl)}" alt="${escapedName}" width="400" height="220" decoding="async" class="drive-photo-thumbnail">
                     <div class="photo-actions">
                     <button class="btn-download-icon drive-photo-download" data-file-id="${photo.id}" data-name="${escapedName}" title="Descargar">
                         <i class="fas fa-download"></i>
@@ -1788,7 +1788,7 @@ class DriveGallery {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             
             // Preload para mejor compatibilidad móvil
-            imageEl.loading = isMobile ? 'eager' : 'lazy';
+            imageEl.loading = 'eager';
             imageEl.decoding = 'async';
             
             // Cargar imagen desde el proxy con timestamp para evitar cache en desarrollo

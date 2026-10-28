@@ -356,17 +356,16 @@
             pattern="[a-zA-Z0-9\s]{8,}"
             title="Código secreto TOTP (al menos 8 letras y números, puede incluir espacios)"
           >
-          <label for="imap2-twofa-qr-file" class="sr-only">Archivo QR</label>
           <input
             type="file"
             id="imap2-twofa-qr-file"
             accept="image/*"
-            class="d-none"
+            class="app-file-picker-input"
           >
           <div class="twofa-compact-actions">
-            <button type="button" id="imap2-twofa-upload-qr-btn" class="btn-blue btn-small">
+            <label for="imap2-twofa-qr-file" id="imap2-twofa-upload-qr-btn" class="btn-blue btn-small">
               <i class="fas fa-qrcode"></i> QR
-            </button>
+            </label>
             <button type="submit" id="imap2-twofa-save-btn" class="btn-green btn-small">Agregar</button>
             <button type="button" id="imap2-twofa-cancel-btn" class="btn-blue btn-small d-none">Cancelar</button>
           </div>
@@ -502,16 +501,15 @@
           pattern="[A-Z0-9\s]{8,}"
           title="Código secreto TOTP (al menos 8 letras y números, puede incluir espacios)"
         >
-        <label for="edit-imap2-twofa-qr-file" class="sr-only">Archivo QR</label>
         <input
           type="file"
           id="edit-imap2-twofa-qr-file"
           accept="image/*"
-          class="d-none"
+          class="app-file-picker-input"
         >
-        <button type="button" id="edit-imap2-twofa-upload-qr-btn" class="btn-blue btn-small">
+        <label for="edit-imap2-twofa-qr-file" id="edit-imap2-twofa-upload-qr-btn" class="btn-blue btn-small">
           <i class="fas fa-qrcode"></i> QR
-        </button>
+        </label>
       </div>
       
       <!-- Preview del QR (oculto por defecto) -->
@@ -536,6 +534,6 @@
 {{ super() }}
 <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2.js') }}?v=20261020-filters-regex-search" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20261020-twofa-clear-search" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20261028-qr-app-picker" defer></script>
 <script src="{{ url_for('static', filename='js/manage_my_page.js') }}?v=20261020-imap-user-only" defer></script>
 {% endblock %}

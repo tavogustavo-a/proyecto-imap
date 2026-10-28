@@ -64,8 +64,8 @@
         }
     }
     
-    // Manejar click en "Subir QR" - ahora abre el selector de archivo
-    if (twofaUploadQrBtn) {
+    // El botón QR es un <label for>: el toque abre el selector en el WebView de la app.
+    if (twofaUploadQrBtn && twofaUploadQrBtn.tagName === 'BUTTON') {
         twofaUploadQrBtn.addEventListener('click', function() {
             if (twofaQrFile) {
                 twofaQrFile.click();
@@ -490,8 +490,7 @@
     
     // ========== HANDLERS DEL MODAL DE EDICIÓN ==========
     
-    // Manejar click en "Subir QR" del modal de edición
-    if (editTwofaUploadQrBtn) {
+    if (editTwofaUploadQrBtn && editTwofaUploadQrBtn.tagName === 'BUTTON') {
         editTwofaUploadQrBtn.addEventListener('click', function() {
             if (editTwofaQrFile) {
                 editTwofaQrFile.click();

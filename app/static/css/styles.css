@@ -532,6 +532,32 @@ input[type="submit"],
   color: #fff !important;
 }
 
+/* El WebView de la app no abre el selector si el input está en display:none. */
+.app-file-picker-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+label.btn-blue,
+label.btn-green,
+label.btn-red {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin: 0;
+  text-decoration: none;
+}
+
 .btn-grey {
   background: var(--ui-static-bg) !important;
   border: none !important;
@@ -8437,11 +8463,11 @@ body:not(.theme-active) .site-footer__social-config-btn {
   #menu2ToggleBtnAccum.btn-panel,
   .menu-toggle-btn.btn-panel,
   .mobile-menu-store .mobile-menu-btn,
-  .btn-panel.btn-blue:not(.btn-sm):not(.mobile-menu-btn):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn),
+  .btn-panel.btn-blue:not(.btn-sm):not(.mobile-menu-btn):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.btn-copy-link),
   .btn-panel.btn-red:not(.btn-sm):not(.mobile-menu-btn):not(:has(> i.fa-trash)):not(.row-icon-btn),
   .btn-panel.btn-green:not(.btn-sm):not(.mobile-menu-btn),
   .btn-panel.btn-orange:not(.btn-sm):not(.mobile-menu-btn):not(.row-icon-btn),
-  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user),
+  .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-blue:not(.btn-sm):not(.btn-small):not(.menu-btn-worksheet):not(.twofa-api-key-toggle):not(.admin-global-api-info-btn):not(.row-icon-btn):not(.row-test-btn):not(.email-user):not(.btn-copy-link),
   .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-red:not(.btn-sm):not(.btn-small):not(.imap2-background-delete-btn):not(:has(> i.fa-trash)):not(.row-icon-btn),
   .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-green:not(.btn-sm):not(.btn-small):not(.row-icon-btn),
   .store-light:not(.worksheet-panel):not(.admin-licencias-page) .btn-orange:not(.btn-sm):not(.btn-small):not(.row-icon-btn) {

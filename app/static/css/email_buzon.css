@@ -206,6 +206,7 @@ form {
   border-radius: 4px;
   font-size: 14px;
   width: 100%;
+  min-width: 0;
   background: #fff;
 }
 
@@ -3130,12 +3131,50 @@ form {
 
 @media (max-width: 640px) {
   .email-toolbar {
-    padding-left: 4px;
-    padding-right: 4px;
+    padding: 6px 6px;
+    overflow: visible;
   }
 
   .toolbar-row-1 {
-    gap: 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+
+  .email-toolbar .search-container,
+  .email-toolbar .email-search {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .email-toolbar .email-search {
+    font-size: 13px;
+    padding: 6px 28px 6px 8px;
+  }
+
+  .toolbar-icons {
+    gap: 3px;
+    flex: 0 0 auto;
+  }
+
+  .email-toolbar #refreshBtn,
+  .email-toolbar #selectAllBtn,
+  .email-toolbar #deleteSelectedBtn,
+  .email-toolbar #filtersBtn {
+    width: 1.7rem !important;
+    min-width: 1.7rem !important;
+    max-width: 1.7rem !important;
+    height: 1.7rem !important;
+    min-height: 1.7rem !important;
+    max-height: 1.7rem !important;
+    padding: 0 !important;
+    font-size: 0.78rem !important;
+  }
+
+  .email-toolbar #refreshBtn i,
+  .email-toolbar #selectAllBtn i,
+  .email-toolbar #deleteSelectedBtn i,
+  .email-toolbar #filtersBtn i {
+    font-size: 0.78rem !important;
   }
 
   .email-forwarding-config {

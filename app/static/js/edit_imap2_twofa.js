@@ -99,8 +99,7 @@
         }
     }
     
-    // Manejar click en "Subir QR" - ahora abre el selector de archivo
-    if (twofaUploadQrBtn) {
+    if (twofaUploadQrBtn && twofaUploadQrBtn.tagName === 'BUTTON') {
         twofaUploadQrBtn.addEventListener('click', function() {
             if (twofaQrFile) {
                 twofaQrFile.click();

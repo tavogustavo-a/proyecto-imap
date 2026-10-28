@@ -3180,7 +3180,7 @@
       cur +
       '_' +
       idx +
-      '" class="admin-pm-qr-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>' +
+      '" class="admin-pm-qr-file app-file-picker-input" accept="image/jpeg,image/png,image/webp,image/gif">' +
       '<button type="button" class="admin-pm-qr-trigger' +
       (hasQr ? ' admin-pm-qr-trigger--has' : '') +
       '"' +

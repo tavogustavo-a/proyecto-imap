@@ -1247,7 +1247,7 @@ def _tv_platform_favicon_img(page: str, row: dict) -> Markup:
         Markup('<img class="tv-favicon tv-favicon-title" src="'),
         escape(src),
         Markup(
-            '" alt="" width="60" height="60" loading="lazy" decoding="async" '
+            '" alt="" width="60" height="60" decoding="async" '
             'referrerpolicy="no-referrer"'
         ),
     ]

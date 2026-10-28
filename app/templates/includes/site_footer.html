@@ -6,6 +6,7 @@
   'user_auth_bp.login',
   'auth_bp.twofa',
   'auth_bp.forgot_password',
+  'user_auth_bp.forgot_password',
 ] %}
 {% if session.get('logged_in') and current_user_obj and not is_subuser and request.endpoint not in _hide_footer_eps %}
 {% set android_url = (site_settings.get('footer_android_url') or '')|trim %}

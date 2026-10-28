@@ -334,16 +334,15 @@
           pattern="[a-zA-Z0-9\s]{8,}"
           title="Código secreto TOTP (al menos 8 letras y números, puede incluir espacios)"
         >
-        <label for="twofa-qr-file" class="sr-only">Archivo QR</label>
         <input
           type="file"
           id="twofa-qr-file"
           accept="image/*"
-          class="d-none"
+          class="app-file-picker-input"
         >
-        <button type="button" id="twofa-upload-qr-btn" class="btn-blue">
+        <label for="twofa-qr-file" id="twofa-upload-qr-btn" class="btn-blue">
           <i class="fas fa-qrcode" aria-hidden="true"></i><span class="twofa-qr-btn-label"> QR</span>
-        </button>
+        </label>
         <button type="submit" id="twofa-save-btn" class="btn-green">Agregar</button>
         <button type="button" id="twofa-cancel-btn" class="btn-blue d-none">Cancelar</button>
       </div>
@@ -428,16 +427,15 @@
           pattern="[a-zA-Z0-9\s]{8,}"
           title="Código secreto TOTP (al menos 8 letras y números, puede incluir espacios)"
         >
-        <label for="edit-twofa-qr-file" class="sr-only">Archivo QR</label>
         <input
           type="file"
           id="edit-twofa-qr-file"
           accept="image/*"
-          class="d-none"
+          class="app-file-picker-input"
         >
-        <button type="button" id="edit-twofa-upload-qr-btn" class="btn-blue">
+        <label for="edit-twofa-qr-file" id="edit-twofa-upload-qr-btn" class="btn-blue">
           <i class="fas fa-qrcode" aria-hidden="true"></i><span class="twofa-qr-btn-label"> QR</span>
-        </button>
+        </label>
       </div>
       
       <!-- Preview del QR (oculto por defecto) -->
@@ -674,7 +672,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/sms_configs.js') }}?v=20261021-sms-pagination-snug" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_list.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/sms_numbers.js') }}?v=20261015-sms-todo" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}?v=20261021-sms-pagination-snug" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/twofa_configs.js') }}?v=20261028-qr-app-picker" defer></script>
 {% endblock %}
 
 

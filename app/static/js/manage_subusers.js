@@ -1041,8 +1041,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
   
-  // Manejar click en "Subir QR"
-  if (subuserTwofaUploadQrBtn) {
+  if (subuserTwofaUploadQrBtn && subuserTwofaUploadQrBtn.tagName === 'BUTTON') {
     subuserTwofaUploadQrBtn.addEventListener('click', function() {
       if (subuserTwofaQrFile) {
         subuserTwofaQrFile.click();
@@ -1521,8 +1520,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
   
-  // Manejar click en "Subir QR" del modal de edición
-  if (subuserEditTwofaUploadQrBtn) {
+  if (subuserEditTwofaUploadQrBtn && subuserEditTwofaUploadQrBtn.tagName === 'BUTTON') {
     subuserEditTwofaUploadQrBtn.addEventListener('click', function() {
       if (subuserEditTwofaQrFile) {
         subuserEditTwofaQrFile.click();
