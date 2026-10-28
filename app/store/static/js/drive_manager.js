@@ -1257,7 +1257,7 @@ class DriveGallery {
         const escapedName = escapeHtml(photo.name);
         return `
             <div class="photo-item drive-media-item" data-type="photo" data-index="${index}" data-api-id="${apiId}" data-file-id="${photo.id}" data-full-url="${escapeHtml(fullUrl)}" data-name="${escapedName}">
-                <img src="${escapeHtml(thumbnailUrl)}" alt="${escapedName}" loading="lazy" class="drive-photo-thumbnail">
+                <img src="${escapeHtml(thumbnailUrl)}" alt="${escapedName}" width="400" height="220" loading="lazy" decoding="async" class="drive-photo-thumbnail">
                     <div class="photo-actions">
                     <button class="btn-download-icon drive-photo-download" data-file-id="${photo.id}" data-name="${escapedName}" title="Descargar">
                         <i class="fas fa-download"></i>
@@ -1667,7 +1667,7 @@ class DriveGallery {
             </button>
             <div class="viewer-content">
                 <div class="viewer-media-container">
-                    <img class="viewer-image" alt="">
+                    <img class="viewer-image" alt="" width="800" height="1200">
                     <video class="viewer-video" controls></video>
                 </div>
                 <div class="viewer-info">

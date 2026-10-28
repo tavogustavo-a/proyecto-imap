@@ -376,7 +376,7 @@ def filter_by_tag(tag_id):
         request.args.get('per_page', BUZON_LIST_PER_PAGE_DEFAULT)
     )
     pagination = paginate_emails_for_tag(
-        tag_id, page=page, per_page=per_page, exclude_deleted=False
+        tag_id, page=page, per_page=per_page, exclude_deleted=True
     )
     recent_emails = pagination.items
 
