@@ -41,6 +41,10 @@ _DOMAIN_RE = re.compile(
 _LINKIFY_RE = re.compile(
     r'(https?://[^\s<]+|(?<![\w@])(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:/[^\s<]*)?)'
 )
+_TV_JOIN_ONLY = re.compile(
+    r'^(?:\s*(?:o|y|u|or|and|/|,|;|\||&)\s*)*$',
+    re.IGNORECASE,
+)
 _MAX_SECTIONS = 40
 _MAX_SUBTITLES = 30
 
@@ -1173,10 +1177,12 @@ def stream_icon_fallback_for_row(row: dict) -> str:
 
 
 def _tv_platform_favicon_img(page: str, row: dict) -> Markup:
-    """Favicon del dominio vía favicon_url_for (misma URL que Telegram / _fetch_favicon_image)."""
-    src = favicon_url_for(page)
-    if not src:
+    """Favicon del dominio, servido por el sitio para cumplir img-src 'self'."""
+    if not favicon_url_for(page):
         return Markup('')
+    from flask import url_for
+
+    src = url_for('store_bp.site_favicon', page=page)
     fallback = stream_icon_fallback_for_row(row)
     parts: list[Markup] = [
         Markup('<img class="tv-favicon tv-favicon-title" src="'),
@@ -1303,20 +1309,54 @@ def _tv_plain(value: str) -> Markup:
     return escape(text)
 
 
+def _tv_anchor(label: str, href: str) -> Markup:
+    return (
+        Markup('<a class="tv-link" href="')
+        + escape(href)
+        + Markup('" target="_blank" rel="noopener noreferrer">')
+        + escape(label)
+        + Markup('</a>')
+    )
+
+
+def _tv_urls_in_text(text: str) -> tuple[list[tuple[str, str]], str]:
+    """Enlaces encontrados y el texto que queda entre ellos."""
+    links: list[tuple[str, str]] = []
+    leftover: list[str] = []
+    cursor = 0
+    for match in _LINKIFY_RE.finditer(text):
+        token = match.group(0)
+        end = match.end()
+        while token and token[-1] in '.,;:!?)]\'"':
+            token = token[:-1]
+            end -= 1
+        href = _safe_href(token)
+        if not href:
+            continue
+        leftover.append(text[cursor:match.start()])
+        links.append((_url_label(token, href), href))
+        cursor = end
+    leftover.append(text[cursor:])
+    return links, ' '.join(bit.strip() for bit in leftover if bit.strip())
+
+
 def _tv_cell(value: str) -> Markup:
     text = (value or '').strip()
     if not text:
         return Markup('<span class="tv-empty">') + escape(_TV_EMPTY) + Markup('</span>')
     href = _safe_href(text)
-    if not href:
-        return escape(text)
-    return (
-        Markup('<a class="tv-link" href="')
-        + escape(href)
-        + Markup('" target="_blank" rel="noopener noreferrer">')
-        + escape(_url_label(text, href))
-        + Markup('</a>')
-    )
+    if href:
+        return _tv_anchor(_url_label(text, href), href)
+    links, glue = _tv_urls_in_text(text)
+    if len(links) >= 2 and _TV_JOIN_ONLY.fullmatch(glue or ''):
+        parts: list[Markup] = [Markup('<span class="tv-links">')]
+        for label, link_href in links:
+            parts.append(_tv_anchor(label, link_href))
+        parts.append(Markup('</span>'))
+        return Markup('').join(parts)
+    if links:
+        return Markup(str(_linkify_text(text)).replace('class="mdp-url"', 'class="tv-link"'))
+    return escape(text)
 
 
 def render_pantallas_html(saved: dict | None, heading: str = '') -> Markup:

@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261028-tv-favicon-fix">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261028-prod-compact">
 {% endblock %}
 
 {% block content %}
@@ -166,17 +166,20 @@
     <h4 class="text-center my-3">Videos de Producción</h4>
     <div class="d-flex flex-column gap-3">
       {% for listing in accessible_listings %}
-        <div class="card herramienta-accordion">
+        {% set listing_plain = (listing.content or '')|striptags|trim %}
+        <div class="card herramienta-accordion production-listing">
           <div class="accordion-header d-flex align-items-center justify-content-between w-100">
             <span>• {{ listing.title }}</span>
             <div class="accordion-arrow"></div>
           </div>
-          <div class="accordion-body hidden">
-            {{ listing.content | default('', true) | rewrite_external_images | safe }}
+          <div class="accordion-body hidden{% if not listing_plain %} production-listing-nodesc{% endif %}">
+            {% if listing_plain %}
+            <div class="production-listing-desc">{{ listing.content | rewrite_external_images | safe }}</div>
+            {% endif %}
             
             {% if listing.production_links %}
             <div class="production-links-list-container">
-              <div class="d-flex flex-column gap-2 mt-3">
+              <div class="production-links-stack">
                   {% for link in listing.production_links %}
                   <div class="card herramienta-accordion nested-accordion">
                       <div class="accordion-header d-flex align-items-center justify-content-between w-100">
