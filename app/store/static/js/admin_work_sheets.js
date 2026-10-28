@@ -2053,7 +2053,6 @@ function splitTextAcrossColumns(preservedSelection) {
             <h4 style='margin-bottom:15px;color:#333;text-align:center;font-size:18px;'>🔀 Dividir texto</h4>
             
             <div style='margin-bottom:15px;'>
-                <div style='display:block;margin-bottom:6px;font-weight:bold;font-size:14px;'>Tipo de división:</div>
                 <div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;'>
                     <button class='mode-btn' data-mode='personalizado' style='padding:5px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;font-size:13px;'>Personalizado</button>
                     <button class='mode-btn' data-mode='separador' style='padding:5px 12px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer;color:#333;font-size:13px;'>Separador</button>
@@ -2367,7 +2366,6 @@ function splitTextAcrossColumns(preservedSelection) {
                                 <h5 style='margin:0;color:#333;font-size:15px;'>Correos únicos</h5>
                                 <span id='correosUnicosConteo' style='font-size:12px;font-weight:bold;color:#333;'>0 líneas</span>
                             </div>
-                            <label for='correosUnicosInput' style='display:block;margin-bottom:4px;font-weight:bold;color:#333;font-size:12px;'>Pega el lote:</label>
                             <textarea id='correosUnicosInput' name='correosUnicosInput'
                                       style='width:100%;min-height:140px;max-height:220px;padding:8px;border:2px solid #000;border-radius:4px;font-family:monospace;font-size:12px;box-sizing:border-box;resize:vertical;overflow-y:auto;'
                                       placeholder='correo contraseña nombre número'
@@ -2564,12 +2562,21 @@ function splitTextAcrossColumns(preservedSelection) {
     const correosUnicosConteo = modal.querySelector('#correosUnicosConteo');
 
     function lineasCorreoContrasena(texto) {
+        const sufijoCorreoRe = /^\((1|2|4)\)$/;
         return String(texto || '').split(/\r?\n/).map(function(linea) {
             return linea.trim();
         }).filter(Boolean).map(function(linea) {
             const partes = linea.split(/\s+/);
-            if (partes.length >= 2) return partes[0] + ' ' + partes[1];
-            return partes[0];
+            if (!partes.length) return '';
+            let i = 0;
+            let correo = partes[i++];
+            if (i < partes.length && sufijoCorreoRe.test(partes[i])) {
+                correo += ' ' + partes[i++];
+            }
+            if (i < partes.length) {
+                return correo + ' ' + partes[i];
+            }
+            return correo;
         });
     }
 

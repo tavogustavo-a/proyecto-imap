@@ -62,7 +62,12 @@
       <div class="mb-1">
         <label for="drive-telegram-group" class="form-label">Grupo Telegram (opcional):</label>
         <input type="text" id="drive-telegram-group" name="drive_telegram_group" class="form-control" placeholder="-1001234567890" autocomplete="off" spellcheck="false">
-        <small class="form-text text-muted">ID del grupo o canal. La publicidad se envía solo ahí. Entran los usuarios habilitados que tengan ID en la tabla.</small>
+        <small class="form-text text-muted">ID del grupo o canal (fila del grupo en Datos BotFather). La publicidad se envía ahí.</small>
+      </div>
+      <div class="mb-1">
+        <label for="drive-telegram-topic" class="form-label">Tema del foro (opcional):</label>
+        <input type="text" id="drive-telegram-topic" name="drive_telegram_topic" class="form-control" placeholder="5811" autocomplete="off" spellcheck="false" inputmode="numeric">
+        <small class="form-text text-muted">Solo si el grupo tiene temas: el número corto del tema (p. ej. 5811), no el -100… del grupo. Si lo dejas vacío, va al chat general del grupo.</small>
       </div>
       <div class="mb-1">
         <label for="drive-processing-time" class="form-label">Intervalo de ejecución:</label>
@@ -538,7 +543,12 @@
       <div class="mb-1">
         <label for="edit-drive-telegram-group" class="form-label">Grupo Telegram (opcional):</label>
         <input type="text" id="edit-drive-telegram-group" name="drive_telegram_group" class="form-control" placeholder="-1001234567890" autocomplete="off" spellcheck="false">
-        <small class="form-text text-muted">ID del grupo o canal. La publicidad se envía solo ahí. Entran los usuarios habilitados que tengan ID en la tabla.</small>
+        <small class="form-text text-muted">ID del grupo o canal (fila del grupo en Datos BotFather).</small>
+      </div>
+      <div class="mb-1">
+        <label for="edit-drive-telegram-topic" class="form-label">Tema del foro (opcional):</label>
+        <input type="text" id="edit-drive-telegram-topic" name="drive_telegram_topic" class="form-control" placeholder="5811" autocomplete="off" spellcheck="false" inputmode="numeric">
+        <small class="form-text text-muted">Número del tema en Extraer id (5811, 5829…). Requiere el ID del grupo arriba.</small>
       </div>
       <div class="mb-1">
         <label for="edit-drive-processing-time" class="form-label">Intervalo de ejecución:</label>
@@ -627,6 +637,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261019-drive-telegram" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261028-drive-telegram-topic" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261022-botfather-modal8" defer></script>
 {% endblock %}

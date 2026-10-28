@@ -1,0 +1,11 @@
+<div class="mb-3 df-editor" data-df-editor>
+  <label for="df_api_key" class="form-label text-center d-block">JSON cuenta de servicio Google (Drive)</label>
+  <textarea class="form-control mb-2" id="df_api_key" name="df_api_key" rows="6" autocomplete="off" placeholder="Pega el JSON de la cuenta de servicio">{{ drive_fotos.api_key }}</textarea>
+  <label for="df_api_url" class="form-label text-center d-block">ID de carpeta de Drive</label>
+  <input type="text" class="form-control mb-2" id="df_api_url" name="df_api_url" value="{{ drive_fotos.api_url }}" placeholder="ID de carpeta de Drive" autocomplete="off">
+  <label for="df_drive_subtitle_photos" class="form-label text-center d-block">Subtítulo galería de fotos (público)</label>
+  <input type="text" class="form-control mb-05" id="df_drive_subtitle_photos" name="df_drive_subtitle_photos" value="{{ drive_fotos.drive_subtitle_photos }}" placeholder="Subtítulo para fotos" autocomplete="off">
+  <label for="df_drive_subtitle_videos" class="form-label text-center d-block">Subtítulo galería de videos (público)</label>
+  <input type="text" class="form-control mb-05" id="df_drive_subtitle_videos" name="df_drive_subtitle_videos" value="{{ drive_fotos.drive_subtitle_videos }}" placeholder="Subtítulo para videos" autocomplete="off">
+  <p class="form-text text-muted text-center mb-0">Al menos uno de los dos subtítulos es obligatorio.</p>
+</div>

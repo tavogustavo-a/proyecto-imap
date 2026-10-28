@@ -2695,15 +2695,17 @@ def get_or_create_role_for_user(user_id):
 @store_bp.route('/admin/herramientas')
 @admin_required
 def admin_tools():
-    from app.store.html_presets import HTML_PRESET_CHOICES
+    from app.store.html_presets import BUSQUEDA_MEDIOS_KEY, DRIVE_FOTOS_PELICULAS_KEY, HTML_PRESET_CHOICES
     from app.store.tool_info_schema import ensure_html_preset_key_column
+    from app.store.tools_migration import migrate_busqueda_medios_api_to_html, migrate_drive_api_to_html
 
     ensure_html_preset_key_column()
+    migrate_busqueda_medios_api_to_html(db, ApiInfo, HtmlInfo, BUSQUEDA_MEDIOS_KEY)
+    migrate_drive_api_to_html(db, ApiInfo, HtmlInfo, DRIVE_FOTOS_PELICULAS_KEY)
     html_preset_titles = dict(HTML_PRESET_CHOICES)
     tools = ToolInfo.query.order_by(ToolInfo.id.desc()).all()
     htmls = HtmlInfo.query.order_by(HtmlInfo.id.desc()).all()
     youtube_listings = YouTubeListing.query.order_by(YouTubeListing.id.desc()).all()
-    apis = ApiInfo.query.order_by(ApiInfo.id.desc()).all()
     
     # Limpiar valores "None" string en youtube_listings
     for listing in youtube_listings:
@@ -2718,7 +2720,6 @@ def admin_tools():
                            tools=tools, 
                            htmls=htmls, 
                            youtube_listings=youtube_listings,
-                           apis=apis,
                            html_preset_choices=HTML_PRESET_CHOICES,
                            html_preset_titles=html_preset_titles)
 
@@ -3056,6 +3057,15 @@ def create_api():
     api_key = request.form.get('api_key')
     api_type = request.form.get('api_type')
 
+    if api_type == 'Búsqueda de Medios':
+        return _create_response(
+            False,
+            'La búsqueda de medios se configura en HTML añadidos → plantilla «Búsqueda de Medios».',
+            status=400,
+        )
+    if api_type != 'Drive':
+        return _create_response(False, 'Solo se pueden crear entradas Drive para fotos y películas.', status=400)
+
     if not title or not api_key:
         return _create_response(False, 'El título y la clave de API son obligatorios.', status=400)
 
@@ -3100,6 +3110,9 @@ def edit_api(api_id):
 
     ensure_tool_info_is_public_column()
     api = ApiInfo.query.get_or_404(api_id)
+    if api.api_type != 'Drive':
+        flash('La búsqueda de medios se edita en HTML añadidos (plantilla «Búsqueda de Medios»).', 'info')
+        return redirect(url_for('store_bp.admin_tools'))
     public_url = url_for('store_bp.api_public_one', api_id=api.id, _external=True)
     return render_template('edit_api.html', api=api, public_url=public_url)
 
@@ -3486,15 +3499,33 @@ def site_favicon():
     try:
         resp = requests.get(
             target,
-            timeout=8,
-            allow_redirects=False,
-            headers={'User-Agent': 'IMAP-Store-Favicon/1.0'},
+            timeout=10,
+            allow_redirects=True,
+            headers={
+                'User-Agent': (
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                ),
+                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            },
         )
     except requests.RequestException:
         return Response(status=404)
     content_type = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
-    if resp.status_code != 200 or not content_type.startswith('image/') or len(resp.content) > 200_000:
+    body = resp.content or b''
+    if resp.status_code != 200 or len(body) > 200_000 or not body:
         return Response(status=404)
+    if not content_type.startswith('image/'):
+        if body[:8] == b'\x89PNG\r\n\x1a\n':
+            content_type = 'image/png'
+        elif body[:3] == b'\xff\xd8\xff':
+            content_type = 'image/jpeg'
+        elif body[:6] in (b'GIF87a', b'GIF89a'):
+            content_type = 'image/gif'
+        elif body[:4] == b'RIFF' and len(body) > 12 and body[8:12] == b'WEBP':
+            content_type = 'image/webp'
+        else:
+            return Response(status=404)
     out = Response(resp.content, mimetype=content_type)
     out.headers['Cache-Control'] = 'public, max-age=86400'
     return out
@@ -3603,6 +3634,12 @@ def proxy_image():
 
 @store_bp.route('/herramientas-public', endpoint='tools_public')
 def tools_public():
+    from app.store.html_presets import BUSQUEDA_MEDIOS_KEY, DRIVE_FOTOS_PELICULAS_KEY
+    from app.store.tools_migration import migrate_busqueda_medios_api_to_html, migrate_drive_api_to_html
+    from app.store.models import ApiInfo
+
+    migrate_busqueda_medios_api_to_html(db, ApiInfo, HtmlInfo, BUSQUEDA_MEDIOS_KEY)
+    migrate_drive_api_to_html(db, ApiInfo, HtmlInfo, DRIVE_FOTOS_PELICULAS_KEY)
     user = None
     username = session.get("username") # Para admin
     user_id = session.get("user_id") # Para usuarios normales
@@ -3636,20 +3673,7 @@ def tools_public():
             HtmlInfo.enabled == True
         ).order_by(HtmlInfo.id.desc()).all()
 
-    # Cargar APIs según los permisos del usuario
-    if username == admin_user:
-        apis = ApiInfo.query.filter_by(enabled=True).order_by(ApiInfo.id.desc()).all()
-        drive_apis = ApiInfo.query.filter_by(api_type="Drive", enabled=True).order_by(ApiInfo.id.desc()).all()
-    else:
-        apis = ApiInfo.query.join(ApiInfo.users).filter(
-            User.id == user.id,
-            ApiInfo.enabled == True
-        ).order_by(ApiInfo.id.desc()).all()
-        drive_apis = ApiInfo.query.join(ApiInfo.users).filter(
-            User.id == user.id,
-            ApiInfo.api_type == "Drive",
-            ApiInfo.enabled == True
-        ).order_by(ApiInfo.id.desc()).all()
+    # Drive y búsqueda de medios viven en HtmlInfo (preset drive_fotos_peliculas / busqueda_medios)
 
     # Cargar videos de producción según los permisos del usuario
     if username == admin_user:
@@ -3663,9 +3687,7 @@ def tools_public():
     return render_template('herramientas_public.html',
                            tools=tools,
                            html_contents=html_contents,
-                           apis=apis,
                            youtube_listings=youtube_listings,
-                           drive_apis=drive_apis,
                            title="Consulta de Códigos",
                            ADMIN_USER=admin_user,
                            current_user=user,
@@ -3946,6 +3968,8 @@ def edit_html(html_id):
         como_trabajo_editor_data,
         codigos_editor_data,
         pantallas_editor_data,
+        drive_fotos_editor_data,
+        busqueda_medios_editor_data,
         screen_icon_choices,
         parse_html_form_fields,
     )
@@ -4007,6 +4031,12 @@ def edit_html(html_id):
         como_trabajo_icons=COMO_TRABAJO_ICONS,
         codigos_resumen=codigos_editor_data(html.text),
         pantallas=pantallas_editor_data(html.text),
+        busqueda_medios=busqueda_medios_editor_data(
+            html.text if html.preset_key == 'busqueda_medios' else ''
+        ),
+        drive_fotos=drive_fotos_editor_data(
+            html.text if html.preset_key == 'drive_fotos_peliculas' else ''
+        ),
         screen_icons=screen_icon_choices(),
                            public_url=url_for('store_bp.html_public_one', html_id=html.id, _external=True))
 
@@ -4133,10 +4163,22 @@ def find_media():
                 or not bool(getattr(api, 'is_public', False))
             ):
                 return jsonify({'error': 'No autorizado'}), 401
+            api_key_blob = api.api_key or ''
         else:
-            api = ApiInfo.query.filter_by(api_type="Búsqueda de Medios", enabled=True).first()
-        if not api:
-            return jsonify({'error': 'No hay ninguna API de "Búsqueda de Medios" configurada o habilitada.'}), 500
+            html_id_raw = None
+            if request.is_json and isinstance(request.json, dict):
+                html_id_raw = request.json.get('html_id')
+            html_id = None
+            if html_id_raw not in (None, ''):
+                try:
+                    html_id = int(html_id_raw)
+                except (TypeError, ValueError):
+                    html_id = None
+            from app.store.html_presets import resolve_media_search_api_key
+
+            api_key_blob = resolve_media_search_api_key(html_id)
+            if not api_key_blob:
+                return jsonify({'error': 'No hay búsqueda de medios configurada en HTML personalizado.'}), 500
 
         query = request.json.get('query')
         country = request.json.get('country', 'CO')
@@ -4144,7 +4186,7 @@ def find_media():
             return jsonify({'error': 'Se requiere una consulta de búsqueda.'}), 400
 
         claves = {}
-        for parte in api.api_key.split(','):
+        for parte in (api_key_blob or '').split(','):
             if ':' in parte:
                 k, v = parte.split(':', 1)
                 claves[k.strip().lower()] = v.strip()
@@ -4921,18 +4963,15 @@ import mimetypes
 
 @store_bp.route('/api/drive-files')
 def api_drive_files():
-    api_id = request.args.get('id')
-    if api_id:
-        api = ApiInfo.query.get(api_id)
-        if not api or api.api_type != "Drive" or not api.enabled:
-            return jsonify({'error': 'API de Drive no encontrada o no habilitada.'}), 404
-    else:
-        api = ApiInfo.query.filter_by(api_type="Drive", enabled=True).first()
-        if not api:
-            return jsonify({'error': 'No hay API de Drive configurada.'}), 500
+    from app.store.html_presets import resolve_drive_gallery_credentials
 
-    cred_json_str = api.api_key  # JSON de credenciales pegado en el campo de API
-    folder_id = api.api_url      # ID de la carpeta pegado en el campo URL de la API
+    payload, err = resolve_drive_gallery_credentials(request.args.get('id'))
+    if err or not payload:
+        status = 404 if request.args.get('id') else 500
+        return jsonify({'error': err or 'Drive no configurado.'}), status
+
+    cred_json_str = payload.get('api_key') or ''
+    folder_id = payload.get('api_url') or ''
     if not cred_json_str or not folder_id:
         return jsonify({'error': 'Faltan credenciales o ID de carpeta.'}), 400
 
@@ -4976,20 +5015,18 @@ def api_drive_media():
     if not file_id:
         return jsonify({'error': 'Falta file_id'}), 400
     
-    if api_id:
-        api = ApiInfo.query.get(api_id)
-        if not api or api.api_type != "Drive" or not api.enabled:
-            return jsonify({'error': 'API no encontrada'}), 404
-    else:
-        api = ApiInfo.query.filter_by(api_type="Drive", enabled=True).first()
-        if not api:
-            return jsonify({'error': 'API no configurada'}), 500
+    from app.store.html_presets import resolve_drive_gallery_credentials
+
+    payload, err = resolve_drive_gallery_credentials(api_id)
+    if err or not payload:
+        status = 404 if api_id else 500
+        return jsonify({'error': err or 'Drive no configurado'}), status
     
     try:
         import google.auth.transport.requests
         import requests
         
-        cred_json_str = api.api_key
+        cred_json_str = payload.get('api_key') or ''
         cred_dict = json.loads(cred_json_str)
         SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
         creds = service_account.Credentials.from_service_account_info(
@@ -15352,6 +15389,27 @@ def save_push_subscription():
 
 # ==================== RUTAS PARA DRIVE TRANSFER ====================
 
+def _drive_telegram_config_from_request(data) -> tuple[str | None, str | None, str | None]:
+    """Devuelve (group_id, topic_id, error_message). Vacío → None en IDs."""
+    from app.store.telegram_bot_service import validate_chat_id, validate_topic_id
+
+    group_raw = (data.get('drive_telegram_group') or '').strip()
+    topic_raw = (data.get('drive_telegram_topic') or '').strip()
+    if topic_raw and not group_raw:
+        return None, None, 'Para un tema de foro hace falta también el ID del grupo (-100…).'
+    if group_raw:
+        _, group_err = validate_chat_id(group_raw)
+        if group_err:
+            return None, None, 'El grupo de Telegram debe ser un ID numérico, por ejemplo -1001234567890.'
+    topic_id = None
+    if topic_raw:
+        normalized_topic, topic_err = validate_topic_id(topic_raw)
+        if topic_err:
+            return None, None, topic_err
+        topic_id = normalized_topic or None
+    return group_raw or None, topic_id, None
+
+
 @store_bp.route('/admin/drive_transfers', methods=['GET'])
 @admin_required
 def list_drive_transfers():
@@ -15381,6 +15439,7 @@ def list_drive_transfers():
                     'drive_processed_id': t.drive_processed_id,
                     'drive_deleted_id': t.drive_deleted_id,  # Campo opcional
                     'telegram_group_id': getattr(t, 'telegram_group_id', None) or '',
+                    'telegram_topic_id': getattr(t, 'telegram_topic_id', None) or '',
                     'telegram_send_problems': _drive_tg_problems(getattr(t, 'telegram_send_problems', None)),
                     'processing_time': t.processing_time if isinstance(t.processing_time, str) else (t.processing_time.strftime('%I:%M %p') if t.processing_time else None),  # Soporta ambos formatos (legacy y nuevo)
                     'is_active': t.is_active,
@@ -15399,7 +15458,6 @@ def create_drive_transfer():
     drive_original_id = data.get('drive_original_id')
     drive_processed_id = data.get('drive_destination')  # Corregido: el campo se llama 'drive_destination'
     drive_deleted_id = data.get('drive_deleted')  # Campo opcional
-    telegram_group_id = (data.get('drive_telegram_group') or '').strip()
     processing_time_str = data.get('drive_processing_time')
     
     if not all([credentials_json, drive_original_id, drive_processed_id, processing_time_str]):
@@ -15426,11 +15484,9 @@ def create_drive_transfer():
     try:
         from app.store.drive_manager import ensure_drive_telegram_columns, parse_interval
         ensure_drive_telegram_columns()
-        if telegram_group_id:
-            from app.store.telegram_bot_service import validate_chat_id
-            _, group_err = validate_chat_id(telegram_group_id)
-            if group_err:
-                return jsonify({'success': False, 'error': 'El grupo de Telegram debe ser un ID numérico, por ejemplo -1001234567890.'}), 400
+        group_id, topic_id, tg_err = _drive_telegram_config_from_request(data)
+        if tg_err:
+            return jsonify({'success': False, 'error': tg_err}), 400
         # Validar formato de intervalo (5h, 10m, 5H, 10M, etc.)
         interval = parse_interval(processing_time_str)
         if not interval:
@@ -15442,7 +15498,8 @@ def create_drive_transfer():
             drive_original_id=drive_original_id,
             drive_processed_id=drive_processed_id,
             drive_deleted_id=drive_deleted_id,  # Campo opcional
-            telegram_group_id=telegram_group_id or None,
+            telegram_group_id=group_id,
+            telegram_topic_id=topic_id,
             processing_time=processing_time_str.upper(),  # Guardar como string (ej: "5H", "10M")
             activated_at=datetime.utcnow(),  # Establecer activated_at al crear
             consecutive_errors=0,  # Valor por defecto para el campo NOT NULL
@@ -15481,16 +15538,14 @@ def update_drive_transfer(transfer_id):
             transfer.drive_processed_id = data['drive_destination']
         if 'drive_deleted' in data:
             transfer.drive_deleted_id = data['drive_deleted']  # Campo opcional
-        if 'drive_telegram_group' in data:
+        if 'drive_telegram_group' in data or 'drive_telegram_topic' in data:
             from app.store.drive_manager import ensure_drive_telegram_columns
-            from app.store.telegram_bot_service import validate_chat_id
             ensure_drive_telegram_columns()
-            group_raw = (data.get('drive_telegram_group') or '').strip()
-            if group_raw:
-                _, group_err = validate_chat_id(group_raw)
-                if group_err:
-                    return jsonify({'success': False, 'error': 'El grupo de Telegram debe ser un ID numérico, por ejemplo -1001234567890.'}), 400
-            transfer.telegram_group_id = group_raw or None
+            group_id, topic_id, tg_err = _drive_telegram_config_from_request(data)
+            if tg_err:
+                return jsonify({'success': False, 'error': tg_err}), 400
+            transfer.telegram_group_id = group_id
+            transfer.telegram_topic_id = topic_id if group_id else None
         if 'drive_processing_time' in data:
             from app.store.drive_manager import parse_interval
             processing_time_str = data['drive_processing_time']

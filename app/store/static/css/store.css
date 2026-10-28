@@ -20,7 +20,7 @@ html, body {
 
 /* Estilos modernos para el resumen de productos */
 .resumen-pago-modern {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ui-static-bg);
   border-radius: 20px;
   overflow: hidden;
   margin: 1.5rem auto;
@@ -5482,7 +5482,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   
   .store-dark .action-green, .store-light .action-green {
     /* Mismo gradiente que los botones de códigos */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: var(--ui-static-bg) !important;
     border: none !important;
     color: white !important;
     border-radius: 20px !important;
@@ -5503,7 +5503,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   /* Botones de búsqueda con gradiente */
   .btn-search {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: var(--ui-static-bg) !important;
     border: none !important;
     color: white !important;
     border-radius: 20px !important;
@@ -5514,7 +5514,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   /* Botones AÑADIR con gradiente */
   .btn.btn-success {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: var(--ui-static-bg) !important;
     border: none !important;
     color: white !important;
     border-radius: 20px !important;
@@ -7090,8 +7090,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
   .btn-panel.btn-blue.mobile-menu-btn {
     color: #fff !important;
-    background: #1976d2 !important;
-    border-color: #1976d2 !important;
+    background: var(--ui-static-bg) !important;
+    border-color: var(--ui-static-1) !important;
   }
   .btn-panel.btn-red.mobile-menu-btn {
     color: #fff !important;
@@ -7123,7 +7123,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     background: none;
     border: none;
     font-size: 1.7em;
-    color: #1976d2;
+    color: var(--ui-static-2);
     cursor: pointer;
     position: absolute;
     top: 12px;
@@ -7200,7 +7200,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     box-sizing: border-box;
     border-radius: 8px;
     border: 2px solid #0d6efd;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--ui-static-bg);
     text-align: center;
     box-shadow: none;
   }
@@ -7910,12 +7910,12 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   }
 
   .btn-renovar-cuenta-cliente-tienda {
-    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+    background: var(--ui-static-bg);
     color: #fff;
-    border: none;
+    border: 1px solid var(--ui-static-1);
     font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.28);
     text-transform: none;
     letter-spacing: 0.01em;
     padding: 0.35rem 0.55rem;
@@ -7925,8 +7925,11 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     margin-left: 0.25rem;
   }
 
-  .btn-renovar-cuenta-cliente-tienda:hover:not(:disabled) {
-    filter: brightness(1.05);
+  .btn-renovar-cuenta-cliente-tienda:hover:not(:disabled),
+  .btn-renovar-cuenta-cliente-tienda:active:not(:disabled) {
+    background: var(--ui-click-bg);
+    border-color: var(--ui-click-dark);
+    filter: none;
   }
 
   .carrito-cuenta-cliente-email {
@@ -8263,7 +8266,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   
   /* Header del modal */
   .modal-carrito-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--ui-static-bg);
     color: white;
     padding: 1.5rem 2rem;
     display: flex;
@@ -8346,11 +8349,11 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     left: 0;
     width: 4px;
     height: 100%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--ui-static-bg);
   }
   
   .carrito-producto-item:hover {
-    border-color: #667eea;
+    border-color: var(--ui-static-2);
   }
   
   .carrito-producto-item:last-child {
@@ -8424,13 +8427,13 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   /* Precio */
   .carrito-producto-precio {
     font-weight: 600;
-    color: #667eea;
+    color: var(--ui-static-2);
     font-size: 1rem;
     margin: 0;
   }
   
   .btn-carrito-mas, .btn-carrito-menos {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--ui-static-bg);
     color: white;
     border: none;
     border-radius: 6px;
@@ -8506,11 +8509,11 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .carrito-total-amount {
     font-size: 1.4rem;
     font-weight: 800;
-    color: #667eea;
+    color: var(--ui-static-2);
   }
   
   .btn-procesar-pago-carrito {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--ui-static-bg);
     color: white;
     border: none;
     border-radius: 12px;
@@ -8960,11 +8963,13 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   .public-tools-container .search-form-inner {
       width: 100%;
+      display: flex;
+      justify-content: center;
   }
 
   .public-tools-container .public-tools-search-wrap {
       width: 100%;
-      max-width: 100%;
+      max-width: 22rem;
   }
 
   .public-tools-container .public-tools-search-wrap .search-input {
@@ -9271,7 +9276,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     font-weight: 600;
     margin-bottom: 0.4rem !important;
   }
-
+  
   .production-links-section .production-link-item {
     border: 1px solid #e0e0e0;
     padding: 0.32rem 0.55rem !important;
@@ -10187,6 +10192,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .media-search-form > .d-flex {
       min-width: min-content !important;
       flex-wrap: nowrap !important;
+      align-items: center !important;
   }
   
   /* Estilos responsive para pantallas pequeñas */
@@ -10464,7 +10470,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     height: 100px;
     overflow: hidden;
     border-radius: 20px 20px 0 0;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -15277,7 +15283,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   display: flex;
   justify-content: center;
   margin-top: 0.85rem;
-}
+  }
   
   .license-position-content {
     background: white;
@@ -16642,8 +16648,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
   .worksheet-panel #menu4ToggleBtn.menu-toggle-btn:hover,
   .worksheet-panel #licensesCollapseBtn.menu-btn-worksheet:hover,
   .worksheet-panel #licensesDuplicatesBtn.menu-btn-worksheet:hover {
-    background: #0b5ed7 !important;
-    border-color: #0b5ed7 !important;
+    background: var(--ui-click-bg) !important;
+    border-color: var(--ui-click-dark) !important;
   }
   
   
@@ -16802,8 +16808,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
     /* Estilos para los botones de menú en herramientas públicas en pantallas pequeñas */
     .public-tools-container .d-flex.gap-05 .menu-toggle-btn:hover {
-      background: #0b5ed7 !important;
-      border-color: #0b5ed7 !important;
+      background: var(--ui-click-bg) !important;
+      border-color: var(--ui-click-dark) !important;
     }
 
     /* Estilos para los botones de menú en herramientas públicas (solo para admins) */
@@ -16812,8 +16818,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     }
 
     .public-tools-container .d-flex.gap-05 .menu-toggle-btn:hover {
-      background: #0b5ed7 !important;
-      border-color: #0b5ed7 !important;
+      background: var(--ui-click-bg) !important;
+      border-color: var(--ui-click-dark) !important;
     }
 
 
@@ -16841,8 +16847,8 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     .worksheet-panel #menu4ToggleBtn.menu-toggle-btn:hover,
     .worksheet-panel #licensesCollapseBtn.menu-btn-worksheet:hover,
     .worksheet-panel #licensesDuplicatesBtn.menu-btn-worksheet:hover {
-      background: #0b5ed7 !important;
-      border-color: #0b5ed7 !important;
+      background: var(--ui-click-bg) !important;
+      border-color: var(--ui-click-dark) !important;
     }
     #volverBtnWorksheet {
       margin-right: 0 !important;
@@ -18932,7 +18938,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
     max-height: 80vh;
     overflow-y: auto;
   }
-
+  
   /* Modal crear plantilla: X roja en esquina, bordes negros, centrados */
   #modalCrearPlantilla .worksheet-crear-plantilla-modal {
     position: relative;
@@ -21726,7 +21732,7 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
       font-size: 15px;
       gap: 0.4rem 0.65rem;
     }
-
+    
     .plantilla-titulo-header .connection-logs-btn {
       padding: 4px 9px;
       gap: 5px;
@@ -23897,7 +23903,7 @@ body.shared-mode .connection-logs-btn {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ui-static-bg);
   color: white;
   border: 3px solid white;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -24261,8 +24267,8 @@ body.shared-mode .connection-logs-btn {
   }
 
   .public-tools-container .menu-toggle-container .d-flex.gap-05 .menu-toggle-btn:hover {
-    background: #0b5ed7 !important;
-    border-color: #0b5ed7 !important;
+    background: var(--ui-click-bg) !important;
+    border-color: var(--ui-click-dark) !important;
   }
 
   /* ================== ESTILOS PARA TABLA DE USUARIOS SOPORTE ================== */
@@ -24387,9 +24393,9 @@ body.shared-mode .connection-logs-btn {
     padding: 2px 7px !important;
     min-width: 60px !important;
     border-radius: 6px !important;
-    background: #0d6efd !important;
+    background: var(--ui-static-bg) !important;
     color: #fff !important;
-    border: 2px solid #0d6efd !important;
+    border: 2px solid var(--ui-static-1) !important;
     font-weight: 600 !important;
     box-shadow: none !important;
     width: auto !important;
@@ -24397,14 +24403,14 @@ body.shared-mode .connection-logs-btn {
   }
 
   .search-page-container .menu-toggle-btn:hover {
-    background: #1256a6 !important;
-    border-color: #1256a6 !important;
+    background: var(--ui-click-bg) !important;
+    border-color: var(--ui-click-dark) !important;
   }
 
   .purchase-history-container .btn-panel.btn-blue.menu-toggle-btn:hover,
   .public-tools-container .btn-panel.btn-blue.menu-toggle-btn:hover {
-    background: #1256a6 !important;
-    border-color: #1256a6 !important;
+    background: var(--ui-click-bg) !important;
+    border-color: var(--ui-click-dark) !important;
   }
   /* Espaciado específico para pantallas grandes en hojas de cálculo */
   @media (min-width: 701px) {
@@ -25037,6 +25043,36 @@ body.shared-mode .connection-logs-btn {
 .herramientas-admin-hub .edit-html-form select.form-control {
     text-align: center;
     text-align-last: center;
+}
+
+/* Crear porcentajes / html / youtube / importar — color global (igual que btn-blue) */
+.herramientas-admin-hub form button[type="submit"].btn-panel.btn-green,
+.herramientas-admin-hub .edit-html-form button[type="submit"].btn-panel.btn-green,
+.herramientas-admin-hub .herramientas-import-export-block .btn-panel.btn-green {
+  background: var(--ui-static-bg) !important;
+  color: #fff !important;
+  border: 2px solid var(--ui-static-1) !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+}
+
+.herramientas-admin-hub form button[type="submit"].btn-panel.btn-green:hover,
+.herramientas-admin-hub .edit-html-form button[type="submit"].btn-panel.btn-green:hover,
+.herramientas-admin-hub .herramientas-import-export-block .btn-panel.btn-green:hover {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+  color: #fff !important;
+}
+
+.herramientas-admin-hub .mdp-add-btn.btn-panel.btn-green {
+  background: var(--ui-static-bg) !important;
+  color: #fff !important;
+  border: 2px solid var(--ui-static-1) !important;
+}
+
+.herramientas-admin-hub .mdp-add-btn.btn-panel.btn-green:hover {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+  color: #fff !important;
 }
 
 .store-light.maxw-800 .herramientas-import-export-block.import-export-card {
@@ -25680,37 +25716,37 @@ body.shared-mode .connection-logs-btn {
   }
 
   .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo,
-  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair {
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair {
     column-gap: 0.4rem;
     align-items: stretch !important;
   }
 
   .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-row--num,
-  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-row {
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-row {
     display: flex !important;
     flex-direction: column !important;
     align-items: stretch !important;
     grid-template-columns: none;
     gap: 0.08rem;
-    width: auto !important;
-  }
+  width: auto !important;
+}
 
   .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-row--num > .editar-cupon-label,
-  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-label {
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-label {
     flex: none !important;
     width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
     font-size: 0.78rem !important;
     line-height: 1.15;
     white-space: normal !important;
-    text-align: left !important;
-  }
+  text-align: left !important;
+}
 
   .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo .editar-cupon-input,
-  .store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-input {
+.store-light.maxw-800 .editar-cupon-form .editar-cupon-min-pair .editar-cupon-input {
     width: 100% !important;
-    min-width: 0 !important;
+  min-width: 0 !important;
     min-height: 2.05rem;
     flex: none !important;
   }
@@ -25734,7 +25770,7 @@ body.shared-mode .connection-logs-btn {
   .store-light.maxw-800 .editar-cupon-form .editar-cupon-duo--head .editar-cupon-row--estado > .editar-cupon-label {
     flex: 0 0 auto !important;
     width: auto !important;
-    max-width: none !important;
+  max-width: none !important;
   }
 
   .store-light.maxw-800 .editar-cupon-form .editar-cupon-row--public .editar-cupon-checkbox-label {
@@ -25745,7 +25781,7 @@ body.shared-mode .connection-logs-btn {
 /* Estilos para precio unitario en modal del carrito */
 .carrito-precio-total {
     font-weight: 600;
-    color: #667eea;
+    color: var(--ui-static-2);
     font-size: 1rem;
     margin: 0;
 }
@@ -25868,7 +25904,7 @@ body .card.product-texture-bg::before,
     height: 112px;
     overflow: hidden;
     border-radius: 20px 20px 0 0;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -26049,8 +26085,8 @@ body .card.product-texture-bg::before,
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 2px solid #667eea;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 2px solid var(--ui-static-1);
+    background: var(--ui-static-bg);
     color: white;
     font-weight: 700;
     font-size: 1rem;
@@ -26086,7 +26122,7 @@ body .card.product-texture-bg::before,
 
 .input-cantidad-licencia:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--ui-static-2);
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -26287,7 +26323,7 @@ body .card.product-texture-bg::before,
         height: 92px !important;
         overflow: hidden;
         border-radius: 20px 20px 0 0;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #000;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -28599,8 +28635,8 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-icon-btn,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet {
   color: #f8fbff !important;
-  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
-  border-color: #8498dc !important;
+  background: var(--ui-static-bg) !important;
+  border-color: var(--ui-static-1) !important;
   /* Un solo borde: sin sombra exterior/inset que imitaba un segundo contorno */
   box-shadow: none !important;
 }
@@ -28609,8 +28645,8 @@ body .card.product-texture-bg::before,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet:hover,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-icon-btn:hover,
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet:hover {
-  background: linear-gradient(180deg, #5a76c4 0%, #4259a3 100%) !important;
-  border-color: #9aacf0 !important;
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
   color: #f8fbff !important;
 }
 .admin-licencias-page.user-licencias-shell .user-licencias-toolbar a.user-licencias-toolbar-cambios-link.menu-btn-worksheet:link,
@@ -33464,7 +33500,7 @@ html.admin-lic-bulk-modal--lock body {
 .store-front-main .store-search-actions {
   display: flex !important;
   flex-direction: row !important;
-  align-items: stretch !important;
+  align-items: center !important;
   flex-wrap: nowrap !important;
   gap: 0.5rem !important;
   width: 100%;
@@ -34084,7 +34120,7 @@ body .store-front-main .store-products-wrap--view-list .card.product-texture-bg.
   margin: 0 !important;
   padding: 0.05rem !important;
   box-sizing: border-box !important;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: #000 !important;
   border-radius: 5px !important;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.16)) !important;
 }
@@ -36082,7 +36118,7 @@ body .store-front-main .store-products-wrap--view-view6 > .card.product-texture-
 @media (max-width: 480px) {
   .store-front-main .store-search-actions {
     flex-wrap: nowrap !important;
-    align-items: stretch !important;
+    align-items: center !important;
     gap: 0.35rem !important;
   }
 
@@ -44821,9 +44857,10 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 }
 
 .store-catalog-full-table .product-card-store-action-btns--table .btn-renovar-cuenta-cliente-tienda {
-  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%) !important;
+  background: var(--ui-static-bg) !important;
   color: #fff !important;
-  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.25) !important;
+  border: 1px solid var(--ui-static-1) !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.22) !important;
 }
 
 .store-catalog-full-table .product-card-store-action-btns--table .btn-reservar-producto-tienda,
@@ -44840,6 +44877,12 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 }
 
 .store-catalog-full-table .product-card-store-action-btns--table .btn-renovar-cuenta-cliente-tienda:hover:not(:disabled),
+.store-catalog-full-table .product-card-store-action-btns--table .btn-renovar-cuenta-cliente-tienda:active:not(:disabled) {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+  filter: none;
+}
+
 .store-catalog-full-table .product-card-store-action-btns--table .btn-reservar-producto-tienda:hover:not(:disabled),
 .store-catalog-full-table .product-card-store-action-btns--table .btn-reservar-nextday-tienda:hover:not(:disabled) {
   filter: brightness(1.06);
@@ -47242,8 +47285,8 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   .admin-store-menus
   > .admin-licencias-toolbar-btn {
   color: #f8fbff !important;
-  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
-  border-color: #8498dc !important;
+  background: var(--ui-static-bg) !important;
+  border-color: var(--ui-static-1) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     0 1px 2px rgba(15, 23, 42, 0.28) !important;
@@ -47375,8 +47418,8 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   .admin-licencias-toolbar
   .menu-btn-worksheet {
   color: #f8fbff !important;
-  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
-  border-color: #8498dc !important;
+  background: var(--ui-static-bg) !important;
+  border-color: var(--ui-static-1) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     0 1px 2px rgba(15, 23, 42, 0.28) !important;
@@ -47438,8 +47481,8 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   .user-licencias-toolbar
   .menu-btn-worksheet {
   color: #f8fbff !important;
-  background: linear-gradient(180deg, #4f67b3 0%, #374b91 100%) !important;
-  border-color: #8498dc !important;
+  background: var(--ui-static-bg) !important;
+  border-color: var(--ui-static-1) !important;
   box-shadow: none !important;
 }
 
@@ -48531,6 +48574,22 @@ form[data-html-preset-form][data-preset="foto_pantallas_perfiles_tv"] [data-html
   display: none;
 }
 
+form[data-html-preset-form][data-preset="busqueda_medios"] [data-html-text-wrap] {
+  display: none;
+}
+
+form[data-html-preset-form][data-preset="drive_fotos_peliculas"] [data-html-text-wrap] {
+  display: none;
+}
+
+form[data-html-preset-form]:not([data-preset="busqueda_medios"]) [data-bm-editor] {
+  display: none;
+}
+
+form[data-html-preset-form]:not([data-preset="drive_fotos_peliculas"]) [data-df-editor] {
+  display: none;
+}
+
 form[data-html-preset-form]:not([data-preset="como_trabajo"]) [data-ct-editor] {
   display: none;
 }
@@ -48993,46 +49052,141 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
   word-break: break-word;
 }
 
-/* Cómo trabajo editor: campos claros, fila de icono compacta */
+/* Cómo trabajo: título principal igual que los campos de arriba; secciones debajo del divisor */
+[data-ct-editor] {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  gap: 0.75rem;
+}
+
+[data-ct-editor] .ct-main-title-row {
+  width: 100%;
+  margin: 0;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+[data-ct-editor] .ct-main-title-row .mdp-icon-picker-wrap {
+  flex: 0 0 2.45rem;
+  width: 2.45rem;
+  height: 2.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-ct-editor] .ct-main-title-row .mdp-icon-picker-trigger {
+  width: 2.45rem !important;
+  min-width: 2.45rem !important;
+  max-width: 2.45rem !important;
+  height: 2.45rem !important;
+  min-height: 2.45rem !important;
+  max-height: 2.45rem !important;
+  padding: 0 !important;
+  border: 1.5px solid #111 !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  box-sizing: border-box;
+}
+
+[data-ct-editor] .ct-main-title-row .mdp-icon-picker-preview,
+[data-ct-editor] .ct-main-title-row .mdp-icon-picker-preview i {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+[data-ct-editor] .ct-main-title-row .form-control,
+.store-light.maxw-800 .edit-html-form [data-ct-editor] .ct-main-title-row .form-control {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 2.45rem !important;
+  min-height: 2.45rem !important;
+  max-height: 2.45rem !important;
+  padding: 0.4rem 0.65rem !important;
+  border: 1.5px solid #111 !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  color: #111 !important;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+[data-ct-editor] .ct-editor-divider {
+  display: block;
+  width: 100%;
+  margin: 0.35rem 0 0.55rem;
+  border: 0;
+  border-top: 1px solid #222;
+  opacity: 1;
+}
+
 [data-ct-editor] [data-ct-sections] {
   display: flex;
   flex-direction: column;
-  gap: 1.15rem;
+  gap: 0.85rem;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+[data-ct-editor] [data-ct-sections] .ct-section-edit {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ct-section-edit {
-  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 0.4rem;
+  row-gap: 0.4rem;
+  align-items: start;
+  width: 100%;
+  border: none !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
   overflow: visible;
-  border: 1px solid #c5c5c5 !important;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .ct-section-edit .form-control,
 .store-light.maxw-800 .edit-html-form .ct-section-edit .form-control,
 .store-light.maxw-800 .edit-html-form .ct-section-edit textarea.form-control,
 .store-light.maxw-800 .edit-html-container .edit-html-form .ct-section-edit textarea.form-control {
-  border-color: #c8c8c8 !important;
-  border-width: 1px !important;
+  border: 1px solid #222 !important;
+  background: #fff !important;
+  color: #111 !important;
+  text-align: left;
+}
+
+.ct-section-edit textarea.form-control {
+  text-align: left;
 }
 
 .ct-title-edit {
-  display: flex !important;
-  align-items: center !important;
-  gap: 0;
-  height: 2rem;
-  min-height: 2rem;
-  max-height: 2rem;
-  position: relative;
-  z-index: 2;
-  background: #f7f8fa;
-  border-bottom: 1px solid #d5d5d5;
+  display: contents;
+}
+
+.ct-title-actions {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2.25rem;
+  margin: 0;
 }
 
 .ct-title-edit .mdp-icon-picker-wrap {
-  flex: 0 0 2rem;
-  width: 2rem;
-  height: 2rem;
+  flex: 0 0 2.25rem;
+  width: 2.25rem;
+  height: 2.25rem;
   position: relative;
   z-index: 5;
   display: flex;
@@ -49041,17 +49195,16 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
 }
 
 .ct-title-edit .mdp-icon-picker-trigger {
-  width: 2rem !important;
-  height: 2rem !important;
-  min-width: 2rem !important;
-  min-height: 2rem !important;
-  max-width: 2rem !important;
-  max-height: 2rem !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  min-height: 2.25rem !important;
+  max-width: 2.25rem !important;
+  max-height: 2.25rem !important;
   padding: 0 !important;
-  border: none !important;
-  border-right: 1px solid #d5d5d5 !important;
-  border-radius: 0 !important;
-  background: #eef1f5 !important;
+  border: 1.5px solid #111 !important;
+  border-radius: 3px !important;
+  background: #fff !important;
   box-sizing: border-box;
 }
 
@@ -49075,36 +49228,55 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
 }
 
 .ct-title-edit .form-control {
-  flex: 1 1 auto;
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
   min-width: 0;
-  height: 2rem !important;
-  min-height: 2rem !important;
-  max-height: 2rem !important;
+  height: 2.25rem !important;
+  min-height: 2.25rem !important;
+  max-height: 2.25rem !important;
   padding: 0.25rem 0.55rem !important;
-  border: none !important;
-  border-radius: 0 !important;
+  border: 1.5px solid #111 !important;
+  border-radius: 3px !important;
   font-weight: 600;
   font-size: 0.9rem;
   background: #fff !important;
+  color: #111 !important;
   box-sizing: border-box;
   line-height: 1.2;
 }
 
 .ct-section-edit .ct-title-edit input[type="color"] {
-  flex: 0 0 2rem;
-  width: 2rem !important;
-  min-width: 2rem !important;
-  max-width: 2rem !important;
-  height: 2rem !important;
-  min-height: 2rem !important;
-  max-height: 2rem !important;
+  flex: 0 0 2.25rem;
+  width: 2.25rem !important;
+  min-width: 2.25rem !important;
+  max-width: 2.25rem !important;
+  height: 2.25rem !important;
+  min-height: 2.25rem !important;
+  max-height: 2.25rem !important;
   padding: 3px;
-  border: none;
-  border-left: 1px solid #d5d5d5;
-  border-radius: 0;
+  border: 1.5px solid #111;
+  border-radius: 3px;
   background: #fff;
   cursor: pointer;
   box-sizing: border-box;
+}
+
+.ct-title-actions .mdp-remove-x {
+  flex: 0 0 1.45rem;
+  width: 1.45rem !important;
+  min-width: 1.45rem !important;
+  height: 1.45rem !important;
+  min-height: 1.45rem !important;
+  max-height: 1.45rem !important;
+  margin: 0;
+  padding: 0;
+  border: none !important;
+  border-radius: 3px !important;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.95rem;
+  align-self: center;
 }
 
 .ct-section-edit .ct-title-edit input[type="color"]::-webkit-color-swatch-wrapper {
@@ -49124,20 +49296,27 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
 .ct-field-block {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.45rem 0.55rem 0.5rem;
-  border-top: 1px solid #e4e4e4;
+  gap: 0.28rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+  border-top: 1px solid #d7dde6;
   box-sizing: border-box;
 }
 
 .ct-field-subs {
-  background: #fafbfc;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 !important;
+  border: none;
+  background: transparent;
 }
 
 .ct-field-desc {
-  background: #f5f7f9;
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
+  background: #fff;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
 }
 
 .ct-field-label {
@@ -49148,7 +49327,7 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: #6b7280;
+  color: #5b6575;
   line-height: 1.2;
 }
 
@@ -49231,9 +49410,10 @@ body > .mdp-icon-picker-panel:not(.hidden),
   padding: 0.4rem 0.5rem !important;
   min-height: 2.8rem !important;
   line-height: 1.35;
-  border: 1px solid #d0d0d0 !important;
+  border: 1px solid #222 !important;
   border-radius: 5px !important;
   background: #fff !important;
+  color: #111 !important;
   resize: vertical;
   box-sizing: border-box;
 }
@@ -49897,13 +50077,13 @@ table.tv-table {
 .store-dark .tv-table th,
 .store-light .tv-table th,
 .tv-table th {
-  background: linear-gradient(135deg, #1c2330 0%, #2a3444 48%, #3a4658 100%) !important;
-  color: #f7f3ec !important;
+  background: var(--ui-static-bg) !important;
+  color: #fff !important;
   font-size: 0.8rem !important;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-right-color: rgba(255, 255, 255, 0.12) !important;
-  border-bottom: 2px solid #e07a3a !important;
+  border-right-color: var(--ui-static-1) !important;
+  border-bottom: 2px solid var(--ui-static-1) !important;
 }
 
 .store-dark .tv-table tbody tr:nth-child(odd) td,
@@ -49922,6 +50102,13 @@ table.tv-table {
   width: 6.5rem;
   min-width: 6.5rem;
   text-align: center !important;
+}
+
+.tv-table thead th.tv-th-icon {
+  overflow: visible !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  visibility: visible !important;
 }
 
 .tv-table .tv-th-icon,
@@ -49974,13 +50161,16 @@ table.tv-table {
   max-width: none;
 }
 
+.accordion-body img.tv-favicon,
+.accordion-body img.tv-favicon-title,
 .accordion-body .tv-favicon,
 .tv-favicon,
 .tv-favicon-title {
   width: 64px !important;
   height: 64px !important;
   max-width: none !important;
-  min-width: 64px;
+  min-width: 64px !important;
+  min-height: 64px !important;
   padding: 3px;
   box-sizing: border-box;
   object-fit: contain;
@@ -50046,4 +50236,13 @@ table.tv-table {
   text-align: center;
   color: #5b6b86;
   background: #fff;
+}
+
+/* Tienda pública: franja de iconos siempre negra (independiente de colores globales) */
+.store-front-main .product-img-container {
+  background: #000 !important;
+}
+
+.store-front-main .store-products-wrap--view-list .product-img {
+  background: #000 !important;
 }

@@ -905,16 +905,34 @@
     { file: 'stream30.png', label: 'Stream 30' },
     { file: 'stream31.png', label: 'Stream 31' },
     { file: 'stream32.png', label: 'Stream 32' },
-    { file: 'stream33.png', label: 'Stream 33' },
+    { file: 'stream33.png', label: 'Duolingo' },
     { file: 'stream34.png', label: 'Emby' },
     { file: 'stream35.png', label: 'Jellyfin' },
     { file: 'stream36.png', label: 'Dramas' },
-    { file: 'stream37.png', label: 'Stream 37' },
-    { file: 'stream38.png', label: 'Stream 38' },
-    { file: 'stream39.png', label: 'Stream 39' },
-    { file: 'stream40.png', label: 'Stream 40' },
-    { file: 'stream41.png', label: 'Stream 41' }
+    { file: 'stream37.png', label: 'McAfee' },
+    { file: 'stream38.png', label: 'Gemini' },
+    { file: 'stream39.png', label: 'Proton VPN' },
+    { file: 'stream40.png', label: 'Surfshark VPN' },
+    { file: 'stream41.png', label: 'Adobe Photoshop' }
   ];
+  fetch('/admin/list_icons_ajax')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data || data.status !== 'ok' || !Array.isArray(data.icons)) return;
+      var known = {};
+      ICONS_STREAMING.forEach(function(item) { known[item.file.toLowerCase()] = true; });
+      data.icons.filter(function(name) { return /^stream\d+\.png$/i.test(name); })
+        .sort(function(a, b) { return parseInt(a.match(/\d+/)[0], 10) - parseInt(b.match(/\d+/)[0], 10); })
+        .forEach(function(file) {
+          if (known[file.toLowerCase()]) return;
+          var number = file.match(/\d+/);
+          ICONS_STREAMING.push({ file: file, label: 'Stream ' + (number ? number[0] : file) });
+        });
+      if (currentIconsTab === 'streaming' && iconsGrid && iconsGrid.childElementCount) {
+        buildIconsGrid(iconsSearch ? iconsSearch.value : '', 'streaming');
+      }
+    })
+    .catch(function() {});
   var iconsDropdown = document.getElementById('iconsDropdown');
   var iconsGrid = document.getElementById('iconsGrid');
   var iconsSearch = document.getElementById('iconsSearch');

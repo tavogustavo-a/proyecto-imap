@@ -1,0 +1,40 @@
+{% for drive_api in drive_apis %}
+  <div class="mb-4">
+    {% if drive_api.drive_subtitle_photos %}
+    <div class="card herramienta-accordion">
+      <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+        <span>• {{ drive_api.drive_subtitle_photos }}</span>
+        <div class="accordion-arrow"></div>
+      </div>
+      <div class="accordion-body hidden">
+        <div class="drive-photos-container">
+          <div id="photosPaginationTop-{{ drive_api.id }}" class="pagination-container mb-2"></div>
+          <div class="d-flex justify-content-center mb-2">
+            <button type="button" id="loadPhotosBtn-{{ drive_api.id }}" class="btn-panel btn-blue">Cargar Fotos</button>
+          </div>
+          <div id="photosGallery-{{ drive_api.id }}" class="drive-gallery"></div>
+          <div id="photosPagination-{{ drive_api.id }}" class="pagination-container mt-2"></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% if drive_api.drive_subtitle_videos %}
+    <div class="card herramienta-accordion">
+      <div class="accordion-header d-flex align-items-center justify-content-between w-100">
+        <span>• {{ drive_api.drive_subtitle_videos }}</span>
+        <div class="accordion-arrow"></div>
+      </div>
+      <div class="accordion-body hidden">
+        <div class="drive-videos-container">
+          <div id="videosPaginationTop-{{ drive_api.id }}" class="pagination-container mb-2"></div>
+          <div class="d-flex justify-content-center mb-2">
+            <button type="button" id="loadVideosBtn-{{ drive_api.id }}" class="btn-panel btn-blue">Cargar Videos</button>
+          </div>
+          <div id="videosGallery-{{ drive_api.id }}" class="drive-gallery"></div>
+          <div id="videosPagination-{{ drive_api.id }}" class="pagination-container mt-2"></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+{% endfor %}

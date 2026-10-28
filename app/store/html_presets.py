@@ -14,6 +14,8 @@ HTML_PRESET_CHOICES: tuple[tuple[str, str], ...] = (
     ('como_trabajo', 'Como Trabajo Rapida explicacion'),
     ('resumen_consultas_codigos', 'Resumen de las Consultas de la Pagina de Codigos'),
     ('foto_pantallas_perfiles_tv', 'Foto de pantallas, perfiles, links de tv'),
+    ('busqueda_medios', 'Búsqueda de Medios'),
+    ('drive_fotos_peliculas', 'Drive para fotos y películas'),
 )
 
 HTML_PRESET_KEYS = frozenset(k for k, _ in HTML_PRESET_CHOICES)
@@ -22,6 +24,8 @@ MEDIOS_DE_PAGO_KEY = 'medios_de_pago'
 COMO_TRABAJO_KEY = 'como_trabajo'
 RESUMEN_CODIGOS_KEY = 'resumen_consultas_codigos'
 FOTO_PANTALLAS_KEY = 'foto_pantallas_perfiles_tv'
+BUSQUEDA_MEDIOS_KEY = 'busqueda_medios'
+DRIVE_FOTOS_PELICULAS_KEY = 'drive_fotos_peliculas'
 _MAIN_TITLE_DEFAULT = 'medios de pago que recibo'
 _CODIGOS_TITLE_DEFAULT = 'resumen de las consultas de la pagina de codigos'
 _CODIGOS_INTRO = (
@@ -1010,24 +1014,30 @@ _TV_ICON_NAME = re.compile(r'^[\w.-]+$')
 _TV_ICON_SKIP = frozenset({'favicon.svg', 'favicon.ico'})
 
 
-def screen_icon_choices() -> list[dict]:
-    """Iconos de static/images, los mismos que el botón +Icon de servicios."""
+def list_stream_icon_files() -> list[str]:
+    """streamN.png que existen en static/images, en orden numérico."""
     import os
+    import re
 
     from flask import current_app
 
-    folder = os.path.join(current_app.static_folder, 'images')
-    names: list[str] = []
-    if os.path.isdir(folder):
-        for filename in sorted(os.listdir(folder)):
-            if filename.lower() in _TV_ICON_SKIP:
-                continue
-            if not filename.lower().endswith('.png'):
-                continue
-            if not filename.lower().startswith('stream'):
-                continue
-            if os.path.isfile(os.path.join(folder, filename)) and _clean_screen_icon(filename):
-                names.append(filename)
+    folder = os.path.join(current_app.static_folder or '', 'images')
+    found: list[tuple[int, str]] = []
+    if not os.path.isdir(folder):
+        return []
+    for filename in os.listdir(folder):
+        match = re.fullmatch(r'stream(\d+)\.png', filename, re.IGNORECASE)
+        if not match:
+            continue
+        if os.path.isfile(os.path.join(folder, filename)):
+            found.append((int(match.group(1)), filename))
+    found.sort(key=lambda item: item[0])
+    return [name for _, name in found]
+
+
+def screen_icon_choices() -> list[dict]:
+    """Iconos de static/images, los mismos que el botón +Icon de servicios."""
+    names = [name for name in list_stream_icon_files() if _clean_screen_icon(name)]
     return [
         {'name': name, 'url': '/static/images/' + name, 'dark_url': screen_icon_dark_url(name)}
         for name in names
@@ -1038,7 +1048,7 @@ def screen_icon_dark_url(name: str) -> str:
     """URL del icono adaptado a fondo oscuro."""
     from flask import url_for
 
-    return url_for('store_bp.stream_icon', name=name, v='20261021-darkbg')
+    return url_for('store_bp.stream_icon', name=name, v='20261027-allblack3')
 
 
 def _clean_screen_icon(raw: str | None) -> str:
@@ -1052,6 +1062,143 @@ def _clean_screen_icon(raw: str | None) -> str:
     if not name.lower().endswith('.png') or not name.lower().startswith('stream'):
         return ''
     return name
+
+
+# Dominio o texto de «Página oficial» → streamN.png (tabla clásica de pantallas/perfiles).
+_TV_DOMAIN_ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (('netflix.com', 'netflix.'), 'stream1.png'),
+    (('tv.apple.com', 'apple.com/tv'), 'stream2.png'),
+    (('youtube.com', 'youtu.be'), 'stream3.png'),
+    (('primevideo.com', 'amazon.com/gp/video', 'amazon.prime'), 'stream11.png'),
+    (('disneyplus.com', 'disney+', 'disney plus'), 'stream17.png'),
+    (('vix.com', 'vix.'), 'stream15.png'),
+    (('canva.com',), 'stream10.png'),
+    (('crunchyroll.com',), 'stream16.png'),
+    (('max.com', 'hbomax', 'hbo.com', 'hbo.'), 'stream13.png'),
+    (('paramountplus.com', 'paramount+', 'paramount plus'), 'stream14.png'),
+    (('plex.tv', 'plex.'), 'stream7.png'),
+    (('spotify.com',), 'stream12.png'),
+    (('viki.com', 'rakuten viki'), 'stream9.png'),
+    (('deezer.com',), 'stream20.png'),
+    (('winplay.co', 'winplay', 'win sport', 'winsport'), 'stream25.png'),
+    (('m365.cloud.microsoft', 'office.com', 'office365', 'microsoft365', 'microsoft.com/office'), 'stream23.png'),
+    (('surfshark.com',), 'stream40.png'),
+    (('xbox.com', 'gamepass', 'game pass'), 'stream24.png'),
+    (('directvgo.com', 'directv go', 'directvgo'), 'stream27.png'),
+    (('mcafee.com', 'id.mcafee'), 'stream37.png'),
+    (('protonvpn', 'account.proton'), 'stream39.png'),
+    (('duolingo.com',), 'stream33.png'),
+    (('universalplus.com', 'universal+', 'universal plus'), 'stream28.png'),
+    (('pornhub.com',), 'stream29.png'),
+    (('chatgpt.com', 'openai.com'), 'stream30.png'),
+    (('gemini.google', 'google.com/gemini'), 'stream38.png'),
+    (('photoshop.adobe', 'adobe.com/photoshop'), 'stream41.png'),
+    (('perplexity.ai',), 'stream31.png'),
+    (('emby.media', 'emby.'), 'stream34.png'),
+    (('jellyfin',), 'stream35.png'),
+    (('hulu.com',), 'stream26.png'),
+    (('mubi.com',), 'stream22.png'),
+)
+
+
+def _page_icon_match_blob(row: dict) -> str:
+    from urllib.parse import urlparse
+
+    chunks: list[str] = []
+    for key in ('pagina', 'activacion'):
+        raw = (row.get(key) or '').strip()
+        if not raw:
+            continue
+        chunks.append(raw.lower())
+        href = _safe_href(raw)
+        if not href:
+            continue
+        parsed = urlparse(href)
+        host = (parsed.hostname or '').lower()
+        if host:
+            chunks.append(host)
+        if parsed.path:
+            chunks.append(parsed.path.lower())
+    return ' '.join(chunks)
+
+
+def _detect_stream_icons_from_row(row: dict, limit: int = 2) -> list[str]:
+    blob = _page_icon_match_blob(row)
+    if not blob.strip():
+        return []
+    found: list[str] = []
+    for patterns, icon in _TV_DOMAIN_ICON_RULES:
+        if not _clean_screen_icon(icon):
+            continue
+        if any(pat in blob for pat in patterns):
+            if icon not in found:
+                found.append(icon)
+            if len(found) >= limit:
+                break
+    return found
+
+
+def _enrich_row_auto_icons(row: dict) -> None:
+    """Si no hay iconos manuales, asigna streamN.png según página oficial / activación."""
+    if (row.get('icons') or [])[:2]:
+        return
+    auto = _detect_stream_icons_from_row(row)
+    if auto:
+        row['icons'] = auto
+
+
+def row_manual_screen_icons(row: dict) -> list[str]:
+    """Iconos stream elegidos en el editor (no los detectados solo al renderizar)."""
+    icons: list[str] = []
+    for icon in (row.get('icons') or [])[:2]:
+        cleaned = _clean_screen_icon(str(icon or ''))
+        if cleaned and cleaned not in icons:
+            icons.append(cleaned)
+    return icons
+
+
+def resolve_row_screen_icons(row: dict) -> list[str]:
+    icons = row_manual_screen_icons(row)
+    if icons:
+        return icons
+    return _detect_stream_icons_from_row(row)
+
+
+def stream_icon_fallback_for_row(row: dict) -> str:
+    """URL del logo stream detectado por dominio (respaldo si falla el favicon)."""
+    detected = _detect_stream_icons_from_row(row, limit=1)
+    if not detected:
+        return ''
+    return screen_icon_dark_url(detected[0])
+
+
+def _tv_platform_favicon_img(page: str, row: dict) -> Markup:
+    """Favicon del dominio vía favicon_url_for (misma URL que Telegram / _fetch_favicon_image)."""
+    src = favicon_url_for(page)
+    if not src:
+        return Markup('')
+    fallback = stream_icon_fallback_for_row(row)
+    parts: list[Markup] = [
+        Markup('<img class="tv-favicon tv-favicon-title" src="'),
+        escape(src),
+        Markup(
+            '" alt="" width="60" height="60" loading="lazy" decoding="async" '
+            'referrerpolicy="no-referrer"'
+        ),
+    ]
+    if fallback:
+        parts.extend(
+            [
+                Markup(' data-fallback="'),
+                escape(fallback),
+                Markup(
+                    '" onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;'
+                    "this.classList.remove('tv-favicon','tv-favicon-title');this.classList.add('tv-logo');}"
+                ),
+            ]
+        )
+    parts.append(Markup('">'))
+    return Markup('').join(parts)
 
 
 _PERFIL_RE = re.compile(r'^(\d{1,2})(?:\s*perfiles?)?$', re.IGNORECASE)
@@ -1113,6 +1260,7 @@ def parse_pantallas_payload(text: str | None) -> dict:
                 'activacion': _clip(str(item.get('activacion') or ''), 240),
             }
             if row['pantallas']:
+                _enrich_row_auto_icons(row)
                 rows.append(row)
     return {'rows': rows}
 
@@ -1147,6 +1295,7 @@ def pantallas_from_form(form) -> dict:
             'activacion': _clip(activaciones[index] if index < len(activaciones) else '', 240),
         }
         if row['pantallas']:
+            _enrich_row_auto_icons(row)
             rows.append(row)
     return {'rows': rows}
 
@@ -1179,7 +1328,7 @@ def render_pantallas_html(saved: dict | None, heading: str = '') -> Markup:
     payload = saved if isinstance(saved, dict) else {'rows': []}
     parts: list[Markup] = [
         Markup('<div class="tv-wrap"><article class="tv-card"><div class="tv-table-scroll"><table class="tv-table"><thead><tr>'),
-        Markup('<th class="tv-th-icon" scope="col"><span class="sr-only">Favicon</span></th>'),
+        Markup('<th class="tv-th-icon" scope="col">Plataforma</th>'),
         Markup(
             '<th scope="col" class="tv-th-pantallas">Pantallas</th>'
             '<th scope="col" class="tv-th-perfiles">Perfiles</th>'
@@ -1191,19 +1340,16 @@ def render_pantallas_html(saved: dict | None, heading: str = '') -> Markup:
     rows = payload.get('rows') or []
     if not rows:
         parts.append(Markup('<tr><td colspan="5" class="tv-empty-note">Todavía no hay pantallas configuradas.</td></tr>'))
-    from flask import url_for
 
     for row in rows:
         parts.append(Markup('<tr><td class="tv-icons"><div class="tv-icon-stack">'))
         favicon_page = favicon_source_page(row)
         if favicon_page:
-            src = url_for('store_bp.site_favicon', page=favicon_page)
-            parts.append(
-                Markup('<img class="tv-favicon tv-favicon-title" src="')
-                + escape(src)
-                + Markup('" alt="" width="60" height="60">')
-            )
-        icons = row.get('icons') or []
+            icons = []
+        else:
+            icons = resolve_row_screen_icons(row)
+        if favicon_page:
+            parts.append(_tv_platform_favicon_img(favicon_page, row))
         if icons:
             parts.append(Markup('<div class="tv-logos">'))
             for icon in icons:
@@ -1226,6 +1372,162 @@ def render_pantallas_html(saved: dict | None, heading: str = '') -> Markup:
         parts.append(Markup('</td></tr>'))
     parts.append(Markup('</tbody></table></div></article></div>'))
     return Markup('').join(parts)
+
+
+BUSQUEDA_MEDIOS_DEFAULT: dict = {'api_key': ''}
+
+
+def parse_busqueda_medios_payload(text: str | None) -> dict:
+    raw = (text or '').strip()
+    if raw.startswith('{'):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict):
+            return {'api_key': _clip(str(data.get('api_key') or ''), 8000)}
+    if raw:
+        return {'api_key': _clip(raw, 8000)}
+    return copy.deepcopy(BUSQUEDA_MEDIOS_DEFAULT)
+
+
+def busqueda_medios_editor_data(text: str | None) -> dict:
+    return parse_busqueda_medios_payload(text)
+
+
+def busqueda_medios_from_form(form) -> dict:
+    return {'api_key': _clip(form.get('bm_api_key') or '', 8000)}
+
+
+def resolve_media_search_api_key(html_id: int | None = None) -> str:
+    """Claves tmdb/… desde HtmlInfo busqueda_medios; respaldo ApiInfo legacy."""
+    from app.store.models import ApiInfo, HtmlInfo
+
+    query = HtmlInfo.query.filter_by(preset_key=BUSQUEDA_MEDIOS_KEY, enabled=True)
+    if html_id:
+        row = query.filter(HtmlInfo.id == int(html_id)).first()
+        if row:
+            return parse_busqueda_medios_payload(row.text).get('api_key') or ''
+    row = query.order_by(HtmlInfo.id.desc()).first()
+    if row:
+        return parse_busqueda_medios_payload(row.text).get('api_key') or ''
+    api = ApiInfo.query.filter_by(api_type='Búsqueda de Medios', enabled=True).first()
+    return (api.api_key or '') if api else ''
+
+
+def render_busqueda_medios_html(html_obj) -> Markup:
+    from flask import render_template
+
+    html_id = getattr(html_obj, 'id', 0) or 0
+    return Markup(
+        render_template(
+            'includes/busqueda_medios_public_widget.html',
+            html_id=html_id,
+        )
+    )
+
+
+DRIVE_FOTOS_DEFAULT: dict = {
+    'api_key': '',
+    'api_url': '',
+    'drive_subtitle_photos': '',
+    'drive_subtitle_videos': '',
+}
+
+
+def parse_drive_fotos_payload(text: str | None) -> dict:
+    raw = (text or '').strip()
+    if raw.startswith('{'):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict):
+            return {
+                'api_key': _clip(str(data.get('api_key') or ''), 12000),
+                'api_url': _clip(str(data.get('api_url') or ''), 240),
+                'drive_subtitle_photos': _clip(str(data.get('drive_subtitle_photos') or ''), 100),
+                'drive_subtitle_videos': _clip(str(data.get('drive_subtitle_videos') or ''), 100),
+            }
+    return copy.deepcopy(DRIVE_FOTOS_DEFAULT)
+
+
+def drive_fotos_editor_data(text: str | None) -> dict:
+    return parse_drive_fotos_payload(text)
+
+
+def drive_fotos_from_form(form) -> dict:
+    return {
+        'api_key': _clip(form.get('df_api_key') or '', 12000),
+        'api_url': _clip(form.get('df_api_url') or '', 240),
+        'drive_subtitle_photos': _clip(form.get('df_drive_subtitle_photos') or '', 100),
+        'drive_subtitle_videos': _clip(form.get('df_drive_subtitle_videos') or '', 100),
+    }
+
+
+def drive_gallery_public_row(html_obj) -> dict | None:
+    """Fila de galería pública (id + subtítulos) desde HtmlInfo."""
+    if not html_obj or getattr(html_obj, 'preset_key', None) != DRIVE_FOTOS_PELICULAS_KEY:
+        return None
+    payload = parse_drive_fotos_payload(getattr(html_obj, 'text', None))
+    return {
+        'id': getattr(html_obj, 'id', 0),
+        'drive_subtitle_photos': payload.get('drive_subtitle_photos') or '',
+        'drive_subtitle_videos': payload.get('drive_subtitle_videos') or '',
+    }
+
+
+def resolve_drive_gallery_credentials(entry_id: int | str | None) -> tuple[dict | None, str | None]:
+    """
+    Credenciales Drive para galería pública.
+    Devuelve (payload_dict, error_message).
+    """
+    from app.store.models import ApiInfo, HtmlInfo
+
+    if entry_id not in (None, ''):
+        try:
+            eid = int(entry_id)
+        except (TypeError, ValueError):
+            return None, 'ID no válido'
+        html = HtmlInfo.query.get(eid)
+        if html and html.enabled and html.preset_key == DRIVE_FOTOS_PELICULAS_KEY:
+            payload = parse_drive_fotos_payload(html.text)
+            if payload.get('api_key') and payload.get('api_url'):
+                return payload, None
+            return None, 'Faltan credenciales o ID de carpeta en HTML Drive.'
+        api = ApiInfo.query.get(eid)
+        if api and api.enabled and api.api_type == 'Drive':
+            payload = {
+                'api_key': api.api_key or '',
+                'api_url': api.api_url or '',
+                'drive_subtitle_photos': api.drive_subtitle_photos or '',
+                'drive_subtitle_videos': api.drive_subtitle_videos or '',
+            }
+            if payload.get('api_key') and payload.get('api_url'):
+                return payload, None
+            return None, 'Faltan credenciales o ID de carpeta.'
+        return None, 'Drive no encontrado o no habilitado.'
+
+    html = (
+        HtmlInfo.query.filter_by(preset_key=DRIVE_FOTOS_PELICULAS_KEY, enabled=True)
+        .order_by(HtmlInfo.id.desc())
+        .first()
+    )
+    if html:
+        payload = parse_drive_fotos_payload(html.text)
+        if payload.get('api_key') and payload.get('api_url'):
+            return payload, None
+    api = ApiInfo.query.filter_by(api_type='Drive', enabled=True).first()
+    if api:
+        payload = {
+            'api_key': api.api_key or '',
+            'api_url': api.api_url or '',
+            'drive_subtitle_photos': api.drive_subtitle_photos or '',
+            'drive_subtitle_videos': api.drive_subtitle_videos or '',
+        }
+        if payload.get('api_key') and payload.get('api_url'):
+            return payload, None
+    return None, 'No hay Drive configurado.'
 
 
 def _normalize_ct_icon(raw: str | None, default: str = '') -> str:
@@ -1406,6 +1708,10 @@ def html_info_body(html_obj) -> Markup | str:
         return render_codigos_html(parse_codigos_payload(text))
     if preset == FOTO_PANTALLAS_KEY:
         return render_pantallas_html(parse_pantallas_payload(text), getattr(html_obj, 'title', '') or '')
+    if preset == BUSQUEDA_MEDIOS_KEY:
+        return render_busqueda_medios_html(html_obj)
+    if preset == DRIVE_FOTOS_PELICULAS_KEY:
+        return Markup('')
     return text
 
 
@@ -1430,6 +1736,28 @@ def parse_html_form_fields(form) -> tuple[dict | None, str | None]:
             text = json.dumps(codigos_from_form(form), ensure_ascii=False)
         if preset_key == FOTO_PANTALLAS_KEY and form.get('tv_pantallas') is not None:
             text = json.dumps(pantallas_from_form(form), ensure_ascii=False)
+        if preset_key == BUSQUEDA_MEDIOS_KEY:
+            if form.get('bm_api_key') is not None:
+                key = busqueda_medios_from_form(form).get('api_key') or ''
+                if not key.strip():
+                    return None, 'Las claves de búsqueda de medios (tmdb:, etc.) son obligatorias.'
+                text = json.dumps(busqueda_medios_from_form(form), ensure_ascii=False)
+            elif not text:
+                text = json.dumps(copy.deepcopy(BUSQUEDA_MEDIOS_DEFAULT), ensure_ascii=False)
+        if preset_key == DRIVE_FOTOS_PELICULAS_KEY:
+            if form.get('df_api_key') is not None:
+                data = drive_fotos_from_form(form)
+                if not (data.get('api_key') or '').strip():
+                    return None, 'El JSON de la cuenta de servicio Google (Drive) es obligatorio.'
+                if not (data.get('api_url') or '').strip():
+                    return None, 'El ID de carpeta de Drive es obligatorio.'
+                photos = (data.get('drive_subtitle_photos') or '').strip()
+                videos = (data.get('drive_subtitle_videos') or '').strip()
+                if not photos and not videos:
+                    return None, 'Indica al menos un subtítulo para fotos o para videos.'
+                text = json.dumps(data, ensure_ascii=False)
+            elif not text:
+                text = json.dumps(copy.deepcopy(DRIVE_FOTOS_DEFAULT), ensure_ascii=False)
         return {'title': title, 'text': text, 'preset_key': preset_key}, None
 
     if not title or not text:

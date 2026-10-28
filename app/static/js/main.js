@@ -60,6 +60,160 @@ document.addEventListener("DOMContentLoaded", function () {
     return csrfMeta ? csrfMeta.getAttribute("content") : "";
   }
 
+  function hexToRgb(hex) {
+    let h = String(hex || "").trim().replace("#", "");
+    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+    return [
+      parseInt(h.slice(0, 2), 16),
+      parseInt(h.slice(2, 4), 16),
+      parseInt(h.slice(4, 6), 16)
+    ];
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h = 0;
+    let s = 0;
+    const l = (max + min) / 2;
+    const d = max - min;
+    if (d !== 0) {
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h /= 6;
+    }
+    return [h, s, l];
+  }
+
+  function hslToHex(h, s, l) {
+    const hue = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    let r;
+    let g;
+    let b;
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue(p, q, h + 1 / 3);
+      g = hue(p, q, h);
+      b = hue(p, q, h - 1 / 3);
+    }
+    const to = (v) => Math.round(v * 255).toString(16).padStart(2, "0");
+    return "#" + to(r) + to(g) + to(b);
+  }
+
+  function normalizeHue(h) {
+    let x = h % 1;
+    if (x < 0) x += 1;
+    return x;
+  }
+
+  function hueDistance(a, b) {
+    const d = Math.abs(a - b);
+    return Math.min(d, 1 - d);
+  }
+
+  /** Tono noble/profesional: navy, índigo y acero (menos violeta claro). */
+  function masculineHue(h, sat) {
+    let hue = normalizeHue(h);
+    if (sat < 0.1) return 0.62;
+    if (hue > 0.68 && hue < 0.92) {
+      hue = hue * 0.55 + 0.62 * 0.45;
+    } else if (hue >= 0.52 && hue <= 0.68) {
+      hue = hue * 0.88 + 0.58 * 0.12;
+    } else if (hue > 0.92 || hue < 0.45) {
+      hue = 0.58;
+    }
+    return normalizeHue(hue);
+  }
+
+  function harmonizeServiceColors(c1, c2) {
+    const rgb1 = hexToRgb(c1);
+    const rgb2 = hexToRgb(c2);
+    if (!rgb1) {
+      return { deep: "#0f172a", mid: "#1e3a8a", accent: "#2563eb", ring: "#64748b" };
+    }
+    const hsl1 = rgbToHsl(rgb1[0], rgb1[1], rgb1[2]);
+    let hue = hsl1[0];
+    let sat = Math.min(0.58, Math.max(hsl1[1] * 0.92, 0.32));
+    if (rgb2) {
+      const hsl2 = rgbToHsl(rgb2[0], rgb2[1], rgb2[2]);
+      if (hsl2[1] > 0.08) {
+        if (hueDistance(hsl1[0], hsl2[0]) < 0.14) {
+          hue = normalizeHue(hsl1[0] + 0.02);
+          sat = Math.min(0.55, Math.max(hsl1[1], hsl2[1]) * 0.88);
+        } else {
+          hue = normalizeHue((hsl1[0] + hsl2[0]) / 2);
+          sat = Math.min(0.56, (hsl1[1] + hsl2[1]) / 2 * 0.9);
+        }
+      }
+    }
+    hue = masculineHue(hue, sat);
+    sat = Math.min(0.54, Math.max(sat, 0.34));
+    const deep = hslToHex(hue, sat, 0.17);
+    const mid = hslToHex(normalizeHue(hue + 0.015), Math.min(0.52, sat + 0.04), 0.24);
+    const accent = hslToHex(normalizeHue(hue + 0.03), Math.min(0.5, sat + 0.02), 0.3);
+    const ring = hslToHex(0.58, 0.12, 0.52);
+    return { deep, mid, accent, ring };
+  }
+
+  function serviceGradient(c1, c2, deepOverride) {
+    const palette = harmonizeServiceColors(c1, c2);
+    const deep = deepOverride || palette.deep;
+    return (
+      "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 32%, rgba(0,0,0,0.35) 100%), " +
+      "linear-gradient(125deg, " +
+      deep +
+      " 0%, " +
+      palette.mid +
+      " 55%, " +
+      palette.accent +
+      " 100%)"
+    );
+  }
+
+  function applyServiceButtonColors(button, c1, c2, deepOverride) {
+    const palette = harmonizeServiceColors(c1, c2);
+    const deep = deepOverride || palette.deep;
+    button.style.setProperty("--btn-bg-color", deep);
+    button.style.setProperty("--btn-gradient-color", palette.accent);
+    button.style.setProperty("--btn-ring-color", palette.ring);
+    button.style.setProperty("background", serviceGradient(c1, c2, deepOverride));
+  }
+
+  function readUiColor(name, fallback) {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+    const value = (raw || "").trim();
+    return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+  }
+
+  function applyUiChromeGradients() {
+    const root = document.documentElement;
+    const static1 = readUiColor("--ui-static-1", "#1e3a8a");
+    const static2 = readUiColor("--ui-static-2", "#2563eb");
+    const click1 = readUiColor("--ui-click-1", "#172554");
+    const click2 = readUiColor("--ui-click-2", "#1e40af");
+    const clickDark = readUiColor("--ui-click-dark", "#0f172a");
+    root.style.setProperty("--ui-static-bg", serviceGradient(static1, static2));
+    root.style.setProperty("--ui-click-bg", serviceGradient(click1, click2, clickDark));
+  }
+  window.applyUiChromeGradients = applyUiChromeGradients;
+  applyUiChromeGradients();
+
   // --- INICIO: Lógica movida de search.html --- 
 
   // Aplica el degradado de colores a los botones de servicio desde data-attributes
@@ -70,17 +224,13 @@ document.addEventListener("DOMContentLoaded", function () {
     
     // Usar CSS variables para cumplir CSP estricto (valores dinámicos de datos)
     if (bgColor && gradientColor) {
-      // Aplicar degradado usando CSS variables
-      button.style.setProperty('--btn-bg-color', bgColor);
-      button.style.setProperty('--btn-gradient-color', gradientColor);
-      button.style.setProperty('background', 'linear-gradient(135deg, var(--btn-bg-color) 0%, var(--btn-gradient-color) 100%)');
+      applyServiceButtonColors(button, bgColor, gradientColor);
     } else if (bgColor) {
       // Fallback a color sólido si solo hay bgColor
       button.style.setProperty('--btn-bg-color', bgColor);
       button.style.setProperty('background-color', 'var(--btn-bg-color)');
     } else {
-      // Fallback completo si no hay colores definidos
-      button.style.setProperty('background', 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)');
+      applyServiceButtonColors(button, "#1e3a8a", "#2563eb");
     }
   });
 
@@ -226,35 +376,38 @@ document.addEventListener("DOMContentLoaded", function () {
             // Aplicar todos los estilos necesarios (CSP compliant)
             div.style.setProperty('color', '#fff');
             div.style.setProperty('border', 'none');
-            div.style.setProperty('border-radius', '20px');
+            div.style.setProperty('border-radius', '16px');
             div.style.setProperty('font-size', '1rem');
-            div.style.setProperty('margin', '0.2rem 0px');
-            div.style.setProperty('padding', '0.5rem 1rem');
+            div.style.setProperty('margin', '0.05rem 0');
+            div.style.setProperty('padding', '0.22rem 0.7rem');
             div.style.setProperty('word-wrap', 'break-word');
             div.style.setProperty('display', 'flex');
             div.style.setProperty('align-items', 'center');
-            div.style.setProperty('gap', '0.1rem');
+            div.style.setProperty('gap', '0.45rem');
         } catch (styleErr) {
             div.style.setProperty('background-color', '#888');
             div.style.setProperty('color', '#fff');
             div.style.setProperty('border', 'none');
-            div.style.setProperty('border-radius', '20px');
+            div.style.setProperty('border-radius', '16px');
             div.style.setProperty('font-size', '1rem');
-            div.style.setProperty('margin', '0.2rem 0px');
-            div.style.setProperty('padding', '0.5rem 1rem');
+            div.style.setProperty('margin', '0.05rem 0');
+            div.style.setProperty('padding', '0.22rem 0.7rem');
             div.style.setProperty('word-wrap', 'break-word');
             div.style.setProperty('display', 'flex');
             div.style.setProperty('align-items', 'center');
-            div.style.setProperty('gap', '0.1rem');
+            div.style.setProperty('gap', '0.45rem');
         }
 
         if (al.alias_icons && al.alias_icons.length > 0) {
+          const iconWrap = document.createElement("span");
+          iconWrap.className = "alias-popup-icons";
           al.alias_icons.forEach(iconName => {
             const img = document.createElement("img");
             img.src = decideIconPath(iconName);
             img.classList.add("alias-icon-img");
-            div.appendChild(img);
+            iconWrap.appendChild(img);
           });
+          div.appendChild(iconWrap);
         }
         const textSpan = document.createElement("span");
         textSpan.textContent = al.alias_name;
@@ -270,6 +423,21 @@ document.addEventListener("DOMContentLoaded", function () {
       aliasPopupOverlay.classList.add('d-block');
     }
     if(popup) popup.classList.add('popup-visible');
+    requestAnimationFrame(function () {
+      stackAliasIconsWhenTextWraps(listContainer);
+    });
+  }
+
+  function stackAliasIconsWhenTextWraps(listContainer) {
+    if (!listContainer || !window.matchMedia("(max-width: 700px)").matches) return;
+    listContainer.querySelectorAll(".alias-popup-item").forEach(function (item) {
+      const wrap = item.querySelector(".alias-popup-icons");
+      const text = item.querySelector(":scope > span");
+      if (!wrap || !text || wrap.children.length < 2) return;
+      const lineHeight = parseFloat(window.getComputedStyle(text).lineHeight) || 18;
+      const lines = text.getBoundingClientRect().height / lineHeight;
+      if (lines > 3.15) item.classList.add("alias-icons-stacked");
+    });
   }
 
   // Botón "Volver a Búsqueda" (si existe en la página actual - login o user_login)
@@ -334,8 +502,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Función para aplicar efecto de clic persistente
   function applyClickEffect(button) {
-    const clickColor1 = button.dataset.clickColor1 || '#031faa';
-    const clickColor2 = button.dataset.clickColor2 || '#031faa';
+    const clickColor1 = button.dataset.clickColor1 || '#172554';
+    const clickColor2 = button.dataset.clickColor2 || '#1e40af';
     
     // Restaurar el botón anteriormente seleccionado a su estado normal
     if (currentSelectedButton && currentSelectedButton !== button) {
@@ -343,9 +511,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     
     // Aplicar colores de clic persistentes al botón actual usando CSS variables
-    button.style.setProperty('--click-color1', clickColor1);
-    button.style.setProperty('--click-color2', clickColor2);
-    button.style.setProperty('background', 'linear-gradient(135deg, var(--click-color1) 0%, var(--click-color2) 100%)');
+    applyServiceButtonColors(button, clickColor1, clickColor2, readUiColor("--ui-click-dark", "#0f172a"));
     button.classList.add('service-btn-selected');
     
     // Actualizar el botón actualmente seleccionado
@@ -354,12 +520,10 @@ document.addEventListener("DOMContentLoaded", function () {
   
   // Función para restaurar un botón a su estado normal
   function restoreButtonToNormal(button) {
-    const originalBgColor = button.dataset.bgColor || '#764ba2';
-    const originalGradientColor = button.dataset.gradientColor || '#667eea';
+    const originalBgColor = button.dataset.bgColor || '#1e3a8a';
+    const originalGradientColor = button.dataset.gradientColor || '#2563eb';
     
-    button.style.setProperty('--btn-bg-color', originalBgColor);
-    button.style.setProperty('--btn-gradient-color', originalGradientColor);
-    button.style.setProperty('background', 'linear-gradient(135deg, var(--btn-bg-color) 0%, var(--btn-gradient-color) 100%)');
+    applyServiceButtonColors(button, originalBgColor, originalGradientColor);
     button.classList.remove('service-btn-selected');
   }
 

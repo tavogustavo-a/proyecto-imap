@@ -2,7 +2,7 @@
 
 {% block title %}Tienda Pública{% endblock %}
 
-{% block head %}{{ super() }}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260726-store-alert-modal"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261028-product-icon-black"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/chat_soporte.css') }}"><meta name="csrf_token" content="{{ csrf_token() }}">{% endblock %}
 {% block content %}
 {% set store_can_buy = current_user and not (store_view_only|default(false)) %}
 <div class="container container-max-width-900 store-light store-front-main">

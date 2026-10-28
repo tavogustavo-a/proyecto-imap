@@ -1825,19 +1825,6 @@ def get_tools_resources_ajax():
                 "enabled": enabled,
                 "user_ids": youtube_users.get(yt_id, []),
             })
-        for api_id, title, enabled in (
-            db.session.query(ApiInfo.id, ApiInfo.title, ApiInfo.enabled)
-            .order_by(ApiInfo.id.desc())
-            .all()
-        ):
-            resources.append({
-                "id": api_id,
-                "type": "api",
-                "title": title,
-                "category": "Lista de Creación de APIs",
-                "enabled": enabled,
-                "user_ids": api_users.get(api_id, []),
-            })
 
         return jsonify({
             "status": "ok",

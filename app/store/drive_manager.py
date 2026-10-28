@@ -30,6 +30,7 @@ def ensure_drive_telegram_columns() -> None:
         cols = {c['name'] for c in inspector.get_columns('drive_transfers')}
         additions = [
             ('telegram_group_id', 'ALTER TABLE drive_transfers ADD COLUMN telegram_group_id VARCHAR(32)'),
+            ('telegram_topic_id', 'ALTER TABLE drive_transfers ADD COLUMN telegram_topic_id VARCHAR(32)'),
             ('telegram_send_problems', 'ALTER TABLE drive_transfers ADD COLUMN telegram_send_problems TEXT'),
         ]
         for name, ddl in additions:

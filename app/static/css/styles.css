@@ -1,5 +1,15 @@
 /* app/static/css/styles.css */
 
+:root {
+  --ui-static-1: #1e3a8a;
+  --ui-static-2: #2563eb;
+  --ui-click-1: #172554;
+  --ui-click-2: #1e40af;
+  --ui-click-dark: #0f172a;
+  --ui-static-bg: linear-gradient(135deg, var(--ui-static-1) 0%, var(--ui-static-2) 100%);
+  --ui-click-bg: linear-gradient(135deg, var(--ui-click-dark) 0%, var(--ui-click-1) 46%, var(--ui-click-2) 100%);
+}
+
 /* ================== RESET & BASE ================== */
 html, body {
   width: 100%;
@@ -456,14 +466,14 @@ input[type="submit"],
 
 /* ========== Botones y estilos de busqueda ========== */
 .btn-search {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
   color: #fff !important;
   font-weight: 600 !important;
   border-radius: 30px !important;
   font-size: 0.9rem !important;
-  border: 2px solid #1e88e5 !important;
+  border: 2px solid var(--ui-static-1) !important;
   height: 35px !important;
-  box-shadow: 0 2px 6px rgba(33,150,243,0.08);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
   padding: 0.4rem 1.1rem;
 }
 
@@ -510,31 +520,36 @@ input[type="submit"],
   border: 2px solid;
 }
 .btn-blue {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
   color: #fff !important;
-  border-color: #0d6efd !important;
+  border-color: var(--ui-static-1) !important;
 }
-.btn-blue:hover {
-  background: #1256a6 !important;
-  border-color: #1256a6 !important;
+.btn-blue:hover,
+.btn-blue:active,
+.btn-blue:focus-visible {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+  color: #fff !important;
 }
 
 .btn-grey {
-  /* Mismo gradiente que los botones de servicio */
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
   border: none !important;
   color: white !important;
   padding: 0.4rem 0.8rem !important;
   border-radius: 20px !important;
   font-weight: 600 !important;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
+  box-shadow: 0 4px 15px rgba(15, 23, 42, 0.28) !important;
   transition: all 0.3s ease !important;
   cursor: pointer !important;
 }
 
-.btn-grey:hover {
+.btn-grey:hover,
+.btn-grey:active {
+  background: var(--ui-click-bg) !important;
+  color: #fff !important;
   transform: translateY(-1px) scale(1.02) !important;
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5) !important;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.4) !important;
 }
 
 .btn-grey:active {
@@ -1492,9 +1507,13 @@ noscript p {
   display: block !important;
 }
 
-#aliasPopup button,
+#aliasPopup button:not(.alias-popup-close),
 #editAliasPopup button {
   margin: 0.5rem 0.25rem !important;
+}
+
+#aliasPopup .alias-popup-close {
+  margin: 0 !important;
 }
 /* Pantallas grandes - mantener el dise�o de dos l�neas */
 @media (min-width: 768px) {
@@ -2189,98 +2208,111 @@ noscript p {
 
 .service-btn {
   position: relative;
-  border: none;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(2, 6, 23, 0.45);
   cursor: pointer;
-  color: #fff;
+  color: #e2e8f0;
   outline: none;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 1rem;
+  gap: 0.45rem;
+  font-size: 0.97rem;
   margin: 0;
   width: 100%;
   text-align: left;
-  border-radius: 30px;
+  border-radius: 26px;
   height: 3.5rem;
-  padding: 0 1rem;
+  padding: 0 1rem 0 0;
   overflow: hidden;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(10px);
-  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  font-weight: 700;
+  letter-spacing: 0.025em;
   /* El background-color se aplica inline en la plantilla */
 }
 
-/* Efecto shimmer/brillo sutil */
-.service-btn::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-  transform: translateX(-100%) translateY(-100%) rotate(45deg);
-  pointer-events: none;
+.service-btn:not(:has(> img)) {
+  padding-left: 1rem;
 }
 
-/* Hover effects */
+/* Sin animación de brillo al pasar el mouse */
+.service-btn::before {
+  display: none;
+}
+
 .service-btn:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
-  filter: brightness(1.1) saturate(1.1);
+  transform: none;
+  filter: none;
 }
 
 .service-btn:hover::before {
-  transform: translateX(100%) translateY(100%) rotate(45deg);
+  display: none;
 }
 
-/* Active/Click effect */
 .service-btn:active {
-  transform: translateY(0) scale(0.98);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  transform: none;
 }
 
 /* Estilo para bot�n de servicio seleccionado (persistente) */
 .service-btn-selected {
-  transform: translateY(0) scale(0.98) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
-  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  transform: none !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(2, 6, 23, 0.45) !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
   position: relative;
   z-index: 2;
 }
 
 .service-btn-selected::after {
-  content: "\2713";
+  content: "";
   position: absolute;
-  top: 5px;
-  right: 8px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  font-weight: bold;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  top: 0.2rem;
+  right: 0.78rem;
+  width: 0.55rem;
+  height: 0.95rem;
+  border: solid #fff;
+  border-width: 0 0.28rem 0.28rem 0;
+  transform: rotate(45deg);
+  box-sizing: border-box;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
   pointer-events: none;
-  line-height: 1;
+  z-index: 3;
 }
 
-/* Focus effect para accesibilidad */
-.service-btn:focus {
-  outline: 3px solid rgba(255, 255, 255, 0.3);
-  outline-offset: 2px;
+.service-btn-selected .info-icon {
+  margin-top: 0.35rem;
+}
+
+.service-btn:focus,
+.service-btn:focus-visible {
+  outline: none;
 }
 
 .service-btn img {
-  height: 2.2rem;
+  height: calc(100% - 0.42rem);
   width: auto;
-  object-fit: contain;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 0.2rem;
+  border-radius: 50%;
   vertical-align: middle;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3));
+  box-shadow:
+    0 0 0 2px var(--btn-ring-color, rgba(100, 116, 139, 0.85)),
+    0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.service-btn img + img {
+  margin-left: -0.7rem;
 }
 
 /* Efecto en las im�genes cuando se hace hover en el bot�n */
 .service-btn:hover img {
-  transform: scale(1.1);
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+  transform: none;
 }
 
 .info-icon {
@@ -2288,6 +2320,8 @@ noscript p {
   font-size: 1.4rem;
   cursor: pointer;
   user-select: none;
+  position: relative;
+  z-index: 1;
 }
 
 
@@ -2395,20 +2429,52 @@ noscript p {
   background: #fff;
   border: none; /* Sin borde negro */
   border-radius: 12px;
-  padding: 1.5rem;
-  padding-top: 2.5rem; /* Espacio extra arriba para la X */
+  padding: 2.15rem 0.45rem 0.45rem 0.45rem;
   z-index: 9999;
-  max-width: 600px;
-  width: 90%;
+  width: max-content;
+  max-width: min(94vw, 720px);
+  min-width: 0;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  max-height: 80vh;
+  max-height: 86vh;
+  overflow-x: hidden;
   overflow-y: auto;
-  color: #111; /* Color por defecto para el texto del popup */
+  scrollbar-width: none;
+  color: #111;
+  box-sizing: border-box;
+}
+
+#aliasPopup::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 /* Asegurar que el contenedor de lista no herede colores que afecten los items */
 #aliasListContainer {
-  color: inherit; /* Heredar del popup, pero los items lo sobrescriben con !important */
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+body:not(.edit-service-page) #aliasPopup #aliasListContainer .alias-popup-item {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: 0.08rem !important;
+  margin-bottom: 0.08rem !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+body:not(.edit-service-page) #aliasPopup #aliasListContainer .alias-popup-item:first-child {
+  margin-top: 0 !important;
+}
+
+body:not(.edit-service-page) #aliasPopup #aliasListContainer .alias-popup-item:last-child {
+  margin-bottom: 0 !important;
 }
 
 /* Estilos espec�ficos para el popup de alias en edit_service.html */
@@ -2430,28 +2496,31 @@ body .edit-service-page #aliasPopup {
   width: auto !important;
 }
 
-#aliasPopup .alias-popup-close { /* Selector m�s espec�fico */
+#aliasPopup .alias-popup-close {
   position: absolute;
-  top: 10px;
-  right: 15px;
-  color: #ff0b0b;
-  border: none;
+  top: 6px;
+  right: 8px;
+  width: 1.35rem;
+  height: 1.35rem;
+  color: #fff;
+  background: #e11d2e;
+  border: 2px solid #e11d2e;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
   line-height: 1;
   padding: 0;
+  z-index: 2;
 }
 
 #aliasPopup .alias-popup-close:hover {
-  background: rgba(255, 0, 0, 0.1);
-  color: #c00;
-  transform: scale(1.1);
+  background: #b91322;
+  border-color: #b91322;
+  color: #fff;
 }
 
 /* Mostrar el modal cuando tiene la clase popup-visible */
@@ -2487,8 +2556,8 @@ body .edit-service-page #aliasPopup {
   #aliasPopup,
   #aliasPopup.popup-visible,
   #aliasPopup[style*="display: block"] {
-    max-width: 87% !important; /* Aumentado para m�s ancho en m�vil */
-    width: 87% !important; /* Asegurar que use el ancho completo disponible */
+    max-width: min(94vw, 720px) !important;
+    width: max-content !important;
     position: fixed !important;
     top: 50% !important;
     left: 50% !important;
@@ -2505,18 +2574,13 @@ body .edit-service-page #aliasPopup {
     /* Eliminado flex y max-width para que hereden el 100% de ancho */
   } 
   
-  /* Efectos m�s suaves en m�vil para botones de servicios */
+  /* Botones de servicio en móvil: sin animación al hover */
   .service-btn:hover {
-    transform: translateY(-1px) scale(1.01);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    transform: none;
   }
-  
+
   .service-btn:active {
-    transform: translateY(0) scale(0.99);
-  }
-  
-  .service-btn:hover img {
-    transform: scale(1.05);
+    transform: none;
   }
 }
 
@@ -2767,11 +2831,28 @@ body .edit-service-page #aliasPopup {
   display: flex;
   justify-content: center;
   width: 100%;
+  margin-top: 0.45rem !important;
+}
+
+.edit-service-page #editServiceDescripcionesCard {
+  padding: 0.5rem 0.6rem 0.48rem !important;
+}
+
+.edit-service-page #editServiceDescripcionesCard .edit-service-descripciones-title {
+  margin-bottom: 0.4rem;
+}
+
+.edit-service-page #editServiceAliasesList .alias-list-item {
+  margin-bottom: 0;
+  padding-left: 0;
+  border-bottom: none;
 }
 
 .edit-service-page .alias-card {
   text-align: center;
   transition: none !important;
+  padding: 0.42rem 0.48rem !important;
+  margin-bottom: 0.38rem !important;
 }
 
 .edit-service-page .alias-card:hover {
@@ -2808,7 +2889,10 @@ body .edit-service-page #aliasPopup {
   justify-content: center !important;
   align-items: center !important;
   flex-wrap: wrap !important;
-  gap: 0.35rem !important;
+  gap: 0.28rem !important;
+  margin-top: 0.32rem !important;
+  padding-top: 0 !important;
+  border-top: none !important;
 }
 
 .edit-service-page .alias-card .alias-action-buttons .ml-05 {
@@ -3344,7 +3428,7 @@ body .edit-service-page #aliasPopup {
 .regex-result-open-link-btn {
   margin-left: 1rem;
   /* Estado normal ahora usa el color que antes ten�a COPIADO */
-  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+  background: var(--ui-static-bg) !important;
   /* Asegurar que no hay efectos de destello */
   overflow: visible !important;
   position: relative !important;
@@ -3353,7 +3437,7 @@ body .edit-service-page #aliasPopup {
 /* Hover para botones regex - usar el color original de COPIAR */
 .regex-result-copy-btn:hover,
 .regex-result-open-link-btn:hover {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
 }
 
 /* Los efectos hover, active y focus ahora se heredan autom�ticamente 
@@ -3380,7 +3464,7 @@ body .edit-service-page #aliasPopup {
 
 /* Bot�n limpiar con mismo estilo que botones de servicio */
 #email-search-clear-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
   border: none !important;
   color: white !important;
   padding: 0.4rem 0.8rem !important;
@@ -3412,7 +3496,7 @@ body .edit-service-page #aliasPopup {
 /* Estado COPIADO - ahora usa el color original de COPIAR */
 .regex-result-copy-btn.copied-state,
 .regex-result-open-link-btn.copied-state {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
   transform: translateY(-1px) scale(1.01) !important;
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
   color: white !important;
@@ -3501,7 +3585,7 @@ body .edit-service-page #aliasPopup {
 .twofa-code-value {
   font-size: 1.8rem;
   font-weight: bold;
-  color: #667eea;
+  color: var(--ui-static-2);
   font-family: 'Courier New', monospace;
   margin-bottom: 0.25rem;
 }
@@ -4105,7 +4189,7 @@ body #popupFilter.popup-base.popup-small {
 }
 
 .service-link-popup-list-item.is-selected {
-  background: linear-gradient(135deg, #667eea 0%, #2196f3 100%) !important;
+  background: var(--ui-static-bg) !important;
   color: #fff !important;
 }
 
@@ -5135,9 +5219,9 @@ a.btn-search.btn-rounded:hover {
   line-height: 1.15 !important;
   cursor: pointer !important;
   vertical-align: middle;
-  white-space: normal;
+  white-space: nowrap;
   text-align: center;
-  max-width: min(100%, 10.5rem);
+  max-width: none;
 }
 
 .service-item-container .service-icon-wrapper {
@@ -6159,6 +6243,10 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
   width: 100% !important;
   max-width: none !important;
   flex: 1 !important;
+  box-sizing: border-box !important;
+  min-height: 2.75rem !important;
+  line-height: 1.25 !important;
+  margin: 0 !important;
 }
 
 .search-input:focus {
@@ -6174,7 +6262,7 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
 
 /* Bot�n de b�squeda espec�fico para la p�gina principal de consultas */
 .btn-search-main {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
   border: none !important;
   border-radius: 10px !important;
   padding: 10px 16px !important;
@@ -6190,18 +6278,23 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
   flex-shrink: 0 !important;
   position: relative !important;
   overflow: hidden !important;
-  height: 33px !important;
-  display: flex !important;
+  height: auto !important;
+  min-height: 2.75rem !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  align-self: center !important;
 }
 
 .btn-search-main::before {
   display: none !important;
 }
 
-.btn-search-main:hover {
-  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+.btn-search-main:hover,
+.btn-search-main:active {
+  background: var(--ui-click-bg) !important;
 }
 
 .btn-search-main:hover::before {
@@ -6231,8 +6324,26 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
 
 .search-form-container .d-flex {
   gap: 8px !important;
-  align-items: stretch !important;
+  align-items: center !important;
   flex-wrap: nowrap !important;
+}
+
+/* Input + Buscar en la misma fila (códigos, herramientas, modales) */
+.search-form-container .d-flex.gap-05,
+#ajax-search-form .d-flex,
+.search-page-container .search-form-container .d-flex,
+.media-search-form > .d-flex,
+.media-search-form .d-flex.align-items-center {
+  align-items: center !important;
+}
+
+.search-form-container .d-flex .btn-search-main,
+#ajax-search-form .btn-search-main,
+.media-search-form .btn-search,
+.media-search-form .media-search-btn {
+  align-self: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 /* ===== ESTILOS PROFESIONALES PARA RESULTADOS ===== */
@@ -6452,7 +6563,8 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
     min-width: 75px !important;
     padding: 8px 12px !important;
     font-size: 12px !important;
-    height: 36px !important;
+    min-height: 2.75rem !important;
+    height: auto !important;
   }
 }
 
@@ -6488,7 +6600,8 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
     min-width: 60px !important;
     padding: 2px 7px !important;
     font-size: 9px !important;
-    height: 32px !important;
+    min-height: 2.5rem !important;
+    height: auto !important;
   }
 }
 
@@ -6598,7 +6711,7 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
   height: 28px;
   border-radius: 6px;
   border: 2px solid #d1d5db;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ui-static-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   flex: 0 0 auto;
@@ -6718,14 +6831,15 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
 .alias-popup-item {
   color: #fff !important;
   border: none !important;
-  border-radius: 20px !important;
+  border-radius: 16px !important;
   font-size: 1rem !important;
-  margin: 0.2rem 0px !important;
-  padding: 0.5rem 1rem !important;
+  line-height: 1.25 !important;
+  margin: 0.05rem 0 !important;
+  padding: 0.22rem 0.7rem !important;
   word-wrap: break-word !important;
   display: flex !important;
   align-items: center !important;
-  gap: 0.1rem !important;
+  gap: 0.45rem !important;
   cursor: pointer !important;
 }
 
@@ -6743,14 +6857,15 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
   .alias-popup-item {
     color: #fff !important;
     border: none !important;
-    border-radius: 20px !important;
+    border-radius: 16px !important;
     font-size: 1rem !important;
-    margin: 0.2rem 0px !important;
-    padding: 0.5rem 1rem !important;
+    line-height: 1.25 !important;
+    margin: 0.05rem 0 !important;
+    padding: 0.22rem 0.7rem !important;
     word-wrap: break-word !important;
     display: flex !important;
     align-items: center !important;
-    gap: 0.1rem !important;
+    gap: 0.45rem !important;
     cursor: pointer !important;
   }
   
@@ -6761,21 +6876,47 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
     color: #fff !important;
   }
   
-  /* Estilos para iconos dentro de alias-popup-item en pantallas grandes */
-  #aliasPopup #aliasListContainer .alias-popup-item .alias-icon-img,
-  #aliasPopup .alias-popup-item .alias-icon-img,
-  .alias-popup-item .alias-icon-img {
-    height: 1.9rem !important;
-    margin-right: 0.2rem !important;
-    vertical-align: middle !important;
+}
+
+/* Iconos del modal de descripciones (no como botones de servicio) */
+#aliasPopup #aliasListContainer .alias-popup-item .alias-icon-img,
+#aliasPopup .alias-popup-item .alias-icon-img {
+  height: 1.9rem !important;
+  width: auto !important;
+  max-height: 1.9rem !important;
+  max-width: 1.9rem !important;
+  object-fit: contain !important;
+  flex-shrink: 0 !important;
+  margin-right: 0 !important;
+  vertical-align: middle !important;
+}
+
+#aliasPopup .alias-popup-icons {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.12rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 700px) {
+  #aliasPopup .alias-popup-item.alias-icons-stacked .alias-popup-icons {
+    flex-direction: column;
+    gap: 0.06rem;
+  }
+
+  #aliasPopup .alias-popup-item.alias-icons-stacked .alias-icon-img {
+    height: 1.25rem !important;
+    max-height: 1.25rem !important;
+    max-width: 1.25rem !important;
   }
 }
 
-/* Clases para iconos de alias */
-.alias-icon-img {
-  height: 1.9rem;
-  margin-right: 0.2rem;
-  vertical-align: middle;
+#aliasPopup #aliasListContainer .alias-popup-item span,
+#aliasPopup .alias-popup-item span {
+  line-height: 1.25 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
 }
 
 /* Clases para textarea oculto (copiar al portapapeles) */
@@ -6797,10 +6938,9 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
   color: red;
 }
 
-/* Clases para botones de servicio seleccionados */
+/* Clases para botones de servicio seleccionados (sin contorno extra) */
 .service-btn-selected {
-  transform: scale(0.98);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transform: none;
 }
 
 /* Estilos para labels e inputs peque�os en formulario IMAP2 */
@@ -7491,7 +7631,7 @@ html.usuarios-delete-keyboard-active .usuarios-bulk-emails-section {
   line-height: 1 !important;
   border-radius: 8px !important;
   border: 2px solid #0d6efd !important;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  background: var(--ui-static-bg) !important;
   color: #fff !important;
   text-align: center !important;
 }
@@ -8066,7 +8206,7 @@ body:not(.theme-active) .site-footer__social-config-btn {
 }
 .site-back-link {
   display: inline-block;
-  color: #667eea !important;
+  color: var(--ui-static-2) !important;
   font-weight: 600;
   text-decoration: none;
   font-size: 0.95rem;
@@ -8085,7 +8225,7 @@ body:not(.theme-active) .site-footer__social-config-btn {
 }
 .privacy-page__back {
   display: inline-block;
-  color: #667eea !important;
+  color: var(--ui-static-2) !important;
   font-weight: 600;
   text-decoration: none;
   font-size: 0.95rem;
@@ -8118,7 +8258,7 @@ body:not(.theme-active) .site-footer__social-config-btn {
   padding-left: 1.2rem;
 }
 .privacy-page a {
-  color: #667eea;
+  color: var(--ui-static-2);
   word-break: break-word;
 }
 
@@ -8413,6 +8553,7 @@ body:not(.theme-active) .site-footer__social-config-btn {
 .mobile-menu-store .mobile-menu-btn,
 #mobileMenu .mobile-menu-btn,
 #mobileMenu2 .mobile-menu-btn,
+#mobileMenu3 .mobile-menu-btn,
 #sms-management-container .mobile-menu-btn {
   font-size: 0.92rem !important;
   font-weight: 600 !important;

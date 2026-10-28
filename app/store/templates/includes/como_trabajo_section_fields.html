@@ -1,23 +1,19 @@
 {% set sec = section if section is defined and section else none %}
 <div class="mdp-section-edit ct-section-edit" data-ct-section>
   <div class="mdp-title-row ct-title-edit">
-    {% with mdp_icon_current=(sec.icon if sec and sec.icon else 'none'), mdp_icon_name='ct_icon', mdp_icon_choices=como_trabajo_icons %}
-      {% include 'includes/medios_pago_main_icon_picker.html' %}
-    {% endwith %}
-    <label class="sr-only" data-ct-label="title">Título</label>
-    <input type="text" name="ct_title" class="form-control" data-ct-field="title" placeholder="Título" value="{{ sec.title if sec else '' }}" autocomplete="off" maxlength="160">
-    <label class="sr-only" data-ct-label="color">Color del título</label>
-    <input type="color" name="ct_color" data-ct-field="color" value="{{ sec.color if sec else '#1e88e5' }}" title="Color del título">
+    <label class="sr-only" data-ct-label="title">Título de la sección</label>
+    <input type="text" name="ct_title" class="form-control" data-ct-field="title" placeholder="Título de la sección (ej. Comunicación)" value="{{ sec.title if sec else '' }}" autocomplete="off" maxlength="160">
+    <div class="ct-title-actions">
+      {% with mdp_icon_current=(sec.icon if sec and sec.icon else 'none'), mdp_icon_name='ct_icon', mdp_icon_choices=como_trabajo_icons %}
+        {% include 'includes/medios_pago_main_icon_picker.html' %}
+      {% endwith %}
+      <label class="sr-only" data-ct-label="color">Color del título</label>
+      <input type="color" name="ct_color" data-ct-field="color" value="{{ sec.color if sec else '#1e88e5' }}" title="Color del título">
+      <button type="button" class="mdp-remove-x" data-ct-remove aria-label="Eliminar sección" title="Eliminar sección">&times;</button>
+    </div>
   </div>
   <div class="ct-field-block ct-field-subs">
-    <label class="sr-only" data-ct-label="subtitles">Subtítulos</label>
-    <textarea name="ct_subtitles" class="form-control" data-ct-field="subtitles" rows="3" placeholder="Subtítulos, uno por línea (opcional)" autocomplete="off">{% if sec %}{{ sec.subtitles | join('\n') }}{% endif %}</textarea>
-  </div>
-  <div class="mdp-url-row ct-desc-row ct-field-block ct-field-desc">
-    <div class="ct-desc-fields">
-      <label class="sr-only" data-ct-label="description">Descripción</label>
-      <textarea name="ct_description" class="form-control" data-ct-field="description" rows="2" placeholder="Descripción (opcional)" autocomplete="off">{% if sec %}{{ sec.description }}{% endif %}</textarea>
-    </div>
-    <button type="button" class="mdp-remove-x" data-ct-remove aria-label="Eliminar título" title="Eliminar título">&times;</button>
+    <label class="sr-only" data-ct-label="subtitles">Contenido</label>
+    <textarea name="ct_subtitles" class="form-control" data-ct-field="subtitles" rows="3" placeholder="Contenido, uno por línea" autocomplete="off">{% if sec %}{{ sec.subtitles | join('\n') }}{% endif %}</textarea>
   </div>
 </div>

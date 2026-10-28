@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const destinationId = document.getElementById('drive-destination').value;
         const deletedId = document.getElementById('drive-deleted').value || ''; // Campo opcional
         const telegramGroup = document.getElementById('drive-telegram-group') ? document.getElementById('drive-telegram-group').value || '' : '';
+        const telegramTopic = document.getElementById('drive-telegram-topic') ? document.getElementById('drive-telegram-topic').value || '' : '';
         const processingTime = document.getElementById('drive-processing-time').value;
         
         const data = {
@@ -33,6 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
             drive_destination: destinationId,
             drive_deleted: deletedId,
             drive_telegram_group: telegramGroup,
+            drive_telegram_topic: telegramTopic,
             drive_processing_time: processingTime
         };
         
@@ -79,6 +81,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('drive_destination', data.drive_destination);
             formData.append('drive_deleted', data.drive_deleted);
             formData.append('drive_telegram_group', data.drive_telegram_group || '');
+            formData.append('drive_telegram_topic', data.drive_telegram_topic || '');
             formData.append('drive_processing_time', data.drive_processing_time);
             
             
@@ -601,6 +604,8 @@ window.editDriveTransfer = async function(transferId) {
         document.getElementById('edit-drive-deleted').value = transfer.drive_deleted_id || '';
         const editGroup = document.getElementById('edit-drive-telegram-group');
         if (editGroup) editGroup.value = transfer.telegram_group_id || '';
+        const editTopic = document.getElementById('edit-drive-telegram-topic');
+        if (editTopic) editTopic.value = transfer.telegram_topic_id || '';
         
         // Mostrar intervalo tal como está (ej: "5H", "10M")
         document.getElementById('edit-drive-processing-time').value = transfer.processing_time || '';
@@ -760,6 +765,7 @@ function setupDriveEditModal() {
             formData.append('drive_destination', data.drive_destination);
             formData.append('drive_deleted', data.drive_deleted);
             formData.append('drive_telegram_group', data.drive_telegram_group || '');
+            formData.append('drive_telegram_topic', data.drive_telegram_topic || '');
             formData.append('drive_processing_time', data.drive_processing_time);
             
             

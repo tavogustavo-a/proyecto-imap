@@ -23,8 +23,8 @@
       <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
       <select name="image_filename" id="imageSelect" class="visually-hidden-select edit-product-image-select" autocomplete="off">
         <option value="none" {% if product.image_filename == 'none' %}selected{% endif %}>Ninguno</option>
-        {% for img in range(1,42) %}
-          <option value="stream{{ img }}.png" {% if product.image_filename == 'stream' ~ img ~ '.png' %}selected{% endif %}>stream{{ img }}.png</option>
+        {% for img_name in stream_icon_files %}
+          <option value="{{ img_name }}" {% if product.image_filename == img_name %}selected{% endif %}>{{ img_name }}</option>
         {% endfor %}
       </select>
       <button type="button" id="imageSelectTrigger" class="image-select-trigger-btn edit-product-image-select">Seleccionar Imagen</button>
@@ -47,4 +47,4 @@
   </form>
 </div>
 {% endblock %}
-{% block scripts %}{{ super() }}<script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20261018-toggle-now" defer></script>{% endblock %} 
+{% block scripts %}{{ super() }}<script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20261027-stream-icons" defer></script>{% endblock %} 

@@ -416,6 +416,7 @@ class DriveTransfer(db.Model):
     drive_processed_id = db.Column(db.String(128), nullable=False)
     drive_deleted_id = db.Column(db.String(128), nullable=True)  # Carpeta para archivos eliminados
     telegram_group_id = db.Column(db.String(32), nullable=True)
+    telegram_topic_id = db.Column(db.String(32), nullable=True)
     telegram_send_problems = db.Column(db.Text, nullable=True)
     processing_time = db.Column(db.String(20), nullable=False)  # Intervalo: "5h" o "10m" (horas o minutos)
     is_active = db.Column(db.Boolean, default=True, nullable=False)

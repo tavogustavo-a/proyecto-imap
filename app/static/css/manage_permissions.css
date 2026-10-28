@@ -42,7 +42,7 @@
 }
 
 .permissions-table thead {
-  background: #667eea;
+  background: var(--ui-static-1);
   color: white;
 }
 
@@ -58,7 +58,7 @@
 }
 
 .permissions-table th:first-child {
-  background: #667eea;
+  background: var(--ui-static-1);
   text-align: left;
   white-space: nowrap;
   max-width: none;
@@ -97,7 +97,7 @@
 }
 
 .permission-group-header {
-  background: #764ba2;
+  background: var(--ui-static-2);
   color: white;
   font-weight: 600;
   text-align: center;
@@ -132,7 +132,7 @@
 .stat-value-inline {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #667eea;
+  color: var(--ui-static-2);
 }
 
 .search-input-wrapper {
@@ -220,7 +220,7 @@
 .stat-value {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #667eea;
+  color: var(--ui-static-2);
 }
 
 /* Estilos específicos para la tabla de recursos */
@@ -260,7 +260,7 @@
 }
 
 #user-prices-table thead {
-  background: #667eea;
+  background: var(--ui-static-1);
   color: white;
 }
 
@@ -276,7 +276,7 @@
 }
 
 #user-prices-table th:first-child {
-  background: #667eea;
+  background: var(--ui-static-1);
   text-align: left;
   white-space: nowrap;
   max-width: none;
@@ -481,7 +481,7 @@ button.info-icon.info-icon-square {
 
 .td-final-price {
   font-weight: 600;
-  color: #667eea;
+  color: var(--ui-static-2);
 }
 
 /* Estilos para el modal de añadir saldo */
@@ -577,7 +577,7 @@ button.info-icon.info-icon-square {
 
 .modal-balance-content .form-control:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--ui-static-2);
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -983,7 +983,7 @@ button.info-icon.info-icon-square {
 }
 
 .action-blue {
-  background-color: #667eea;
+  background-color: var(--ui-static-2);
   color: white;
 }
 

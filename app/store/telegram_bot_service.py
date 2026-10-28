@@ -28,6 +28,7 @@ _BTN_PAGOS = 'Medios De Pago Que Recibo'
 _BTN_TRABAJO = 'Cómo trabajo — Guía rápida'
 _BTN_PANTALLAS = 'Foto de pantallas, perfiles, links de tv'
 _BTN_AD = 'Link de publicidad'
+_CODES_SECTION_TITLE = 'Página de códigos'
 _MENU_TEXT_LIMIT = 4000
 _REPEAT_SECONDS = 120
 _recent_button_sends = {}
@@ -35,6 +36,8 @@ _recent_button_lock = threading.Lock()
 _CODE_FIELD = 'correo@dominio.com'
 _pending_code_search = {}
 _pending_code_lock = threading.Lock()
+_code_email_by_chat = {}
+_code_email_lock = threading.Lock()
 
 _schema_ready = False
 _detail_lock = threading.Lock()
@@ -802,6 +805,16 @@ def validate_chat_id(raw: str | None) -> tuple[str, str | None]:
     return chat_id, None
 
 
+def validate_topic_id(raw: str | None) -> tuple[str, str | None]:
+    """ID de tema de foro (message_thread_id): numérico corto, p. ej. 5811."""
+    topic_id = normalize_chat_id(raw)
+    if not topic_id:
+        return '', None
+    if not topic_id.isdigit():
+        return topic_id, 'El ID del tema debe ser numérico, por ejemplo 5811.'
+    return topic_id, None
+
+
 def humanize_telegram_chat_error(description: str | None) -> str:
     low = (description or '').strip().lower()
     if low in ('', 'network'):
@@ -1058,8 +1071,51 @@ def _code_service_by_id(service_id: int):
     return None
 
 
+def _html_preset_menu_defaults() -> list:
+    """Un botón por cada HTML habilitado de pantallas / medios / cómo trabajo."""
+    from app.store.html_presets import (
+        COMO_TRABAJO_KEY,
+        FOTO_PANTALLAS_KEY,
+        MEDIOS_DE_PAGO_KEY,
+        html_preset_label,
+    )
+    from app.store.models import HtmlInfo
+
+    order = (FOTO_PANTALLAS_KEY, MEDIOS_DE_PAGO_KEY, COMO_TRABAJO_KEY)
+    try:
+        rows = (
+            HtmlInfo.query
+            .filter(
+                HtmlInfo.enabled.is_(True),
+                HtmlInfo.preset_key.in_(order),
+            )
+            .order_by(HtmlInfo.id.asc())
+            .all()
+        )
+    except Exception:
+        logger.exception('telegram html presets menu')
+        return []
+    rank = {key: index for index, key in enumerate(order)}
+    rows = sorted(rows, key=lambda row: (rank.get(row.preset_key, 99), row.id or 0))
+    fallback = {
+        FOTO_PANTALLAS_KEY: _BTN_PANTALLAS,
+        MEDIOS_DE_PAGO_KEY: _BTN_PAGOS,
+        COMO_TRABAJO_KEY: _BTN_TRABAJO,
+    }
+    items = []
+    for row in rows:
+        label = (
+            (row.title or '').strip()
+            or fallback.get(row.preset_key)
+            or html_preset_label(row.preset_key)
+            or f'HTML {row.id}'
+        )
+        items.append((f'html:{int(row.id)}', label[:64]))
+    return items
+
+
 def _menu_button_defaults() -> list:
-    """Botones fijos y, en medio, los servicios de la página de códigos."""
+    """Botones fijos, HTMLs de plantilla y, al final, los servicios de códigos."""
     head = [
         ('id', _BTN_ID),
         ('prices', _BTN_PRICES),
@@ -1069,13 +1125,10 @@ def _menu_button_defaults() -> list:
         (f"svc:{service['id']}", service['name'])
         for service in _code_services_for_menu()
     ]
-    tail = [
-        ('pantallas', _BTN_PANTALLAS),
-        ('pagos', _BTN_PAGOS),
-        ('trabajo', _BTN_TRABAJO),
+    middle = _html_preset_menu_defaults() + [
         ('ad', _BTN_AD),
     ]
-    return head + services + tail
+    return head + middle + services
 
 
 def _load_menu_button_prefs() -> dict:
@@ -1147,23 +1200,13 @@ def update_menu_button(key: str, enabled=None, label=None) -> list:
     return menu_button_catalog()
 
 
-def _visible_menu_entries(
-    include_ad: bool,
-    include_pagos: bool,
-    include_pantallas: bool,
-    include_trabajo: bool,
-) -> list:
-    ready = {
-        'pantallas': include_pantallas,
-        'pagos': include_pagos,
-        'trabajo': include_trabajo,
-        'ad': include_ad,
-    }
+def _visible_menu_entries(include_ad: bool) -> list:
+    """Botones encendidos. Publicidad solo si el chat tiene acceso; HTMLs ya vienen de BD."""
     visible = []
     for item in menu_button_catalog():
         if not item['enabled']:
             continue
-        if item['key'] in ready and not ready[item['key']]:
+        if item['key'] == 'ad' and not include_ad:
             continue
         visible.append(item)
     return visible
@@ -1171,23 +1214,25 @@ def _visible_menu_entries(
 
 def _code_service_button_rows(services: list) -> list:
     rows = []
+    if services:
+        rows.append([_inline_menu_button(_CODES_SECTION_TITLE, 'codes_section', '')])
     for service in services:
         data = f"svc:{service['id']}"
         label = service['name'][:64]
-        rows.append([_inline_menu_button(_CODE_FIELD, data, '')])
         rows.append([_inline_menu_button(label, data)])
     return rows
 
 
 def _code_service_rows_html(services: list) -> str:
-    chunks = []
+    if not services:
+        return ''
+    chunks = [
+        f'<p style="text-align:center"><b>{_html_text(_CODES_SECTION_TITLE)}</b></p>'
+    ]
     for service in services:
         data = f"svc:{service['id']}"
         name = _html_text(service['name'][:64])
         chunks.append(
-            '<tg-button-row align="center">'
-            f'<tg-button type="callback_data" data="{data}">{_html_text(_CODE_FIELD)}</tg-button>'
-            '</tg-button-row>'
             '<tg-button-row align="center">'
             f'<tg-button type="callback_data" style="primary" data="{data}">{name}</tg-button>'
             '</tg-button-row>'
@@ -1196,36 +1241,26 @@ def _code_service_rows_html(services: list) -> str:
 
 
 def _medios_pago_menu_ready() -> bool:
-    """El botón solo aparece si hay un HTML de medios de pago activo y con datos."""
+    """True si hay un HTML de medios de pago activo y con datos."""
     data = _load_medios_pago_card()
     return bool(data and (data.get('main_title') or data.get('sections')))
 
 
-def _inline_menu_markup(
-    include_ad: bool,
-    include_pagos: bool = False,
-    include_pantallas: bool = False,
-    include_trabajo: bool = False,
-    code_services: list | None = None,
-) -> dict:
+def _inline_menu_markup(include_ad: bool, code_services: list | None = None) -> dict:
     del code_services
     rows = []
-    for item in _visible_menu_entries(include_ad, include_pagos, include_pantallas, include_trabajo):
-        if item['key'].startswith('svc:'):
-            rows.append([_inline_menu_button(_CODE_FIELD, item['key'], '')])
+    codes_title_added = False
+    for item in _visible_menu_entries(include_ad):
+        if item['key'].startswith('svc:') and not codes_title_added:
+            rows.append([_inline_menu_button(_CODES_SECTION_TITLE, 'codes_section', '')])
+            codes_title_added = True
         rows.append([_inline_menu_button(item['label'][:64], item['key'])])
     return {'inline_keyboard': rows}
 
 
 def _menu_markup_for(chat_id) -> dict:
     include_ad = bool(_working_ad_group_id()) and _chat_belongs_to_store_user(chat_id)
-    return _inline_menu_markup(
-        include_ad,
-        _medios_pago_menu_ready(),
-        _pantallas_menu_ready(),
-        _como_trabajo_menu_ready(),
-        _code_services_for_menu(),
-    )
+    return _inline_menu_markup(include_ad)
 
 
 def _markup_without_style(markup: dict) -> dict:
@@ -1261,28 +1296,34 @@ def _html_text(value: str) -> str:
     )
 
 
-def _centered_menu_html(
-    include_ad: bool,
-    include_pagos: bool = False,
-    include_pantallas: bool = False,
-    include_trabajo: bool = False,
-    code_services: list | None = None,
-) -> str:
+def _menu_has_code_services(include_ad: bool) -> bool:
+    return any(item['key'].startswith('svc:') for item in _visible_menu_entries(include_ad))
+
+
+def _centered_menu_html(include_ad: bool, chat_id=None, code_services: list | None = None) -> str:
     del code_services
     rows = []
-    for item in _visible_menu_entries(include_ad, include_pagos, include_pantallas, include_trabajo):
+    codes_title_added = False
+    for item in _visible_menu_entries(include_ad):
         data = item['key']
         name = _html_text(item['label'][:64])
-        if data.startswith('svc:'):
+        if data.startswith('svc:') and not codes_title_added:
             rows.append(
-                '<tg-button-row align="center">'
-                f'<tg-button type="callback_data" data="{data}">{_html_text(_CODE_FIELD)}</tg-button>'
-                '</tg-button-row>'
+                f'<p style="text-align:center"><b>{_html_text(_CODES_SECTION_TITLE)}</b></p>'
             )
+            codes_title_added = True
         rows.append(
             '<tg-button-row align="center">'
             f'<tg-button type="callback_data" style="primary" data="{data}">{name}</tg-button>'
             '</tg-button-row>'
+        )
+    if codes_title_added:
+        current = _get_code_email(chat_id) if chat_id is not None else ''
+        shown = _html_text(current or _CODE_FIELD)
+        rows.append(
+            f'<p style="text-align:center"><b>Correo</b></p>'
+            f'<p style="text-align:center">{shown}</p>'
+            f'<p style="text-align:center">Escribe el correo abajo y luego pulsa un servicio</p>'
         )
     return ''.join(rows)
 
@@ -1290,30 +1331,43 @@ def _centered_menu_html(
 def _send_with_menu(token: str, chat_id, text: str, include_menu: bool = True) -> dict:
     """Mensaje con los botones azules centrados. Si Telegram no acepta el formato, usa el teclado inline."""
     include_ad = bool(include_menu) and bool(_working_ad_group_id()) and _chat_belongs_to_store_user(chat_id)
-    include_pagos = bool(include_menu) and _medios_pago_menu_ready()
-    include_pantallas = bool(include_menu) and _pantallas_menu_ready()
-    include_trabajo = bool(include_menu) and _como_trabajo_menu_ready()
-    code_services = _code_services_for_menu() if include_menu else []
     body = _html_text(text).replace('\n', '<br>')
     if text.strip() == 'Elige una opción:':
         body = f'<pullquote>{body}</pullquote>'
-    buttons = _centered_menu_html(
-        include_ad, include_pagos, include_pantallas, include_trabajo, code_services,
-    ) if include_menu else ''
+    buttons = _centered_menu_html(include_ad, chat_id) if include_menu else ''
+    has_services = bool(include_menu) and _menu_has_code_services(include_ad)
+    if has_services:
+        reply_markup = {
+            'force_reply': True,
+            'input_field_placeholder': _CODE_FIELD,
+        }
+    else:
+        reply_markup = {'remove_keyboard': True}
     sent = _telegram_call(
         token,
         'sendRichMessage',
         {
             'chat_id': chat_id,
             'rich_message': {'html': body + buttons, 'skip_entity_detection': True},
-            'reply_markup': {'remove_keyboard': True},
+            'reply_markup': reply_markup,
         },
     )
     if not sent.get('ok'):
-        markup = _inline_menu_markup(
-            include_ad, include_pagos, include_pantallas, include_trabajo, code_services,
-        ) if include_menu else None
-        sent = _send_text(token, chat_id, text, markup)
+        markup = _inline_menu_markup(include_ad) if include_menu else None
+        if has_services and markup is not None:
+            sent = _send_text(
+                token,
+                chat_id,
+                text,
+                {
+                    'force_reply': True,
+                    'input_field_placeholder': _CODE_FIELD,
+                },
+            )
+            if sent.get('ok') and markup:
+                _send_text(token, chat_id, 'Elige un servicio:', markup)
+        else:
+            sent = _send_text(token, chat_id, text, markup)
     if include_menu:
         _replace_previous_menu(token, chat_id, sent)
     return sent
@@ -2040,26 +2094,104 @@ def _pantallas_menu_ready() -> bool:
     return _load_pantallas_card() is not None
 
 
-def _load_como_trabajo_card() -> dict | None:
-    from app.store.html_presets import COMO_TRABAJO_KEY, parse_como_trabajo_payload
+def _load_como_trabajo_card(html_id: int | None = None) -> dict | None:
+    from app.store.html_presets import (
+        COMO_TRABAJO_DEFAULT,
+        COMO_TRABAJO_KEY,
+        normalize_como_trabajo,
+        parse_como_trabajo_payload,
+    )
     from app.store.models import HtmlInfo
 
-    row = (
-        HtmlInfo.query
-        .filter(HtmlInfo.preset_key == COMO_TRABAJO_KEY, HtmlInfo.enabled.is_(True))
-        .order_by(HtmlInfo.id.desc())
-        .first()
+    query = HtmlInfo.query.filter(
+        HtmlInfo.preset_key == COMO_TRABAJO_KEY,
+        HtmlInfo.enabled.is_(True),
     )
+    if html_id is not None:
+        row = query.filter(HtmlInfo.id == int(html_id)).first()
+    else:
+        row = query.order_by(HtmlInfo.id.desc()).first()
     if not row:
         return None
     data = parse_como_trabajo_payload(row.text)
-    if not data or not (data.get('main_title') or data.get('sections')):
-        return None
+    if not data:
+        data = normalize_como_trabajo(COMO_TRABAJO_DEFAULT)
+    data = dict(data)
+    data['html_id'] = row.id
+    data['title'] = (row.title or '').strip() or data.get('main_title') or _BTN_TRABAJO
     return data
 
 
 def _como_trabajo_menu_ready() -> bool:
     return _load_como_trabajo_card() is not None
+
+
+def _load_html_preset_row(html_id: int):
+    from app.store.html_presets import COMO_TRABAJO_KEY, FOTO_PANTALLAS_KEY, MEDIOS_DE_PAGO_KEY
+    from app.store.models import HtmlInfo
+
+    return (
+        HtmlInfo.query
+        .filter(
+            HtmlInfo.id == int(html_id),
+            HtmlInfo.enabled.is_(True),
+            HtmlInfo.preset_key.in_((COMO_TRABAJO_KEY, FOTO_PANTALLAS_KEY, MEDIOS_DE_PAGO_KEY)),
+        )
+        .first()
+    )
+
+
+def _send_html_preset_by_id(token: str, chat_id, html_id: int) -> None:
+    """Envía la imagen del HTML de plantilla (pantallas / medios / cómo trabajo)."""
+    from app.store.html_presets import COMO_TRABAJO_KEY, FOTO_PANTALLAS_KEY, MEDIOS_DE_PAGO_KEY
+
+    row = _load_html_preset_row(html_id)
+    if not row:
+        _send_text(token, chat_id, 'Ese contenido ya no está disponible.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    if row.preset_key == COMO_TRABAJO_KEY:
+        data = _load_como_trabajo_card(row.id)
+        if not data:
+            _send_text(token, chat_id, 'Todavía no hay Cómo trabajo — Guía rápida configurado.')
+            _send_with_menu(token, chat_id, 'Elige una opción:')
+            return
+        png = render_como_trabajo_png(data)
+        sent = _send_photo_bytes(token, chat_id, png, 'como-trabajo-guia-rapida.png')
+        if not sent.get('ok'):
+            _send_text(token, chat_id, 'No se pudo enviar la imagen de Cómo trabajo — Guía rápida.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    if row.preset_key == FOTO_PANTALLAS_KEY:
+        from app.store.html_presets import parse_pantallas_payload
+
+        data = parse_pantallas_payload(row.text)
+        data['title'] = (row.title or '').strip() or _BTN_PANTALLAS
+        if not data.get('rows'):
+            _send_text(token, chat_id, 'Todavía no hay pantallas, perfiles y links de TV configurados.')
+            _send_with_menu(token, chat_id, 'Elige una opción:')
+            return
+        png = render_pantallas_png(data)
+        sent = _send_photo_bytes(token, chat_id, png, 'pantallas-perfiles-tv.png')
+        if not sent.get('ok'):
+            _send_text(token, chat_id, 'No se pudo enviar la imagen de pantallas y perfiles.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    if row.preset_key == MEDIOS_DE_PAGO_KEY:
+        from app.store.html_presets import parse_medios_pago_payload
+
+        data = parse_medios_pago_payload(row.text)
+        if not data or not (data.get('main_title') or data.get('sections')):
+            _send_text(token, chat_id, 'Todavía no hay Medios De Pago Que Recibo configurado.')
+            _send_with_menu(token, chat_id, 'Elige una opción:')
+            return
+        png = render_medios_pago_png(data)
+        sent = _send_photo_bytes(token, chat_id, png)
+        if not sent.get('ok'):
+            _send_text(token, chat_id, 'No se pudo enviar la imagen de medios de pago.')
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
 def render_como_trabajo_png(data: dict) -> bytes:
@@ -2230,7 +2362,7 @@ def _send_como_trabajo_image(token: str, chat_id) -> None:
     _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
-_TV_PLATE = (15, 23, 42)
+_TV_PLATE = (0, 0, 0)
 
 
 def _fetch_favicon_image(page: str):
@@ -2254,7 +2386,7 @@ def _fetch_favicon_image(page: str):
 
 def _paste_on_plate(canvas, icon, x: int, y: int, size: int, inset: int) -> None:
     """Placa oscura redondeada con el icono centrado."""
-    from PIL import ImageDraw
+    from PIL import Image, ImageDraw
 
     draw = ImageDraw.Draw(canvas)
     draw.rounded_rectangle((x, y, x + size, y + size), radius=max(8, size // 5), fill=_TV_PLATE)
@@ -2262,7 +2394,8 @@ def _paste_on_plate(canvas, icon, x: int, y: int, size: int, inset: int) -> None
         return
     inner = size - inset * 2
     icon = icon.copy()
-    icon.thumbnail((inner, inner))
+    resample = getattr(getattr(Image, 'Resampling', Image), 'LANCZOS', Image.LANCZOS)
+    icon.thumbnail((inner, inner), resample)
     canvas.paste(icon, (x + (size - icon.width) // 2, y + (size - icon.height) // 2), icon)
 
 
@@ -2282,39 +2415,45 @@ def _paste_screen_icon(canvas, name: str, x: int, y: int, size: int = 44) -> Non
     from app.store.icon_tools import dark_screen_icon
 
     path = os.path.join(current_app.static_folder, 'images', name or '')
-    icon = dark_screen_icon(path, 160)
+    # Pedir icono más grande que el slot para que al reducir quede nítido.
+    icon = dark_screen_icon(path, max(160, size * 3))
     if icon is None:
         return
-    _paste_on_plate(canvas, icon, x, y, size, 6)
+    _paste_on_plate(canvas, icon, x, y, size, max(6, size // 10))
 
 
 def render_pantallas_png(data: dict) -> bytes:
-    """Tabla de pantallas y perfiles como PNG para Telegram."""
+    """Tabla de pantallas y perfiles como PNG nítido para Telegram."""
     import io
 
     from PIL import Image, ImageDraw
 
-    from app.store.html_presets import _tv_perfiles_label, favicon_source_page
+    from app.store.html_presets import (
+        _tv_perfiles_label,
+        favicon_source_page,
+        resolve_row_screen_icons,
+    )
 
-    width = 1100
-    pad = 16
+    # Más resolución + tipografía grande: se ve nítida al abrir a tamaño real.
+    width = 1800
+    pad = 24
     inner = width - pad * 2
-    head_font = _load_font(18, True)
-    cell_font = _load_font(18, True)
-    line_gap = 2
-    icon_w = 140
+    head_font = _load_font(26, True)
+    cell_font = _load_font(24, True)
+    line_gap = 4
+    icon_w = 200
     rest = inner - icon_w
     col_w = [icon_w, int(rest * 0.28), int(rest * 0.16), int(rest * 0.28)]
     col_w.append(inner - sum(col_w))
-    headers = ('', 'PANTALLAS', 'PERFILES', 'PAGINA OFICIAL', 'ACTIVACION TELEVISOR')
+    headers = ('PLATAFORMA', 'PANTALLAS', 'PERFILES', 'PAGINA OFICIAL', 'ACTIVACION TELEVISOR')
     keys = ('pantallas', 'perfiles', 'pagina', 'activacion')
-    fav_size = 60
-    logo_size = 44
-    gap = 6
+    fav_size = 84
+    logo_size = 60
+    gap = 10
 
-    head_a = (11, 42, 111)
-    head_b = (30, 136, 229)
-    accent = (245, 124, 0)
+    head_a = (30, 58, 138)
+    head_b = (37, 99, 235)
+    accent = (30, 58, 138)
     grid = (201, 214, 238)
     row_a = (255, 255, 255)
     row_b = (232, 240, 251)
@@ -2336,20 +2475,23 @@ def render_pantallas_png(data: dict) -> bytes:
             return _tv_perfiles_label(row.get(key) or '') or '----------'
         return row.get(key) or '----------'
 
-    header_h = 56
+    header_h = 72
     prepared = []
     table_h = header_h
     for row in data.get('rows') or []:
         cells = []
         heights = []
         for index, key in enumerate(keys):
-            lines = wrap(cell_text(row, key), cell_font, col_w[index + 1] - 16)
+            lines = wrap(cell_text(row, key), cell_font, col_w[index + 1] - 24)
             cells.append(lines)
             heights.append(block_h(lines, cell_font))
         fav_page = favicon_source_page(row)
-        icons = (row.get('icons') or [])[:2]
+        if fav_page:
+            icons = []
+        else:
+            icons = resolve_row_screen_icons(row)[:2]
         stack_h = (fav_size if fav_page else 0) + (logo_size if icons else 0) + (gap if fav_page and icons else 0)
-        row_h = max(heights + [stack_h, 56]) + 20
+        row_h = max(heights + [stack_h, 72]) + 28
         prepared.append((row, cells, row_h, fav_page, icons, stack_h))
         table_h += row_h
     total = pad * 2 + table_h
@@ -2362,12 +2504,12 @@ def render_pantallas_png(data: dict) -> bytes:
         ratio = step / max(1, inner - 1)
         color = tuple(int(head_a[i] + (head_b[i] - head_a[i]) * ratio) for i in range(3))
         draw.line((pad + step, y, pad + step, y + header_h), fill=color)
-    draw.line((pad, y + header_h - 2, pad + inner, y + header_h - 2), fill=accent, width=3)
+    draw.line((pad, y + header_h - 3, pad + inner, y + header_h - 3), fill=accent, width=4)
     cursor_x = pad
     for index, label in enumerate(headers):
         if label:
             label_w = draw.textlength(label, font=head_font)
-            draw.text((cursor_x + (col_w[index] - label_w) / 2, y + 17), label, font=head_font, fill=(255, 255, 255))
+            draw.text((cursor_x + (col_w[index] - label_w) / 2, y + 22), label, font=head_font, fill=(255, 255, 255))
         cursor_x += col_w[index]
     y += header_h
     for number, (row, cells, row_h, fav_page, icons, stack_h) in enumerate(prepared):
@@ -2376,7 +2518,7 @@ def render_pantallas_png(data: dict) -> bytes:
         if fav_page:
             fav_x = pad + (col_w[0] - fav_size) // 2
             if not _paste_favicon(image, fav_page, fav_x, stack_y, fav_size):
-                _paste_on_plate(image, None, fav_x, stack_y, fav_size, 9)
+                _paste_on_plate(image, None, fav_x, stack_y, fav_size, 12)
             stack_y += fav_size + (gap if icons else 0)
         if icons:
             span = len(icons) * logo_size + (len(icons) - 1) * gap
@@ -2390,7 +2532,7 @@ def render_pantallas_png(data: dict) -> bytes:
         cursor_x = pad + col_w[0]
         for index, lines in enumerate(cells):
             block = block_h(lines, cell_font)
-            line_y = y + max(8, (row_h - block) // 2)
+            line_y = y + max(12, (row_h - block) // 2)
             is_link = keys[index] in ('pagina', 'activacion') and (row.get(keys[index]) or '').strip()
             for line in lines:
                 line_w = draw.textlength(line, font=cell_font)
@@ -2398,7 +2540,7 @@ def render_pantallas_png(data: dict) -> bytes:
                 draw.text((line_x, line_y), line, font=cell_font, fill=link_color if is_link else text_color)
                 if is_link:
                     under_y = line_y + _font_line_h(cell_font) - 2
-                    draw.line((line_x, under_y, line_x + line_w, under_y), fill=link_color, width=1)
+                    draw.line((line_x, under_y, line_x + line_w, under_y), fill=link_color, width=2)
                 line_y += _font_line_h(cell_font) + line_gap
             cursor_x += col_w[index + 1]
         y += row_h
@@ -2411,9 +2553,10 @@ def render_pantallas_png(data: dict) -> bytes:
     for col in col_w[:-1]:
         cursor_x += col
         draw.line((cursor_x, table_top, cursor_x, table_top + table_h), fill=grid, width=1)
-    draw.rounded_rectangle((pad, table_top, pad + inner, table_top + table_h), radius=14, outline=(185, 199, 226), width=2)
+    draw.rounded_rectangle((pad, table_top, pad + inner, table_top + table_h), radius=18, outline=(185, 199, 226), width=3)
     out = io.BytesIO()
-    image.save(out, format='PNG', optimize=True)
+    # PNG sin pérdida; compress_level bajo = más nitidez al abrir el archivo original.
+    image.save(out, format='PNG', optimize=False, compress_level=1)
     return out.getvalue()
 
 
@@ -2431,14 +2574,15 @@ def _send_pantallas_image(token: str, chat_id) -> None:
 
 
 def _send_photo_bytes(token: str, chat_id, png: bytes, filename: str = 'medios-de-pago.png') -> dict:
+    """Envía PNG como documento para que Telegram no recomprima (máxima calidad)."""
     clean = (token or '').strip()
     if not clean:
         return {'ok': False, 'description': 'sin token'}
     try:
         response = requests.post(
-            f'https://api.telegram.org/bot{clean}/sendPhoto',
+            f'https://api.telegram.org/bot{clean}/sendDocument',
             data={'chat_id': chat_id},
-            files={'photo': (filename, png, 'image/png')},
+            files={'document': (filename, png, 'image/png')},
             timeout=60,
         )
         data = response.json()
@@ -2541,6 +2685,29 @@ def _forget_button_send(chat_id, action: str) -> None:
 def _take_pending_code_search(chat_id):
     with _pending_code_lock:
         return _pending_code_search.pop(str(chat_id), None)
+
+
+def _get_code_email(chat_id) -> str:
+    with _code_email_lock:
+        return str(_code_email_by_chat.get(str(chat_id), '') or '').strip()
+
+
+def _save_code_email(chat_id, email: str) -> str:
+    clean = re.sub(r'\s+', '', str(email or '').strip())
+    with _code_email_lock:
+        if clean:
+            _code_email_by_chat[str(chat_id)] = clean
+        else:
+            _code_email_by_chat.pop(str(chat_id), None)
+    return clean
+
+
+def _looks_like_email(text: str) -> bool:
+    raw = (text or '').strip()
+    if '@' not in raw or ' ' in raw:
+        return False
+    local, _, domain = raw.partition('@')
+    return bool(local) and '.' in domain and len(raw) <= 254
 
 
 def _drop_pending_code_prompt(token: str, chat_id) -> None:
@@ -2704,12 +2871,13 @@ def _lookup_code(user, service: dict, email: str):
 
 
 def _send_code_items(token: str, chat_id, items: list) -> None:
+    """Resultados de códigos: valor, Copiar y fecha centrados."""
     blocks = []
     plain_lines = []
     for item in items:
         code = item['code']
         shown = code if len(code) <= 50 else code[:47] + '...'
-        block = f'<h2>{_html_text(shown)}</h2>'
+        block = f'<p style="text-align:center"><b>{_html_text(shown)}</b></p>'
         buttons = ''
         if len(code) <= 256:
             buttons += f'<tg-button type="copy_text" text="{_html_text(code)}">Copiar</tg-button>'
@@ -2719,7 +2887,9 @@ def _send_code_items(token: str, chat_id, items: list) -> None:
         if buttons:
             block += f'<tg-button-row align="center">{buttons}</tg-button-row>'
         if item.get('date'):
-            block += f'<p>Fecha: {_html_text(item["date"])}</p>'
+            block += (
+                f'<p style="text-align:center">Fecha: {_html_text(item["date"])}</p>'
+            )
         blocks.append(block)
         line = code
         if item.get('date'):
@@ -2729,12 +2899,53 @@ def _send_code_items(token: str, chat_id, items: list) -> None:
         'chat_id': chat_id,
         'rich_message': {'html': ''.join(blocks), 'skip_entity_detection': True},
     })
-    if not sent.get('ok'):
-        _send_text(token, chat_id, '\n\n'.join(plain_lines))
+    if sent.get('ok'):
+        return
+    # Fallback: mensaje + teclado con Copiar centrado
+    for item in items:
+        code = item['code']
+        text = code
+        if item.get('date'):
+            text += f"\nFecha: {item['date']}"
+        markup = None
+        row = []
+        if len(code) <= 256:
+            row.append({'text': 'Copiar', 'copy_text': {'text': code}})
+        link = item.get('link') or ''
+        if link and len(link) <= 2000:
+            row.append({'text': 'Abrir Enlace', 'url': link})
+        if row:
+            markup = {'inline_keyboard': [row]}
+        _send_text(token, chat_id, text, markup)
+
+
+def _run_code_search(token: str, chat_id, service_id: int, email: str, prompt_id=None) -> None:
+    """Busca códigos con el correo guardado o recién escrito."""
+    user = _enabled_user_for_chat(chat_id)
+    service = _code_service_by_id(int(service_id))
+    if user is None or service is None:
+        if prompt_id:
+            _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
+        return
+    clean = _save_code_email(chat_id, email)
+    try:
+        message, items = _lookup_code(user, service, clean)
+    except Exception:
+        db.session.rollback()
+        logger.exception('telegram code search')
+        message, items = 'No se pudo completar esa opción. Intentalo de nuevo.', []
+    if prompt_id:
+        _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
+    if items:
+        _send_code_items(token, chat_id, items)
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    _send_long_text(token, chat_id, message or 'No se encontraron resultados.')
+    _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
 def _begin_code_service_search(token: str, chat_id, service_id: int) -> None:
-    """Pide el correo solo si el chat está en un usuario encendido. Si no, no responde."""
+    """Usa el correo del campo si ya está; si no, pide el correo."""
     button = _menu_button(f'svc:{int(service_id)}')
     if button is None or not button['enabled']:
         return
@@ -2742,6 +2953,10 @@ def _begin_code_service_search(token: str, chat_id, service_id: int) -> None:
         return
     service = _code_service_by_id(service_id)
     if service is None:
+        return
+    saved = _get_code_email(chat_id)
+    if saved:
+        _run_code_search(token, chat_id, int(service_id), saved)
         return
     sent = _send_text(token, chat_id, button['label'], reply_markup={
         'force_reply': True,
@@ -2771,26 +2986,13 @@ def _finish_code_search(token: str, chat_id, email: str) -> None:
     entry = _take_pending_code_search(chat_id)
     if not isinstance(entry, dict):
         return
-    prompt_id = entry.get('prompt_id')
-    user = _enabled_user_for_chat(chat_id)
-    service = _code_service_by_id(int(entry.get('service_id') or 0))
-    if user is None or service is None:
-        if prompt_id:
-            _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
-        return
-    try:
-        message, items = _lookup_code(user, service, email)
-    except Exception:
-        db.session.rollback()
-        logger.exception('telegram code search')
-        message, items = 'No se pudo completar esa opción. Intentalo de nuevo.', []
-    if prompt_id:
-        _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
-    if items:
-        _send_code_items(token, chat_id, items)
-        _send_with_menu(token, chat_id, 'Elige una opción:')
-        return
-    _send_long_text(token, chat_id, message or 'No se encontraron resultados.')
+    _run_code_search(
+        token,
+        chat_id,
+        int(entry.get('service_id') or 0),
+        email,
+        prompt_id=entry.get('prompt_id'),
+    )
 
 
 def _handle_menu_callback(token: str, callback: dict) -> None:
@@ -2806,7 +3008,9 @@ def _handle_menu_callback(token: str, callback: dict) -> None:
 
     action = str(callback.get('data') or '').strip()
     service_match = re.fullmatch(r'svc:(\d+)', action)
-    if service_match is None and action not in ('id', 'prices', 'codes', 'pantallas', 'pagos', 'trabajo', 'ad'):
+    html_match = re.fullmatch(r'html:(\d+)', action)
+    known = ('id', 'prices', 'codes', 'pantallas', 'pagos', 'trabajo', 'ad', 'codes_section')
+    if service_match is None and html_match is None and action not in known:
         answer()
         return
     sender = callback.get('from') if isinstance(callback.get('from'), dict) else {}
@@ -2817,6 +3021,9 @@ def _handle_menu_callback(token: str, callback: dict) -> None:
         return
     chat_id = chat.get('id')
     if chat_id is None:
+        answer()
+        return
+    if action == 'codes_section':
         answer()
         return
     if service_match is not None:
@@ -2838,7 +3045,8 @@ def _handle_menu_callback(token: str, callback: dict) -> None:
 
 def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
     known = ('start', 'id', 'prices', 'codes', 'pantallas', 'pagos', 'trabajo', 'ad')
-    action = text if text in known or str(text).startswith('svc:') else _menu_action(text)
+    raw = str(text or '')
+    action = text if text in known or raw.startswith('svc:') or raw.startswith('html:') else _menu_action(text)
     if not action:
         return 'skip'
     if not _menu_key_enabled(action):
@@ -2847,6 +3055,20 @@ def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
         try:
             _begin_code_service_search(token, chat_id, int(str(action).split(':', 1)[1]))
         except Exception:
+            logger.exception('telegram menu %s', action)
+            _telegram_call(
+                token,
+                'sendMessage',
+                {'chat_id': chat_id, 'text': 'No se pudo completar esa opción. Intentalo de nuevo.'},
+            )
+        return 'sent'
+    if str(action).startswith('html:'):
+        if _button_sent_recently(chat_id, action):
+            return 'repeat'
+        try:
+            _send_html_preset_by_id(token, chat_id, int(str(action).split(':', 1)[1]))
+        except Exception:
+            _forget_button_send(chat_id, action)
             logger.exception('telegram menu %s', action)
             _telegram_call(
                 token,
@@ -2955,6 +3177,14 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
                 waiting = str(chat_id) in _pending_code_search
             if waiting:
                 _finish_code_search(token, chat_id, pending_text)
+                continue
+            if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is not None:
+                saved = _save_code_email(chat_id, pending_text)
+                _send_with_menu(
+                    token,
+                    chat_id,
+                    f'Correo listo: {saved}\nAhora pulsa un servicio de códigos.',
+                )
     if saved_through is not None:
         fresh = get_telegram_bot_config()
         if fresh is not None:

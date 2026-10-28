@@ -75,7 +75,7 @@
         <input
           type="color"
           id="newAliasColor1"
-          value="#000000"
+          value="#1e293b"
           class="popup-color-input"
           title="Color inicial del degradado para alias"
         >
@@ -84,7 +84,7 @@
         <input
           type="color"
           id="newAliasColor2"
-          value="#000000"
+          value="#1e293b"
           class="popup-color-input"
           title="Color final del degradado para alias"
         >
@@ -110,7 +110,7 @@
         <input
           type="color"
           id="newClickColor1"
-          value="#031faa"
+          value="#172554"
           class="popup-color-input"
           title="Color inicial del degradado al hacer clic"
         >
@@ -119,9 +119,18 @@
         <input
           type="color"
           id="newClickColor2"
-          value="#031faa"
+          value="#1e40af"
           class="popup-color-input"
           title="Color final del degradado al hacer clic"
+        >
+      </div>
+      <div class="d-flex gap-03 align-items-center">
+        <input
+          type="color"
+          id="newClickColorDark"
+          value="#0f172a"
+          class="popup-color-input"
+          title="Color oscuro que combina al hacer clic"
         >
       </div>
       <div class="gradient-preview-container">
@@ -145,7 +154,7 @@
         <input
           type="color"
           id="newNormalColor1"
-          value="#764ba2"
+          value="#1e3a8a"
           class="popup-color-input"
           title="Color inicial del degradado normal"
         >
@@ -154,7 +163,7 @@
         <input
           type="color"
           id="newNormalColor2"
-          value="#667eea"
+          value="#2563eb"
           class="popup-color-input"
           title="Color final del degradado normal"
         >
@@ -223,5 +232,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20261021-no-color-cancel" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20261028-ui-chrome" defer></script>
 {% endblock %}

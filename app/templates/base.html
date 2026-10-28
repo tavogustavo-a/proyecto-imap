@@ -11,7 +11,16 @@
   {% endblock %}
 
   <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20261022-create-short">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20261028-menu3-compact">
+  <style id="ui-chrome-vars">
+    :root {
+      --ui-static-1: {{ ui_chrome.static1 if ui_chrome is defined else '#1e3a8a' }};
+      --ui-static-2: {{ ui_chrome.static2 if ui_chrome is defined else '#2563eb' }};
+      --ui-click-1: {{ ui_chrome.click1 if ui_chrome is defined else '#172554' }};
+      --ui-click-2: {{ ui_chrome.click2 if ui_chrome is defined else '#1e40af' }};
+      --ui-click-dark: {{ ui_chrome.click_dark if ui_chrome is defined else '#0f172a' }};
+    }
+  </style>
   <meta name="service-worker-url" content="{{ url_for('service_worker') }}">
   {% block page_styles %}{% endblock %}
   {% if is_admin %}
@@ -49,6 +58,8 @@
 
   {% include 'includes/site_footer.html' %}
 
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui_chrome.css') }}?v=20261028-menu-tight">
+
   {% if is_admin %}
   {% include 'includes/footer_social_links_modal.html' %}
   {% include 'includes/admin_proveedor_ventas_modals.html' %}
@@ -61,7 +72,7 @@
   
   <script src="{{ url_for('static', filename='js/session_back_check.js') }}?v=20261018-session-back"></script>
   <script src="{{ url_for('static', filename='js/register_service_worker.js') }}?v=20260730-csp" defer></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=20260712-mobile-kb-ux" defer></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=20261028-alias-stack" defer></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}?v=20260730-csp" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_sse_realtime.js') }}?v=20260622-sse-unified" defer></script>

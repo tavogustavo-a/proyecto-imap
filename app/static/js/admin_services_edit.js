@@ -190,7 +190,7 @@ document.addEventListener("DOMContentLoaded", function() {
               <button type="button" class="btn-panel btn-red btn-sm delete-alias-btn" data-alias-id="${al.id}" title="Eliminar">
                 <i class="fas fa-trash"></i>
               </button>
-              <button type="button" class="add-alias-icon-btn btn-small btn-add-icon" data-alias-id="${al.id}">+Icon</button>
+              <button type="button" class="add-alias-icon-btn btn-small btn-blue" data-alias-id="${al.id}">+Icon</button>
               ${iconsInlineHtml ? `<span class="alias-attached-icons-inline">${iconsInlineHtml}</span>` : ""}
             </div>
           </li>
@@ -356,18 +356,36 @@ document.addEventListener("DOMContentLoaded", function() {
       overlay.classList.add('popup-visible'); 
       container.classList.add('popup-visible'); 
       grid.innerHTML = "";
-  
-      for(let i=1;i<=41;i++){
-        const fileName=`stream${i}.png`;
-        const img=document.createElement("img");
-        img.src=decideIconPath(fileName);
-        img.alt=fileName;
-        img.title=fileName;
-        img.addEventListener("click",()=>{
-          addAliasIcon(aliasId,fileName);
+      fillStreamIconGrid(grid, (fileName) => addAliasIcon(aliasId, fileName));
+    }
+
+    function streamIconNames(files) {
+      return files
+        .filter((name) => /^stream\d+\.png$/i.test(name))
+        .sort((a, b) => parseInt(a.match(/\d+/)[0], 10) - parseInt(b.match(/\d+/)[0], 10));
+    }
+
+    function fillStreamIconGrid(grid, onPick) {
+      const paint = (files) => {
+        grid.innerHTML = "";
+        files.forEach((fileName) => {
+          const img = document.createElement("img");
+          img.src = decideIconPath(fileName);
+          img.alt = fileName;
+          img.title = fileName;
+          img.addEventListener("click", () => onPick(fileName));
+          grid.appendChild(img);
         });
-        grid.appendChild(img);
-      }
+      };
+      fetch("/admin/list_icons_ajax")
+        .then((r) => r.json())
+        .then((data) => {
+          const files = data && data.status === "ok" && Array.isArray(data.icons)
+            ? streamIconNames(data.icons)
+            : [];
+          paint(files);
+        })
+        .catch(() => paint([]));
     }
   
     function addAliasIcon(aliasId, iconName){

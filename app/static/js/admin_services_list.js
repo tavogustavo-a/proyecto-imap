@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // Campos de clic
   const newClickColor1 = document.getElementById("newClickColor1");
   const newClickColor2 = document.getElementById("newClickColor2");
+  const newClickColorDark = document.getElementById("newClickColorDark");
   const clickGradientPreview = document.getElementById("clickGradientPreview");
   
   // Campos sin darle clic (normales)
@@ -98,9 +99,17 @@ document.addEventListener("DOMContentLoaded", function() {
   }
   
   // Variables para almacenar colores originales (para cancelar)
-  let originalAliasColors = { color1: "#000000", color2: "#000000" };
-  let originalClickColors = { color1: "#031faa", color2: "#031faa" };
-  let originalNormalColors = { color1: "#764ba2", color2: "#667eea" };
+  // Colores plantilla códigos (mismos que botones públicos)
+  const CODIGOS_NORMAL_1 = "#1e3a8a";
+  const CODIGOS_NORMAL_2 = "#2563eb";
+  const CODIGOS_CLICK_1 = "#172554";
+  const CODIGOS_CLICK_2 = "#1e40af";
+  const CODIGOS_ALIAS_1 = "#1e293b";
+  const CODIGOS_ALIAS_2 = "#334155";
+
+  let originalAliasColors = { color1: CODIGOS_ALIAS_1, color2: CODIGOS_ALIAS_2 };
+  let originalClickColors = { color1: CODIGOS_CLICK_1, color2: CODIGOS_CLICK_2, colorDark: "#0f172a" };
+  let originalNormalColors = { color1: CODIGOS_NORMAL_1, color2: CODIGOS_NORMAL_2 };
 
   // Función para actualizar la vista previa del degradado (ya no se usa en crear servicio)
   function updateGradientPreview() {
@@ -111,17 +120,18 @@ document.addEventListener("DOMContentLoaded", function() {
   // Función para actualizar la vista previa del degradado de clic
   function updateClickGradientPreview() {
     if (clickGradientPreview && newClickColor1 && newClickColor2) {
-      const color1 = newClickColor1.value || "#031faa";
-      const color2 = newClickColor2.value || "#031faa";
-      clickGradientPreview.style.background = `linear-gradient(135deg, ${color1} 0%, ${color2} 100%)`;
+      const color1 = newClickColor1.value || "#172554";
+      const color2 = newClickColor2.value || "#1e40af";
+      const colorDark = (newClickColorDark && newClickColorDark.value) || "#0f172a";
+      clickGradientPreview.style.background = `linear-gradient(135deg, ${colorDark} 0%, ${color1} 46%, ${color2} 100%)`;
     }
   }
 
   // Función para actualizar la vista previa del degradado normal
   function updateNormalGradientPreview() {
     if (normalGradientPreview && newNormalColor1 && newNormalColor2) {
-      const color1 = newNormalColor1.value || "#764ba2";
-      const color2 = newNormalColor2.value || "#667eea";
+      const color1 = newNormalColor1.value || "#1e3a8a";
+      const color2 = newNormalColor2.value || "#2563eb";
       normalGradientPreview.style.background = `linear-gradient(135deg, ${color1} 0%, ${color2} 100%)`;
     }
   }
@@ -142,6 +152,9 @@ document.addEventListener("DOMContentLoaded", function() {
   if (newClickColor2) {
     newClickColor2.addEventListener("input", updateClickGradientPreview);
   }
+  if (newClickColorDark) {
+    newClickColorDark.addEventListener("input", updateClickGradientPreview);
+  }
   if (newNormalColor1) {
     newNormalColor1.addEventListener("input", updateNormalGradientPreview);
   }
@@ -157,17 +170,16 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // Funciones para restablecer colores predeterminados
   function resetClickColors() {
-    if (newClickColor1) newClickColor1.value = "#031faa";
-    if (newClickColor2) newClickColor2.value = "#031faa";
+    if (newClickColor1) newClickColor1.value = CODIGOS_CLICK_1;
+    if (newClickColor2) newClickColor2.value = CODIGOS_CLICK_2;
+    if (newClickColorDark) newClickColorDark.value = "#0f172a";
     updateClickGradientPreview();
-    // La sincronización se hace automáticamente en updateClickGradientPreview()
   }
 
   function resetNormalColors() {
-    if (newNormalColor1) newNormalColor1.value = "#764ba2";
-    if (newNormalColor2) newNormalColor2.value = "#667eea";
+    if (newNormalColor1) newNormalColor1.value = CODIGOS_NORMAL_1;
+    if (newNormalColor2) newNormalColor2.value = CODIGOS_NORMAL_2;
     updateNormalGradientPreview();
-    // La sincronización se hace automáticamente en updateNormalGradientPreview()
   }
 
   function resetAliasColors() {
@@ -207,8 +219,10 @@ document.addEventListener("DOMContentLoaded", function() {
         // Actualizar colores de clic
         newClickColor1.value = data.click_colors.color1;
         newClickColor2.value = data.click_colors.color2;
+        if (newClickColorDark) newClickColorDark.value = data.click_colors.color_dark || "#0f172a";
         originalClickColors.color1 = data.click_colors.color1;
         originalClickColors.color2 = data.click_colors.color2;
+        originalClickColors.colorDark = data.click_colors.color_dark || "#0f172a";
         
         // Actualizar colores normales
         newNormalColor1.value = data.normal_colors.color1;
@@ -273,9 +287,20 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
   
+  function paintSavedChrome(partial) {
+    const root = document.documentElement;
+    Object.keys(partial).forEach((name) => {
+      if (partial[name]) root.style.setProperty(name, partial[name]);
+    });
+    if (typeof window.applyUiChromeGradients === "function") {
+      window.applyUiChromeGradients();
+    }
+  }
+
   function saveClickColors() {
     const color1 = newClickColor1.value;
     const color2 = newClickColor2.value;
+    const colorDark = newClickColorDark ? newClickColorDark.value : "#0f172a";
     
     fetch("/admin/save_global_click_colors_ajax", {
       method: "POST",
@@ -283,16 +308,20 @@ document.addEventListener("DOMContentLoaded", function() {
         "Content-Type": "application/json",
         "X-CSRFToken": getCsrfToken()
       },
-      body: JSON.stringify({ color1, color2 })
+      body: JSON.stringify({ color1, color2, color_dark: colorDark })
     })
     .then(r => r.json())
     .then(data => {
       if (data.status === "ok") {
         alert("✅ " + data.message);
-        // Actualizar colores originales
         originalClickColors.color1 = color1;
         originalClickColors.color2 = color2;
-        // Recargar colores para confirmar que se guardaron
+        originalClickColors.colorDark = colorDark;
+        paintSavedChrome({
+          "--ui-click-1": color1,
+          "--ui-click-2": color2,
+          "--ui-click-dark": colorDark
+        });
         setTimeout(() => loadCurrentColors(), 500);
       } else {
         alert("❌ Error: " + data.message);
@@ -323,7 +352,10 @@ document.addEventListener("DOMContentLoaded", function() {
         // Actualizar colores originales
         originalNormalColors.color1 = color1;
         originalNormalColors.color2 = color2;
-        // Recargar colores para confirmar que se guardaron
+        paintSavedChrome({
+          "--ui-static-1": color1,
+          "--ui-static-2": color2
+        });
         setTimeout(() => loadCurrentColors(), 500);
       } else {
         alert("❌ Error: " + data.message);
@@ -381,18 +413,36 @@ document.addEventListener("DOMContentLoaded", function() {
     container.classList.remove("modal-hidden");
     container.classList.add("modal-visible");
     grid.innerHTML = "";
+    fillStreamIconGrid(grid, (fileName) => addServiceIcon(serviceId, fileName));
+  }
 
-    for (let i=1; i<=41; i++){
-      const fileName = `stream${i}.png`;
-      const img = document.createElement("img");
-      img.src = decideIconPath(fileName);
-      img.alt = fileName;
-      img.title = fileName;
-      img.addEventListener("click", () => {
-        addServiceIcon(serviceId, fileName);
+  function streamIconNames(files) {
+    return files
+      .filter((name) => /^stream\d+\.png$/i.test(name))
+      .sort((a, b) => parseInt(a.match(/\d+/)[0], 10) - parseInt(b.match(/\d+/)[0], 10));
+  }
+
+  function fillStreamIconGrid(grid, onPick) {
+    const paint = (files) => {
+      grid.innerHTML = "";
+      files.forEach((fileName) => {
+        const img = document.createElement("img");
+        img.src = decideIconPath(fileName);
+        img.alt = fileName;
+        img.title = fileName;
+        img.addEventListener("click", () => onPick(fileName));
+        grid.appendChild(img);
       });
-      grid.appendChild(img);
-    }
+    };
+    fetch("/admin/list_icons_ajax")
+      .then((r) => r.json())
+      .then((data) => {
+        const files = data && data.status === "ok" && Array.isArray(data.icons)
+          ? streamIconNames(data.icons)
+          : [];
+        paint(files);
+      })
+      .catch(() => paint([]));
   }
 
   function addServiceIcon(serviceId, iconName){
@@ -469,10 +519,10 @@ document.addEventListener("DOMContentLoaded", function() {
       }
       
       const n = newServiceName.value.trim();
-      const c1 = (newNormalColor1 && newNormalColor1.value.trim()) || "#764ba2";
-      const c2 = (newNormalColor2 && newNormalColor2.value.trim()) || "#667eea";
-      const click1 = (newClickColor1 && newClickColor1.value.trim()) || "#031faa";
-      const click2 = (newClickColor2 && newClickColor2.value.trim()) || "#031faa";
+      const c1 = (newNormalColor1 && newNormalColor1.value.trim()) || CODIGOS_NORMAL_1;
+      const c2 = (newNormalColor2 && newNormalColor2.value.trim()) || CODIGOS_NORMAL_2;
+      const click1 = (newClickColor1 && newClickColor1.value.trim()) || CODIGOS_CLICK_1;
+      const click2 = (newClickColor2 && newClickColor2.value.trim()) || CODIGOS_CLICK_2;
       
       if(!n){
         alert("Ingresa un nombre para el servicio.");
@@ -691,6 +741,11 @@ document.addEventListener("DOMContentLoaded", function() {
     if(target.classList.contains("add-service-icon-btn")){
       e.preventDefault();
       const sId=target.getAttribute("data-id");
+      const row = target.closest(".service-item-container");
+      if (row && row.querySelector(".service-item-icons-inline .service-icon-wrapper")) {
+        alert("Cada botón principal solo puede tener un icono. Quítalo para cambiarlo.");
+        return;
+      }
       showIconGridForService(sId);
     }
     if(target.classList.contains("delete-service-icon") || target.closest(".delete-service-icon")){
@@ -974,6 +1029,10 @@ document.addEventListener("DOMContentLoaded", function() {
     return `<span class="service-item-icons-inline" aria-label="Iconos del servicio">${items}</span>`;
   }
 
+  function serviceHasMainIcon(service) {
+    return Boolean(service && service.service_icons && service.service_icons.length >= 1);
+  }
+
   function renderServiceItems(services){
     let html = "";
     let popupsHtml = "";
@@ -994,7 +1053,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
       // --- HTML principal del servicio (MODIFICADO para usar degradados) ---
       const gradientStyle = s.gradient_color ? 
-        `background: linear-gradient(135deg, ${s.border_color || '#764ba2'} 0%, ${s.gradient_color} 100%);` :
+        `background: linear-gradient(135deg, ${s.border_color || CODIGOS_NORMAL_1} 0%, ${s.gradient_color || CODIGOS_NORMAL_2} 100%);` :
         `background-color: ${s.border_color || '#333333'};`;
       
         html += `
@@ -1015,8 +1074,9 @@ document.addEventListener("DOMContentLoaded", function() {
                 <button type="button" class="btn-panel btn-red btn-sm delete-service" data-id="${s.id}" title="Eliminar" aria-label="Eliminar">
                   <i class="fas fa-trash" aria-hidden="true"></i>
                 </button>`;
-        const addIconBtnHtml = `
-                <button type="button" class="add-service-icon-btn btn-blue service-row-icon-btn" data-id="${s.id}" title="Añadir icono">+Icon</button>`;
+        const addIconBtnHtml = serviceHasMainIcon(s)
+          ? ""
+          : `<button type="button" class="add-service-icon-btn btn-blue service-row-icon-btn" data-id="${s.id}" title="Añadir icono">+Icon</button>`;
         // Botones para servicios no protegidos
         if (!s.protected) {
             if (s.visibility_mode === 'sms') {

@@ -1,0 +1,165 @@
+/* Menús, iconos de la barra y piezas que usaban el violeta #667eea / #764ba2.
+   Estático = colores «Sin darle clic». Hover, clic y foco = «Cuando se da clic». */
+
+html body .btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn),
+html body a.btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn),
+html body button.btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn),
+html body .btn-panel.btn-blue.mobile-menu-btn,
+html body .btn-panel.btn-blue.menu-toggle-btn,
+html body .btn-blue.menu-btn-worksheet,
+html body .menu-toggle-btn.btn-blue,
+html body .btn-grey,
+html body .btn-search,
+html body .btn-search-main,
+html body .action-green,
+html body .store-dark .action-green,
+html body .store-light .action-green,
+html body .action-blue,
+html body .btn-agregar-licencia,
+html body .resumen-pago-modern,
+html body .mobile-menu-store .mobile-menu-store-saldo-footer,
+html body #email-search-clear-btn,
+html body .regex-result-copy-btn,
+html body .regex-result-open-link-btn,
+html body .manage-my-page-menu-row #menuToggleBtn,
+html body .manage-my-page-menu-row #menu2ToggleBtn,
+html body .manage-my-page-menu-row a.menu-btn-worksheet,
+html body .search-page-container .menu-toggle-btn,
+html body .search-page-container .btn-panel.btn-blue.mobile-menu-btn,
+html body .public-tools-container .menu-toggle-btn,
+html body .worksheet-panel .menu-toggle-btn,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-icon-btn,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet,
+html body .admin-licencias-page .admin-licencias-toolbar .admin-licencias-toolbar-btn,
+html body .admin-licencias-page .admin-licencias-toolbar .menu-btn-worksheet,
+html body .admin-licencias-page .admin-store-menus > .btn-blue,
+html body .permissions-table thead,
+html body .permissions-table th:first-child,
+html body #user-prices-table thead,
+html body .permission-group-header {
+  background: var(--ui-static-bg) !important;
+  border-color: var(--ui-static-1) !important;
+  color: #fff !important;
+}
+
+html body .btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn):hover,
+html body .btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn):active,
+html body .btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn):focus-visible,
+html body a.btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn):hover,
+html body button.btn-blue:not(.row-test-btn):not(.row-icon-btn):not(.admin-global-api-info-btn):hover,
+html body .btn-panel.btn-blue.mobile-menu-btn:hover,
+html body .btn-panel.btn-blue.mobile-menu-btn:active,
+html body .btn-panel.btn-blue.menu-toggle-btn:hover,
+html body .btn-panel.btn-blue.menu-toggle-btn:active,
+html body .menu-toggle-btn:hover,
+html body .menu-toggle-btn:active,
+html body .btn-blue.menu-btn-worksheet:hover,
+html body .btn-blue.menu-btn-worksheet:active,
+html body .btn-grey:hover,
+html body .btn-grey:active,
+html body .btn-search:hover,
+html body .btn-search:active,
+html body .btn-search-main:hover,
+html body .btn-search-main:active,
+html body .action-green:hover,
+html body .action-green:active,
+html body .store-dark .action-green:hover,
+html body .store-dark .action-green:active,
+html body .store-light .action-green:hover,
+html body .store-light .action-green:active,
+html body .action-blue:hover,
+html body .action-blue:active,
+html body .btn-agregar-licencia:hover,
+html body .btn-agregar-licencia:active,
+html body #email-search-clear-btn:hover,
+html body #email-search-clear-btn:active,
+html body .regex-result-copy-btn:hover,
+html body .regex-result-open-link-btn:hover,
+html body .regex-result-copy-btn.copied-state,
+html body .regex-result-open-link-btn.copied-state,
+html body .search-page-container .menu-toggle-btn:hover,
+html body .search-page-container .menu-toggle-btn:active,
+html body .public-tools-container .d-flex.gap-05 .menu-toggle-btn:hover,
+html body .public-tools-container .menu-toggle-container .d-flex.gap-05 .menu-toggle-btn:hover,
+html body .worksheet-panel #menuToggleBtn.menu-toggle-btn:hover,
+html body .worksheet-panel #menu2ToggleBtn.menu-toggle-btn:hover,
+html body .worksheet-panel #menu3ToggleBtn.menu-toggle-btn:hover,
+html body .worksheet-panel #menu4ToggleBtn.menu-toggle-btn:hover,
+html body .worksheet-panel #licensesCollapseBtn.menu-btn-worksheet:hover,
+html body .worksheet-panel #licensesDuplicatesBtn.menu-btn-worksheet:hover,
+html body .purchase-history-container .btn-panel.btn-blue.menu-toggle-btn:hover,
+html body .public-tools-container .btn-panel.btn-blue.menu-toggle-btn:hover,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #menuToggleBtn.menu-btn-worksheet:hover,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-cambios-link.menu-btn-worksheet:hover,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar .user-licencias-toolbar-icon-btn:hover,
+html body .admin-licencias-page.user-licencias-shell .user-licencias-toolbar #btnUserLicVencimientos.menu-btn-worksheet:hover,
+html body .admin-licencias-page .admin-licencias-toolbar .admin-licencias-toolbar-btn:hover,
+html body .admin-licencias-page .admin-licencias-toolbar .admin-licencias-toolbar-btn:active,
+html body .admin-licencias-page .admin-licencias-toolbar .menu-btn-worksheet:hover,
+html body .admin-licencias-page .admin-licencias-toolbar .menu-btn-worksheet:active,
+html body .admin-licencias-page .admin-store-menus > .btn-blue:hover,
+html body .admin-licencias-page .admin-store-menus > .btn-blue:active,
+html body .manage-my-page-menu-row #menuToggleBtn:hover,
+html body .manage-my-page-menu-row #menu2ToggleBtn:hover,
+html body .manage-my-page-menu-row a.menu-btn-worksheet:hover {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+  color: #fff !important;
+}
+
+html body .btn-renovar-cuenta-cliente-tienda,
+html body .store-front-main .btn-renovar-cuenta-cliente-tienda,
+html body .product-card-store-action-btns .btn-renovar-cuenta-cliente-tienda {
+  background: var(--ui-static-bg) !important;
+  border: 1px solid var(--ui-static-1) !important;
+  color: #fff !important;
+}
+
+html body .btn-renovar-cuenta-cliente-tienda:hover:not(:disabled),
+html body .btn-renovar-cuenta-cliente-tienda:active:not(:disabled),
+html body .store-front-main .btn-renovar-cuenta-cliente-tienda:hover:not(:disabled),
+html body .product-card-store-action-btns .btn-renovar-cuenta-cliente-tienda:hover:not(:disabled) {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+}
+
+html body #closeMenuBtn,
+html body .site-back-link,
+html body .privacy-page__back,
+html body .privacy-page a,
+html body .twofa-code-value,
+html body .carrito-producto-precio,
+html body .carrito-precio-total {
+  color: var(--ui-static-2) !important;
+}
+
+html body .carrito-producto-item::before,
+html body .service-link-popup-list-item.is-selected {
+  background: var(--ui-static-bg) !important;
+}
+
+html body .carrito-producto-item:hover,
+html body .btn-agregar-licencia {
+  border-color: var(--ui-static-1) !important;
+}
+
+/* Menús laterales: menos hueco entre botones y un poco más de alto */
+html body .mobile-menu-store .btn-blue.mobile-menu-btn,
+html body .mobile-menu-store .btn-red.mobile-menu-btn,
+html body .mobile-menu-store .btn-panel.btn-blue.mobile-menu-btn,
+html body .mobile-menu-store .btn-panel.btn-red.mobile-menu-btn {
+  margin-top: 0.04rem !important;
+  margin-bottom: 0.1rem !important;
+  padding-top: 0.72rem !important;
+  padding-bottom: 0.72rem !important;
+  min-height: 2.65rem !important;
+  line-height: 1.2 !important;
+  box-sizing: border-box !important;
+}
+
+html body .mobile-menu-store .codigos-sidebar-codigos-row .mobile-menu-btn {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}

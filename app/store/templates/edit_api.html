@@ -11,7 +11,7 @@
 <div class="store-light maxw-800 mx-auto br-8 store-container-padding">
     <div class="edit-tool-page-head">
       <a href="{{ url_for('store_bp.admin_tools') }}" class="btn-panel btn-blue edit-tool-back">Volver</a>
-      <h2 class="edit-tool-page-title">Editar API</h2>
+      <h2 class="edit-tool-page-title">Editar Drive fotos y películas</h2>
     </div>
     
     <form id="apiForm" class="no-form-styles" method="POST" action="{{ url_for('store_bp.update_api', api_id=api.id) }}">
@@ -34,12 +34,8 @@
         </div>
 
         <div class="mb-3">
-            <label for="api_type" class="form-label text-center d-block">Tipo de API</label>
-            <select class="form-select" id="api_type" name="api_type" autocomplete="off">
-                <option value="" {% if not api.api_type %}selected{% endif %}>Genérica / Ninguno</option>
-                <option value="Búsqueda de Medios" {% if api.api_type == "Búsqueda de Medios" %}selected{% endif %}>Búsqueda de Medios</option>
-                <option value="Drive" {% if api.api_type == "Drive" %}selected{% endif %}>Drive</option>
-            </select>
+            <input type="hidden" name="api_type" id="api_type" value="Drive">
+            <p class="text-center text-muted mb-0">Tipo: <strong>Drive para fotos y películas</strong></p>
         </div>
 
         <div id="drive-folder-id-field" class="drive-folder-id-field mb-3">

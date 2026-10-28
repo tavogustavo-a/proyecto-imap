@@ -64,7 +64,14 @@ def send_moved_files_to_telegram(drive_service, transfer, moved_files: list) -> 
                 continue
             kind = _send_kind(mime)
             for target in targets:
-                ok, err = _upload(token, target['chat_id'], prepared, kind, name)
+                ok, err = _upload(
+                    token,
+                    target['chat_id'],
+                    prepared,
+                    kind,
+                    name,
+                    target.get('message_thread_id'),
+                )
                 if ok:
                     sent += 1
                 else:
@@ -81,6 +88,12 @@ def _targets(transfer, probe_telegram_chat, validate_chat_id, telegram_digest_re
     problems = []
     targets = []
     group_raw = (getattr(transfer, 'telegram_group_id', None) or '').strip()
+    topic_raw = (getattr(transfer, 'telegram_topic_id', None) or '').strip()
+    if not group_raw and not topic_raw:
+        return targets, problems
+    if topic_raw and not group_raw:
+        problems.append(_problem('', 'grupo', 'Para enviar a un tema hace falta también el ID del grupo (-100…).'))
+        return targets, problems
     if not group_raw:
         return targets, problems
     if not telegram_digest_ready():
@@ -94,11 +107,24 @@ def _targets(transfer, probe_telegram_chat, validate_chat_id, telegram_digest_re
     if err:
         problems.append(_problem('', 'grupo', 'El grupo de Telegram no es un ID válido.'))
         return targets, problems
+    topic_id = ''
+    if topic_raw:
+        from app.store.telegram_bot_service import validate_topic_id
+
+        topic_id, topic_err = validate_topic_id(topic_raw)
+        if topic_err:
+            problems.append(_problem('', 'tema', topic_err))
+            return targets, problems
     probe = probe_telegram_chat(chat_id)
     if not probe.get('connected'):
         problems.append(_problem('', 'grupo', probe.get('message') or 'El bot no puede escribir en el grupo.'))
         return targets, problems
-    targets.append({'chat_id': chat_id, 'label': 'grupo'})
+    label = 'tema' if topic_id else 'grupo'
+    targets.append({
+        'chat_id': chat_id,
+        'label': label,
+        'message_thread_id': topic_id or None,
+    })
     return targets, problems
 
 
@@ -299,14 +325,27 @@ def _send_kind(mime: str) -> str:
     return 'document'
 
 
-def _upload(token: str, chat_id: str, path: str, kind: str, caption: str) -> tuple[bool, str]:
+def _upload(
+    token: str,
+    chat_id: str,
+    path: str,
+    kind: str,
+    caption: str,
+    message_thread_id: str | None = None,
+) -> tuple[bool, str]:
     field = {'photo': 'photo', 'video': 'video'}.get(kind, 'document')
     method = {'photo': 'sendPhoto', 'video': 'sendVideo'}.get(kind, 'sendDocument')
+    payload = {'chat_id': chat_id, 'caption': caption[:1000]}
+    if message_thread_id:
+        try:
+            payload['message_thread_id'] = int(message_thread_id)
+        except (TypeError, ValueError):
+            return False, 'El ID del tema no es válido.'
     try:
         with open(path, 'rb') as handle:
             response = requests.post(
                 f'https://api.telegram.org/bot{token}/{method}',
-                data={'chat_id': chat_id, 'caption': caption[:1000]},
+                data=payload,
                 files={field: handle},
                 timeout=180,
             )

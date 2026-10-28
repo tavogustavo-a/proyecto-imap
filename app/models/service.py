@@ -4,6 +4,16 @@ from app.extensions import db
 from app.models.alias import ServiceAlias
 from app.models.service_icon import ServiceIcon
 
+# Colores base de la plantilla códigos (botones y descripciones)
+CODIGOS_NORMAL_COLOR1 = "#1e3a8a"
+CODIGOS_NORMAL_COLOR2 = "#2563eb"
+CODIGOS_CLICK_COLOR1 = "#172554"
+CODIGOS_CLICK_COLOR2 = "#1e40af"
+# Tercer tono del clic: más oscuro, misma familia navy
+UI_CLICK_DARK = "#0f172a"
+CODIGOS_ALIAS_COLOR1 = "#1e293b"
+CODIGOS_ALIAS_COLOR2 = "#334155"
+
 # Tablas asociativas para Filter y Regex
 service_regex = db.Table(
     "service_regex",
@@ -24,10 +34,10 @@ class ServiceModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     color = db.Column(db.String(50), default="black")       # Color de texto
-    border_color = db.Column(db.String(50), default="#764ba2") # Contorno
-    gradient_color = db.Column(db.String(50), default="#667eea") # Segundo color para degradado
-    click_color1 = db.Column(db.String(50), default="#031faa") # Color 1 al hacer clic
-    click_color2 = db.Column(db.String(50), default="#031faa") # Color 2 al hacer clic
+    border_color = db.Column(db.String(50), default=CODIGOS_NORMAL_COLOR1) # Contorno
+    gradient_color = db.Column(db.String(50), default=CODIGOS_NORMAL_COLOR2) # Segundo color para degradado
+    click_color1 = db.Column(db.String(50), default=CODIGOS_CLICK_COLOR1) # Color 1 al hacer clic
+    click_color2 = db.Column(db.String(50), default=CODIGOS_CLICK_COLOR2) # Color 2 al hacer clic
     position = db.Column(db.Integer, default=1)
     # Misma clave en otro proyecto (otra BD) con distinto id/nombre visible; enlaza regex/filtros equivalentes
     match_key = db.Column(db.String(64), nullable=True, unique=True, index=True)

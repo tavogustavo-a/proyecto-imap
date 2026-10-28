@@ -2738,6 +2738,7 @@ form {
 #viewEmailModal .modal-footer {
   flex-shrink: 0;
   margin-top: 0;
+  justify-content: center;
 }
 
 /* Estilos para el modal de responder email */

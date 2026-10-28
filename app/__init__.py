@@ -753,7 +753,20 @@ def create_app(config_class_passed=None):
             # Usa logging.warning en lugar de print si deseas registrar este error
             pass
 
-        return {"site_settings": settings_dict}
+        ui_chrome = {
+            "static1": "#1e3a8a",
+            "static2": "#2563eb",
+            "click1": "#172554",
+            "click2": "#1e40af",
+            "click_dark": "#0f172a",
+        }
+        try:
+            from app.admin.ui_chrome import get_ui_chrome_colors
+            ui_chrome = get_ui_chrome_colors()
+        except Exception:
+            pass
+
+        return {"site_settings": settings_dict, "ui_chrome": ui_chrome}
 
 
     @app.context_processor

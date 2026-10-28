@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261023-ct-nolabels">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261027-ct-wide">
 {% endblock %}
 
 {% block content %}
@@ -62,13 +62,14 @@
         </div>
 
         <div class="mb-3 mdp-editor" data-ct-editor>
-          <div class="mdp-main-row">
+          <div class="mdp-main-row ct-main-title-row">
             <label for="ct_main_title" class="sr-only">Título principal</label>
             <input type="text" class="form-control" id="ct_main_title" name="ct_main_title" value="{{ como_trabajo.main_title }}" placeholder="Cómo trabajo — Guía rápida" autocomplete="off" maxlength="160">
             {% with mdp_icon_current=como_trabajo.main_icon, mdp_icon_name='ct_main_icon', mdp_icon_choices=como_trabajo_icons %}
               {% include 'includes/medios_pago_main_icon_picker.html' %}
             {% endwith %}
           </div>
+          <hr class="ct-editor-divider" aria-hidden="true">
           <div data-ct-sections>
             {% for section in como_trabajo.sections %}
               {% include 'includes/como_trabajo_section_fields.html' %}
@@ -84,6 +85,8 @@
 
         {% include 'includes/codigos_resumen_fields.html' %}
         {% include 'includes/pantallas_fields.html' %}
+        {% include 'includes/busqueda_medios_fields.html' %}
+        {% include 'includes/drive_fotos_fields.html' %}
 
         <!-- Sección de la tabla de usuarios -->
         <div class="d-flex flex-column align-items-center edit-tool-main-container">

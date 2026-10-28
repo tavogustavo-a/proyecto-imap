@@ -38,21 +38,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (overlay) overlay.style.display = 'none';
                 return;
             }
-            grid.innerHTML = ''; 
-            for (let i = 1; i <= 41; i++) {
+            grid.innerHTML = '';
+            const files = Array.from(sel.options)
+                .map((opt) => opt.value)
+                .filter((value) => value && value !== 'none');
+            files.forEach((fileName) => {
                 const imgEl = document.createElement('img');
-                imgEl.src = `${staticImagesPath}stream${i}.png`;
-                imgEl.alt = `stream${i}.png`;
-                imgEl.title = `stream${i}.png`;
+                imgEl.src = `${staticImagesPath}${fileName}`;
+                imgEl.alt = fileName;
+                imgEl.title = fileName;
                 imgEl.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    sel.value = `stream${i}.png`;
+                    sel.value = fileName;
                     sel.dispatchEvent(new Event('change'));
                     grid.style.display = 'none';
                     if (overlay) overlay.style.display = 'none';
                 });
                 grid.appendChild(imgEl);
-            }
+            });
             grid.style.display = 'grid';
             if (overlay) overlay.style.display = 'block';
         });

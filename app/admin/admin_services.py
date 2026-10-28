@@ -11,9 +11,17 @@ from app.models import (
     FilterModel,
     ServiceAlias,
     ServiceIcon,
-    AliasIcon
+    AliasIcon,
+    CODIGOS_NORMAL_COLOR1,
+    CODIGOS_NORMAL_COLOR2,
+    CODIGOS_CLICK_COLOR1,
+    CODIGOS_CLICK_COLOR2,
+    UI_CLICK_DARK,
+    CODIGOS_ALIAS_COLOR1,
+    CODIGOS_ALIAS_COLOR2,
 )
 from app.admin.decorators import admin_required
+from app.admin.ui_chrome import safe_hex, save_ui_click_colors, save_ui_static_colors
 from app.services.alias_service import (
     create_service_alias,
     update_service_alias,
@@ -471,6 +479,17 @@ def create_service_icon_ajax():
         icon_name = data.get("icon_name", "").strip()
         if not icon_name:
             return jsonify({"status": "error", "message": "No se indicó icon_name"}), 400
+        if not service_id:
+            return jsonify({"status": "error", "message": "ID de servicio requerido."}), 400
+
+        service = ServiceModel.query.get(service_id)
+        if not service:
+            return jsonify({"status": "error", "message": "Servicio no encontrado."}), 404
+        if ServiceIcon.query.filter_by(service_id=service_id).count() >= 1:
+            return jsonify({
+                "status": "error",
+                "message": "Cada botón principal solo puede tener un icono. Quítalo para cambiarlo.",
+            }), 400
 
         new_icon = ServiceIcon(service_id=service_id, icon_name=icon_name)
         db.session.add(new_icon)
@@ -599,8 +618,8 @@ def update_service_gradient_ajax():
     try:
         data = request.get_json()
         service_id = data.get("service_id")
-        border_color = data.get("border_color", "#764ba2")
-        gradient_color = data.get("gradient_color", "#667eea")
+        border_color = data.get("border_color", CODIGOS_NORMAL_COLOR1)
+        gradient_color = data.get("gradient_color", CODIGOS_NORMAL_COLOR2)
 
         if not service_id:
             return jsonify({"status": "error", "message": "ID de servicio requerido."}), 400
@@ -650,8 +669,9 @@ def save_global_click_colors_ajax():
     """Guarda los colores globales para cuando se da clic"""
     try:
         data = request.get_json()
-        color1 = data.get("color1", "#031faa")
-        color2 = data.get("color2", "#031faa")
+        color1 = safe_hex(data.get("color1"), CODIGOS_CLICK_COLOR1)
+        color2 = safe_hex(data.get("color2"), CODIGOS_CLICK_COLOR2)
+        color_dark = safe_hex(data.get("color_dark"), UI_CLICK_DARK)
         
         # Actualizar todos los servicios con los nuevos colores de clic
         services = ServiceModel.query.all()
@@ -660,6 +680,7 @@ def save_global_click_colors_ajax():
             service.click_color2 = color2
         
         db.session.commit()
+        save_ui_click_colors(color1, color2, color_dark)
         
         return jsonify({
             "status": "ok",
@@ -676,8 +697,8 @@ def save_global_normal_colors_ajax():
     """Guarda los colores globales para sin darle clic (normales)"""
     try:
         data = request.get_json()
-        color1 = data.get("color1", "#764ba2")
-        color2 = data.get("color2", "#667eea")
+        color1 = safe_hex(data.get("color1"), CODIGOS_NORMAL_COLOR1)
+        color2 = safe_hex(data.get("color2"), CODIGOS_NORMAL_COLOR2)
         
         # Actualizar todos los servicios con los nuevos colores normales
         services = ServiceModel.query.all()
@@ -686,6 +707,7 @@ def save_global_normal_colors_ajax():
             service.gradient_color = color2
         
         db.session.commit()
+        save_ui_static_colors(color1, color2)
         
         return jsonify({
             "status": "ok",
@@ -724,18 +746,25 @@ def get_global_colors_ajax():
         
         # Valores por defecto
         normal_colors = {
-            "color1": service_with_normal.border_color if service_with_normal else "#764ba2",
-            "color2": service_with_normal.gradient_color if service_with_normal else "#667eea"
+            "color1": service_with_normal.border_color if service_with_normal else CODIGOS_NORMAL_COLOR1,
+            "color2": service_with_normal.gradient_color if service_with_normal else CODIGOS_NORMAL_COLOR2
         }
-        
+
         click_colors = {
-            "color1": service_with_click.click_color1 if service_with_click else "#031faa",
-            "color2": service_with_click.click_color2 if service_with_click else "#031faa"
+            "color1": service_with_click.click_color1 if service_with_click else CODIGOS_CLICK_COLOR1,
+            "color2": service_with_click.click_color2 if service_with_click else CODIGOS_CLICK_COLOR2,
+            "color_dark": UI_CLICK_DARK,
         }
-        
+        try:
+            from app.admin.ui_chrome import get_ui_chrome_colors
+            chrome = get_ui_chrome_colors()
+            click_colors["color_dark"] = chrome["click_dark"]
+        except Exception:
+            pass
+
         alias_colors = {
-            "color1": alias_with_color.border_color if alias_with_color else "#000000",
-            "color2": alias_with_color.gradient_color if alias_with_color else "#000000"
+            "color1": alias_with_color.border_color if alias_with_color else CODIGOS_ALIAS_COLOR1,
+            "color2": alias_with_color.gradient_color if alias_with_color else CODIGOS_ALIAS_COLOR2
         }
         
         return jsonify({

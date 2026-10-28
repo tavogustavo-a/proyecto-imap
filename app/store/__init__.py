@@ -30,6 +30,12 @@ def html_info_body_filter(html_obj):
     return html_info_body(html_obj)
 
 
+@store_bp.app_template_filter('drive_gallery_public_row')
+def drive_gallery_public_row_filter(html_obj):
+    from app.store.html_presets import drive_gallery_public_row
+    return drive_gallery_public_row(html_obj)
+
+
 @store_bp.app_template_filter('rewrite_external_images')
 def rewrite_external_images_filter(html):
     """Reescribe img src externos para usar proxy local y evitar CORB/CORS."""
@@ -89,6 +95,17 @@ except Exception:
 def inject_worksheet_access():
     from .routes import user_has_worksheet_access
     return dict(user_has_worksheet_access=user_has_worksheet_access)
+
+
+@store_bp.context_processor
+def inject_stream_icon_files():
+    from app.store.html_presets import list_stream_icon_files
+
+    try:
+        files = list_stream_icon_files()
+    except Exception:
+        files = []
+    return dict(stream_icon_files=files)
 
 # ✅ NUEVO: Cargar eventos de SocketIO solo cuando se use la tienda
 def load_socketio_events():

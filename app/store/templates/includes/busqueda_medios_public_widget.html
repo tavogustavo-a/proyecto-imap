@@ -1,0 +1,12 @@
+<div class="media-search-container" data-media-html-id="{{ html_id }}">
+  <form class="media-search-form mb-05" name="mediaSearchForm">
+    <div class="d-flex gap-05 w-100">
+      <input type="text" class="search-input media-search-input flex-grow-1" placeholder="Escribe un título..." required name="media_search_title" autocomplete="off" aria-label="Título a buscar">
+      <select class="form-select media-country-select w-120px" name="media_country" autocomplete="off" aria-label="País">
+        {% include 'includes/media_country_options.html' %}
+      </select>
+      <button type="submit" class="btn-search media-search-btn">Buscar</button>
+    </div>
+  </form>
+  <div class="media-results-container mt-3"></div>
+</div>

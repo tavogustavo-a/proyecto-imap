@@ -133,8 +133,8 @@
             <label for="imageSelect" class="sr-only">Seleccionar imagen</label>
             <select name="image_filename" id="imageSelect" class="visually-hidden-select" autocomplete="off">
                 <option value="none" selected>Ninguno</option>
-                {% for img_num in range(1, 42) %}
-                <option value="stream{{ img_num }}.png">stream{{ img_num }}.png</option>
+                {% for img_name in stream_icon_files %}
+                <option value="{{ img_name }}">{{ img_name }}</option>
                 {% endfor %}
             </select>
             <button type="button" id="imageSelectTrigger" class="image-select-trigger-btn">Seleccionar Imagen</button>
@@ -354,7 +354,7 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20261018-tabla-sin-id" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_store.js') }}?v=20261027-stream-icons" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/productos.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/cupones.js') }}?v=20261018-cupones-pager" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/anuncios_admin.js') }}?v=20261016-switch" defer></script>

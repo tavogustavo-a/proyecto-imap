@@ -129,6 +129,27 @@ def _lighten_dark_strokes(image):
     return image
 
 
+def _circle_is_already_dark(image) -> bool:
+    """True si el icono ya trae círculo negro. No hay que invertirlo a blanco."""
+    width, height = image.size
+    pixels = image.load()
+    points = (
+        (width // 2, 14),
+        (width // 2, height - 15),
+        (14, height // 2),
+        (width - 15, height // 2),
+    )
+    dark = 0
+    for x, y in points:
+        red, green, blue, alpha = pixels[x, y]
+        if alpha < 200:
+            continue
+        lum = (red * 299 + green * 587 + blue * 114) // 1000
+        if lum < 45:
+            dark += 1
+    return dark >= 3
+
+
 def dark_screen_icon(path: str, size: int = 160):
     """Imagen RGBA del icono lista para una placa oscura, o None si no existe."""
     from PIL import Image
@@ -139,6 +160,9 @@ def dark_screen_icon(path: str, size: int = 160):
         image = Image.open(path).convert('RGBA')
     except Exception:
         return None
+    if _circle_is_already_dark(image):
+        image.thumbnail((size, size))
+        return image
     image = _remove_background(image)
     image = _clear_light_holes(image)
     image.thumbnail((size, size))

@@ -81,7 +81,7 @@
                 <button type="button" class="btn-panel btn-red btn-sm delete-alias-btn" data-alias-id="{{ al.id }}" title="Eliminar">
                   <i class="fas fa-trash"></i>
                 </button>
-                <button type="button" class="add-alias-icon-btn btn-small btn-add-icon" data-alias-id="{{ al.id }}">+Icon</button>
+                <button type="button" class="add-alias-icon-btn btn-small btn-blue" data-alias-id="{{ al.id }}">+Icon</button>
                 {% if al.alias_icons and al.alias_icons|length > 0 %}
                 <span class="alias-attached-icons-inline">
                   {% for ai in al.alias_icons %}
@@ -186,6 +186,6 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/admin_services_edit.js') }}?v=20261021-confirm-a11y"></script>
+<script src="{{ url_for('static', filename='js/admin_services_edit.js') }}?v=20261028-alias-icon-blue"></script>
 
 {% endblock %}

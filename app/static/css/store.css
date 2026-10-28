@@ -45,8 +45,8 @@
 }
 .btn-panel.btn-blue.mobile-menu-btn {
   color: #fff !important;
-  background: #1976d2 !important;
-  border-color: #1976d2 !important;
+  background: var(--ui-static-bg) !important;
+  border-color: var(--ui-static-1) !important;
 }
 .btn-panel.btn-red.mobile-menu-btn {
   width: auto !important;
@@ -72,7 +72,7 @@
   background: none;
   border: none;
   font-size: 1.7em;
-  color: #1976d2;
+  color: var(--ui-static-2);
   cursor: pointer;
   position: absolute;
   top: 12px;
@@ -222,7 +222,7 @@ body.manage-subusers-page #menuToggleBtn {
   box-sizing: border-box;
   border-radius: 8px;
   border: 2px solid #0d6efd;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ui-static-bg);
   text-align: center;
   box-shadow: none;
   overflow: visible;

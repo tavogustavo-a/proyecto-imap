@@ -479,13 +479,18 @@ function initMediaSearch() {
             resultsContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
 
             try {
+                const htmlId = container.dataset.mediaHtmlId;
+                const payload = { query: query, country: country };
+                if (htmlId) {
+                    payload.html_id = htmlId;
+                }
                 const response = await fetch('/tienda/tools/find-media', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': document.querySelector('meta[name="csrf_token"]').getAttribute('content')
                     },
-                    body: JSON.stringify({ query: query, country: country })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
