@@ -1899,7 +1899,28 @@ function initHerramientasPage() {
   initHttpApiForm();
 }
 
+function applyTvFaviconFallback(img) {
+  if (!img || img.tagName !== 'IMG' || !img.classList.contains('tv-favicon')) return;
+  var fallback = img.getAttribute('data-fallback');
+  if (!fallback || img.getAttribute('data-fallback-applied') === '1') return;
+  img.setAttribute('data-fallback-applied', '1');
+  img.src = fallback;
+  img.classList.remove('tv-favicon', 'tv-favicon-title');
+  img.classList.add('tv-logo');
+}
+
+document.addEventListener('error', function (ev) {
+  applyTvFaviconFallback(ev.target);
+}, true);
+
+function recoverFailedTvFavicons() {
+  document.querySelectorAll('img.tv-favicon[data-fallback]').forEach(function (img) {
+    if (img.complete && img.naturalWidth === 0) applyTvFaviconFallback(img);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+  recoverFailedTvFavicons();
   if (window.requestIdleCallback) {
     requestIdleCallback(initHerramientasPage, { timeout: 150 });
   } else {

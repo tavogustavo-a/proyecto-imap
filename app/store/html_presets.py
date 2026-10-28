@@ -1191,10 +1191,6 @@ def _tv_platform_favicon_img(page: str, row: dict) -> Markup:
             [
                 Markup(' data-fallback="'),
                 escape(fallback),
-                Markup(
-                    '" onerror="if(this.dataset.fallback){this.onerror=null;this.src=this.dataset.fallback;'
-                    "this.classList.remove('tv-favicon','tv-favicon-title');this.classList.add('tv-logo');}"
-                ),
             ]
         )
     parts.append(Markup('">'))
