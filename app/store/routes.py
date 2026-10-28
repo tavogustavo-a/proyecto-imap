@@ -3487,19 +3487,11 @@ def _proxy_image_url_allowed(url):
         return False
 
 
-@store_bp.route('/site-favicon')
-@csrf_exempt_route
-def site_favicon():
-    """Favicon público de la página oficial. Solo consulta el servicio de iconos, no el sitio escrito."""
-    from app.store.html_presets import favicon_url_for
-
-    target = favicon_url_for(request.args.get('page'))
-    if not target:
-        return Response(status=404)
+def _remote_favicon(url: str) -> tuple[bytes, str] | None:
     try:
         resp = requests.get(
-            target,
-            timeout=10,
+            url,
+            timeout=6,
             allow_redirects=True,
             headers={
                 'User-Agent': (
@@ -3510,25 +3502,45 @@ def site_favicon():
             },
         )
     except requests.RequestException:
-        return Response(status=404)
-    content_type = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+        return None
     body = resp.content or b''
-    if resp.status_code != 200 or len(body) > 200_000 or not body:
-        return Response(status=404)
-    if not content_type.startswith('image/'):
-        if body[:8] == b'\x89PNG\r\n\x1a\n':
-            content_type = 'image/png'
-        elif body[:3] == b'\xff\xd8\xff':
-            content_type = 'image/jpeg'
-        elif body[:6] in (b'GIF87a', b'GIF89a'):
-            content_type = 'image/gif'
-        elif body[:4] == b'RIFF' and len(body) > 12 and body[8:12] == b'WEBP':
-            content_type = 'image/webp'
-        else:
-            return Response(status=404)
-    out = Response(resp.content, mimetype=content_type)
-    out.headers['Cache-Control'] = 'public, max-age=86400'
-    return out
+    if resp.status_code != 200 or not body or len(body) > 200_000:
+        return None
+    content_type = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+    if content_type.startswith('image/'):
+        return body, content_type
+    if body[:8] == b'\x89PNG\r\n\x1a\n':
+        return body, 'image/png'
+    if body[:3] == b'\xff\xd8\xff':
+        return body, 'image/jpeg'
+    if body[:6] in (b'GIF87a', b'GIF89a'):
+        return body, 'image/gif'
+    if body[:4] == b'RIFF' and len(body) > 12 and body[8:12] == b'WEBP':
+        return body, 'image/webp'
+    return None
+
+
+@store_bp.route('/site-favicon')
+@csrf_exempt_route
+def site_favicon():
+    """Favicon público. Si el subdominio no tiene icono, usa el dominio principal o el logo local."""
+    from app.store.html_presets import favicon_source_urls, stream_icon_name_for_page
+
+    page = request.args.get('page')
+    for target in favicon_source_urls(page):
+        found = _remote_favicon(target)
+        if not found:
+            continue
+        body, content_type = found
+        out = Response(body, mimetype=content_type)
+        out.headers['Cache-Control'] = 'public, max-age=86400'
+        return out
+    icon = stream_icon_name_for_page(page)
+    if icon:
+        fallback = redirect(url_for('store_bp.stream_icon', name=icon))
+        fallback.headers['Cache-Control'] = 'public, max-age=3600'
+        return fallback
+    return Response(status=404)
 
 
 @store_bp.route('/stream-icon/<name>')

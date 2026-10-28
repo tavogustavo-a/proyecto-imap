@@ -706,6 +706,56 @@ def favicon_url_for(raw: str | None) -> str | None:
     )
 
 
+_FAVICON_LOGIN_LABELS = frozenset({
+    'id', 'auth', 'login', 'account', 'accounts', 'signin', 'sso', 'myaccount',
+})
+
+
+def favicon_lookup_hosts(raw: str | None) -> list[str]:
+    """Dominios a consultar. Un login (id.youtube.com) usa primero el sitio principal."""
+    href = _safe_href(raw)
+    if not href:
+        return []
+    from urllib.parse import urlparse
+
+    host = (urlparse(href).hostname or '').strip('.').lower()
+    if not host or '.' not in host:
+        return []
+    labels = host.split('.')
+    hosts: list[str] = []
+
+    def add(value: str) -> None:
+        value = (value or '').strip('.').lower()
+        if value and '.' in value and value not in hosts:
+            hosts.append(value)
+
+    if len(labels) >= 3 and labels[0] in _FAVICON_LOGIN_LABELS:
+        apex = '.'.join(labels[1:])
+        add(apex)
+        add('www.' + apex)
+    add(host)
+    if host.startswith('www.') and len(labels) > 2:
+        add('.'.join(labels[1:]))
+    else:
+        add('www.' + host)
+    return hosts
+
+
+def favicon_source_urls(raw: str | None) -> list[str]:
+    """Servicios de iconos, en el orden en que hay que probarlos."""
+    urls: list[str] = []
+    for host in favicon_lookup_hosts(raw):
+        gstatic = favicon_url_for('https://' + host + '/')
+        if gstatic and gstatic not in urls:
+            urls.append(gstatic)
+        s2 = 'https://www.google.com/s2/favicons?domain=' + host + '&sz=128'
+        if s2 not in urls:
+            urls.append(s2)
+        if len(urls) >= 4:
+            break
+    return urls
+
+
 def favicon_source_page(row: dict) -> str:
     """Página de la que sale el favicon: la oficial, o la de activación si la oficial no es web."""
     for key in ('pagina', 'activacion'):
@@ -1124,6 +1174,15 @@ def _page_icon_match_blob(row: dict) -> str:
         if parsed.path:
             chunks.append(parsed.path.lower())
     return ' '.join(chunks)
+
+
+def stream_icon_name_for_page(raw: str | None) -> str:
+    """streamN.png del dominio, para cuando el favicon público no existe."""
+    text = (raw or '').strip()
+    if not text:
+        return ''
+    found = _detect_stream_icons_from_row({'pagina': text, 'activacion': ''}, limit=1)
+    return found[0] if found else ''
 
 
 def _detect_stream_icons_from_row(row: dict, limit: int = 2) -> list[str]:

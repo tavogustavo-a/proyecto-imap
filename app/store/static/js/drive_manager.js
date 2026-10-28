@@ -1269,12 +1269,11 @@ class DriveGallery {
 
     createVideoItem(video, index, apiId) {
         const thumbnailUrl = `https://drive.google.com/thumbnail?id=${video.id}&sz=w400`;
-        const fullUrl = `https://drive.google.com/uc?export=download&id=${video.id}`;
-        const proxyUrl = `/tienda/drive/proxy?file_id=${video.id}&api_id=${apiId}&type=video`;
+        const fullUrl = `/tienda/drive/proxy?file_id=${video.id}&api_id=${apiId}&type=video`;
         const escapedName = escapeHtml(video.name);
         return `
             <div class="video-item drive-media-item" data-type="video" data-index="${index}" data-api-id="${apiId}" data-file-id="${video.id}" data-full-url="${escapeHtml(fullUrl)}" data-name="${escapedName}">
-                <video src="${escapeHtml(fullUrl)}" poster="${escapeHtml(thumbnailUrl)}" preload="none" class="drive-video-thumbnail"></video>
+                <video poster="${escapeHtml(thumbnailUrl)}" preload="none" class="drive-video-thumbnail"></video>
                     <div class="video-actions">
                     <button class="btn-download-icon drive-video-download" data-file-id="${video.id}" data-name="${escapedName}" title="Descargar">
                         <i class="fas fa-download"></i>
@@ -1897,19 +1896,10 @@ class DriveGallery {
             videoEl.addEventListener('canplaythrough', handleVideoLoad, { once: true });
             
             // Manejar errores de carga de video (CSP-compliant)
-            let videoErrorAttempts = 0;
             const handleVideoError = function() {
                 if (loadTimeout) clearTimeout(loadTimeout);
-                videoErrorAttempts++;
-                
-                if (videoErrorAttempts === 1) {
-                    const fallbackUrl = `https://drive.google.com/uc?export=download&id=${item.id}`;
-                    this.src = fallbackUrl;
-                    this.load();
-                } else {
-                    this.removeEventListener('error', handleVideoError);
-                    showError('No se pudo cargar el video. Verifica tu conexión.');
-                }
+                this.removeEventListener('error', handleVideoError);
+                showError('No se pudo cargar el video. Verifica tu conexión.');
             };
             
             videoEl.addEventListener('error', handleVideoError);

@@ -9034,7 +9034,24 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   .public-tools-container .nested-accordion > .accordion-header > span {
       text-align: center !important;
-      padding-right: 5.5rem !important;
+      padding-right: 2.4rem !important;
+  }
+
+  .public-tools-container .btn-copy-link {
+      width: 1.7rem;
+      height: 1.7rem;
+      min-width: 1.7rem;
+      padding: 0 !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      line-height: 1;
+  }
+
+  .public-tools-container .btn-copy-link i {
+      font-size: 0.78rem;
+      pointer-events: none;
   }
 
   .public-tools-container .herramienta-accordion,

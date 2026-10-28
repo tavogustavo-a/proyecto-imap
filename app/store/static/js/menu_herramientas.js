@@ -389,6 +389,19 @@ function initBuscadorHerramientas() {
 }
 
 function showCopySuccess(buttonElement) {
+    const icon = buttonElement.querySelector('i');
+    if (icon) {
+        const wasCopy = icon.classList.contains('fa-copy');
+        icon.classList.remove('fa-copy');
+        icon.classList.add('fa-check');
+        buttonElement.disabled = true;
+        setTimeout(() => {
+            icon.classList.remove('fa-check');
+            if (wasCopy) icon.classList.add('fa-copy');
+            buttonElement.disabled = false;
+        }, 1500);
+        return;
+    }
     const originalText = buttonElement.textContent;
     buttonElement.textContent = 'Copiado!';
     buttonElement.disabled = true;
@@ -425,18 +438,19 @@ function fallbackCopyTextToClipboard(text, buttonElement) {
 function initCopyToClipboard() {
     // Event listeners optimizados para botones de copiar
     document.body.addEventListener('click', function(e) {
-        if (e.target.classList.contains('btn-copy-link')) {
-            const linkToCopy = e.target.dataset.link;
+        const copyBtn = e.target.closest && e.target.closest('.btn-copy-link');
+        if (copyBtn) {
+            const linkToCopy = copyBtn.dataset.link;
             if (!linkToCopy) return;
 
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(linkToCopy).then(() => {
-                    showCopySuccess(e.target);
+                    showCopySuccess(copyBtn);
                 }).catch(err => {
-                    fallbackCopyTextToClipboard(linkToCopy, e.target);
+                    fallbackCopyTextToClipboard(linkToCopy, copyBtn);
                 });
             } else {
-                fallbackCopyTextToClipboard(linkToCopy, e.target);
+                fallbackCopyTextToClipboard(linkToCopy, copyBtn);
             }
         }
     }, { passive: true });

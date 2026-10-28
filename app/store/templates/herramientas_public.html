@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261028-prod-compact">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261028-copy-icon">
 {% endblock %}
 
 {% block content %}
@@ -185,7 +185,7 @@
                       <div class="accordion-header d-flex align-items-center justify-content-between w-100">
                           <span>• {{ link.title }}</span>
                           <div class="d-flex align-items-center">
-                              <button class="btn-panel btn-blue btn-copy-link btn-small" data-link="{{ link.url }}">Copiar</button>
+                              <button type="button" class="btn-panel btn-blue btn-copy-link" data-link="{{ link.url }}" title="Copiar" aria-label="Copiar enlace"><i class="fas fa-copy" aria-hidden="true"></i></button>
                               <div class="accordion-arrow ms-2"></div>
                           </div>
                       </div>
@@ -239,8 +239,8 @@
 {% block scripts %}
 {{ super() }}
 <meta name="clear_trigger_log_url" content="{{ url_for('admin_bp.clear_trigger_log') }}">
-<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}?v=20261028-tv-favicon-fallback" defer></script>
-<script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/menu_herramientas.js') }}?v=20261028-copy-icon" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261028-drive-media-src" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
 {% endblock %} 

@@ -205,7 +205,7 @@ class Config:
     # En producción el header lo pone nginx; Flask solo si CONTENT_SECURITY_POLICY_FROM_APP=1.
     _CSP_DEFAULT = (
         "default-src 'self'; "
-        "media-src 'self' data: blob:; "
+        "media-src 'self' data: blob: https://drive.google.com; "
         "script-src 'self' https://apis.google.com https://accounts.google.com "
         "https://cdn.socket.io https://cdnjs.cloudflare.com https://code.iconify.design; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; "
