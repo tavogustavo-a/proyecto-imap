@@ -176,13 +176,30 @@ def _all_addresses_excluding_envelope(decoded: str, env_norm: str) -> list[str]:
     return out
 
 
+def _addresses_from_headers(
+    message: email.message.Message, env_norm: str, headers: tuple[str, ...]
+) -> list[str]:
+    found: list[str] = []
+    for header in headers:
+        chunks = message.get_all(header, [])
+        if not chunks:
+            one = message.get(header)
+            if one:
+                chunks = [one]
+        for raw in chunks:
+            if not raw:
+                continue
+            decoded = _decode_mime_header(raw)
+            if header == "Original-Recipient" and ";" in decoded:
+                decoded = decoded.split(";", 1)[1].strip()
+            found.extend(_all_addresses_excluding_envelope(decoded, env_norm))
+    return found
+
+
 def _pick_best_display_recipient(candidates: list[str]) -> Optional[str]:
     """
-    Entre varias cabeceras (reenvío Gmail), elige la mejor para mostrar al usuario.
-
-    Prioriza Gmail/Googlemail con subdirección (+alias), típica de servicios
-    (Disney, bancos). Evita quedarse solo en la primera dirección distinta del RCPT
-    cuando X-Forwarded-To mezcla el buzón de reenvío con otra cuenta.
+    Elige el destinatario a mostrar. No depende del proveedor: vale Gmail,
+    Hotmail o cualquier otro dominio. Si hay un alias con «+», se prefiere.
     """
     if not candidates:
         return None
@@ -194,25 +211,11 @@ def _pick_best_display_recipient(candidates: list[str]) -> Optional[str]:
             continue
         seen.add(cl)
         uniq.append(c)
-
-    plus_gmails: list[str] = []
-    plain_gmails: list[str] = []
-    rest: list[str] = []
     for c in uniq:
-        local, _, domain = c.partition("@")
-        d = domain.lower()
-        if d in ("gmail.com", "googlemail.com"):
-            if "+" in local:
-                plus_gmails.append(c)
-            else:
-                plain_gmails.append(c)
-        else:
-            rest.append(c)
-    if plus_gmails:
-        return plus_gmails[0]
-    if plain_gmails:
-        return plain_gmails[0]
-    return rest[0] if rest else None
+        local, _, _domain = c.partition("@")
+        if "+" in local:
+            return c
+    return uniq[0]
 
 
 # "for <addr@host>" en cabeceras Received (muchas veces conserva el destinatario original)
@@ -257,38 +260,26 @@ def _gather_header_recipient_candidates(
     message: email.message.Message, env_norm: str
 ) -> list[str]:
     """
-    Recoge todas las direcciones distintas del RCPT en cabeceras relevantes.
-
-    Delivered-To antes que X-Forwarded-To: en reenvíos, el +alias de servicios
-    suele aparecer en Delivered-To; X-Forwarded-To a veces repite el buzón de reenvío.
+    Primero la cabecera To (el buzón al que escribió el servicio: Gmail, Hotmail
+    u otro). Si no hay, el resto de cabeceras de reenvío.
     """
-    candidates: list[str] = []
-    for header in (
-        "X-Gm-Original-To",
-        "X-Google-Original-To",
-        "X-Original-To",
-        "Delivered-To",
-        "X-Forwarded-To",
-        "Envelope-To",
-        "X-Envelope-To",
-        "Original-Recipient",
-        "To",
-    ):
-        chunks = message.get_all(header, [])
-        if not chunks:
-            one = message.get(header)
-            if one:
-                chunks = [one]
-        for raw in chunks:
-            if not raw:
-                continue
-            decoded = _decode_mime_header(raw)
-            if header == "Original-Recipient" and ";" in decoded:
-                tail = decoded.split(";", 1)[1].strip()
-                candidates.extend(_all_addresses_excluding_envelope(tail, env_norm))
-            else:
-                candidates.extend(_all_addresses_excluding_envelope(decoded, env_norm))
-    return candidates
+    to_addrs = _addresses_from_headers(message, env_norm, ("To",))
+    if to_addrs:
+        return to_addrs
+    return _addresses_from_headers(
+        message,
+        env_norm,
+        (
+            "X-Gm-Original-To",
+            "X-Google-Original-To",
+            "X-Original-To",
+            "Delivered-To",
+            "X-Forwarded-To",
+            "Envelope-To",
+            "X-Envelope-To",
+            "Original-Recipient",
+        ),
+    )
 
 
 def _forwarded_recipient_for_display(

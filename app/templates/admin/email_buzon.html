@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261028-toolbar-icons">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261028-view-compact">
 {% endblock %}
 
 {% block content %}
@@ -724,17 +724,14 @@
 <!-- Modal para ver email completo -->
 <div id="viewEmailModal" class="edit-modal hidden">
   <div class="edit-modal-content">
-    <div class="modal-header view-email-modal-header">
-      <span class="sr-only">Detalle del correo</span>
-      <button type="button" class="view-email-close-btn" data-action="close-view-modal" aria-label="Cerrar">
-        <i class="fas fa-times" aria-hidden="true"></i>
-      </button>
-    </div>
     <div class="modal-body">
       <div class="email-details">
-        <div class="email-field">
+        <div class="email-field email-field-from">
           <strong>De:</strong>
           <span id="emailFrom"></span>
+          <button type="button" class="view-email-close-btn" data-action="close-view-modal" aria-label="Cerrar">
+            <i class="fas fa-times" aria-hidden="true"></i>
+          </button>
         </div>
         <div class="email-field">
           <strong>Para:</strong>

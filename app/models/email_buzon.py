@@ -114,7 +114,13 @@ class EmailFilter(db.Model):
         
         # Verificar condición de destinatario
         if self.filter_to_email:
-            if not email.to_email or self.filter_to_email.lower() not in email.to_email.lower():
+            targets = " ".join(
+                part for part in (
+                    getattr(email, "to_email", "") or "",
+                    getattr(email, "original_to_email", "") or "",
+                ) if part
+            )
+            if not targets or self.filter_to_email.lower() not in targets.lower():
                 return False
         
         # Verificar condición de asunto
@@ -232,17 +238,21 @@ class BlockedSender(db.Model):
         return "Sin especificar"
     
     def matches_email(self, email):
-        """Verifica si este bloqueo coincide con el email dado"""
+        """Verifica si este bloqueo coincide con el email dado (también «Nombre <correo>»)."""
         if not self.enabled:
             return False
-            
-        if self.sender_email and self.sender_email.lower() == email.lower():
+        from email.utils import parseaddr
+
+        _, addr = parseaddr(email or "")
+        addr = (addr or email or "").strip().lower()
+        if not addr:
+            return False
+
+        if self.sender_email and addr == self.sender_email.strip().lower():
             return True
-            
-        if self.sender_domain:
-            # Extraer dominio del email
-            if '@' in email:
-                email_domain = email.split('@')[1].lower()
-                return email_domain == self.sender_domain.lower()
-        
+
+        domain = (self.sender_domain or "").strip().lower().lstrip("@")
+        if domain and addr.endswith("@" + domain):
+            return True
+
         return False

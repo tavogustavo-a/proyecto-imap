@@ -2,7 +2,7 @@
 
 import logging
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.extensions import db
 from app.models import EmailBuzonServer, ReceivedEmail, EmailTag
@@ -20,6 +20,37 @@ EMAIL_CLEANUP_SCHEDULER_INTERVAL_MINUTES = 5
 # Lista de correos (admin buzón): tamaño por defecto y opciones tipo Gmail
 BUZON_LIST_PER_PAGE_DEFAULT = 100
 BUZON_LIST_PER_PAGE_CHOICES = (25, 50, 100, 200, 500, 1000, 10000)
+
+
+def _like_contains(column, needle: str):
+    safe = (needle or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return column.like(f"%{safe}%", escape="\\")
+
+
+def _blocked_sender_exclusion():
+    """Expresión SQL: el remitente no está en la lista de bloqueados activos."""
+    from app.models.email_buzon import BlockedSender
+
+    rows = BlockedSender.query.filter_by(enabled=True).all()
+    likes = []
+    col = func.lower(ReceivedEmail.from_email)
+    for row in rows:
+        email = (row.sender_email or "").strip().lower()
+        if email:
+            likes.append(_like_contains(col, email))
+        domain = (row.sender_domain or "").strip().lower().lstrip("@")
+        if domain:
+            likes.append(_like_contains(col, f"@{domain}"))
+    if not likes:
+        return None
+    return ~or_(*likes)
+
+
+def _without_blocked_senders(query):
+    clause = _blocked_sender_exclusion()
+    if clause is None:
+        return query
+    return query.filter(clause)
 
 
 def normalize_buzon_list_page(value):
@@ -464,30 +495,28 @@ def mark_email_as_processed(email_id):
 
 def get_recent_emails(limit=None):
     """Obtiene los emails más recientes (excluyendo eliminados Y sin etiquetas)"""
-    q = ReceivedEmail.query.filter(
+    q = _without_blocked_senders(ReceivedEmail.query.filter(
         ReceivedEmail.deleted == False,
         ~ReceivedEmail.tags.any(),
-    ).order_by(ReceivedEmail.received_at.desc())
+    )).order_by(ReceivedEmail.received_at.desc())
     if limit is not None:
         q = q.limit(limit)
     return q.all()
 
 
 def count_recent_emails():
-    return (
-        ReceivedEmail.query.filter(
-            ReceivedEmail.deleted == False,
-            ~ReceivedEmail.tags.any(),
-        ).count()
-    )
+    return _without_blocked_senders(ReceivedEmail.query.filter(
+        ReceivedEmail.deleted == False,
+        ~ReceivedEmail.tags.any(),
+    )).count()
 
 
 def paginate_recent_emails(page=1, per_page=BUZON_LIST_PER_PAGE_DEFAULT):
     """Recibidos (sin etiquetas), paginado."""
-    q = ReceivedEmail.query.filter(
+    q = _without_blocked_senders(ReceivedEmail.query.filter(
         ReceivedEmail.deleted == False,
         ~ReceivedEmail.tags.any(),
-    ).order_by(ReceivedEmail.received_at.desc())
+    )).order_by(ReceivedEmail.received_at.desc())
     return q.paginate(page=page, per_page=per_page, error_out=False)
 
 
@@ -533,6 +562,9 @@ def search_received_emails(query, view="inbox", tag_id=None, limit=200):
         q = q.filter(ReceivedEmail.deleted.is_(False))
     else:
         q = q.filter(ReceivedEmail.deleted.is_(False))
+
+    if view_key != "trash":
+        q = _without_blocked_senders(q)
 
     try:
         lim = int(limit)
@@ -587,6 +619,7 @@ def count_emails_for_tag(tag_id, exclude_deleted=False):
     q = ReceivedEmail.query.join(ReceivedEmail.tags).filter(EmailTag.id == tag_id)
     if exclude_deleted:
         q = q.filter(ReceivedEmail.deleted == False)
+    q = _without_blocked_senders(q)
     return q.count()
 
 
@@ -596,19 +629,22 @@ def paginate_emails_for_tag(
     q = ReceivedEmail.query.join(ReceivedEmail.tags).filter(EmailTag.id == tag_id)
     if exclude_deleted:
         q = q.filter(ReceivedEmail.deleted == False)
+    q = _without_blocked_senders(q)
     q = q.order_by(ReceivedEmail.received_at.desc())
     return q.paginate(page=page, per_page=per_page, error_out=False)
 
 
 def get_tag_email_counts_non_deleted():
     """Conteo por etiqueta (solo correos no eliminados) para badges del sidebar."""
-    rows = (
+    q = (
         db.session.query(email_tags.c.tag_id, func.count(ReceivedEmail.id))
         .join(ReceivedEmail, ReceivedEmail.id == email_tags.c.email_id)
         .filter(ReceivedEmail.deleted.is_(False))
-        .group_by(email_tags.c.tag_id)
-        .all()
     )
+    clause = _blocked_sender_exclusion()
+    if clause is not None:
+        q = q.filter(clause)
+    rows = q.group_by(email_tags.c.tag_id).all()
     return {tid: n for tid, n in rows}
 
 def permanently_delete_email(email_id):

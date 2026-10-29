@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20260526-email-filters">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261028-filters-mostrar">
   {# store.css ya en admin_dashboard; email_buzon.css aporta estilos compartidos con el buzón #}
 {% endblock %}
 
@@ -11,7 +11,7 @@
 <!-- Interfaz principal de filtros -->
 <main class="email-interface" role="main">
   
-  <header class="email-header">
+  <header class="email-header email-filters-header">
     <h1><i class="fas fa-filter" aria-hidden="true"></i> Gestión Filtros</h1>
     <div class="email-stats">
       <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn btn-blue no-decoration">
