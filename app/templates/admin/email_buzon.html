@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261028-view-compact">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261029-list-scroll">
 {% endblock %}
 
 {% block content %}
@@ -751,12 +751,8 @@
         </div>
       </div>
       <div class="email-content-viewer">
-        <div class="email-content-tabs">
-          <button type="button" class="tab-btn active" data-action="show-tab" data-tab="text" aria-label="Mostrar texto plano">Texto plano</button>
-          <button type="button" class="tab-btn hidden" data-action="show-tab" data-tab="html" id="htmlTabBtn" aria-label="Mostrar vista previa del mensaje">Vista previa</button>
-        </div>
         <div class="email-content-body">
-          <div id="emailContentText" class="email-tab-content email-tab-plain active"></div>
+          <div id="emailContentText" class="email-tab-content email-tab-plain hidden" aria-hidden="true"></div>
           <div id="emailContentHtml" class="email-tab-content email-tab-html hidden" aria-hidden="true">
             <iframe id="emailContentHtmlFrame" class="email-html-frame" title="Vista previa del mensaje" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
           </div>
@@ -764,9 +760,6 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-primary" data-action="mark-processed" id="markProcessedBtn" aria-label="Marcar email como procesado">
-        <i class="fas fa-check"></i> Marcar como Procesado
-      </button>
       <button type="button" class="btn btn-red" data-action="move-to-trash" id="moveToTrashBtn" aria-label="Mover email a papelera">
         <i class="fas fa-trash"></i> Mover a Papelera
       </button>
@@ -824,7 +817,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261028-email-yt-csp" defer></script>
+  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261029-solo-preview" defer></script>
   <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

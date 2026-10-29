@@ -66,16 +66,8 @@ function wrapEmailHtmlForIframe(html) {
   if (/^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t)) {
     return sanitizeEmailHtmlForPreview(t);
   }
-  const previewCsp =
-    'default-src * data: blob:; img-src * data: blob:; media-src * data: blob:; ' +
-    'style-src * \'unsafe-inline\'; font-src * data:; connect-src *; ' +
-    'frame-src https://www.youtube.com https://www.youtube-nocookie.com https://*.youtube.com https://drive.google.com; ' +
-    'script-src \'unsafe-inline\' \'unsafe-eval\' https://www.youtube.com https://www.youtube-nocookie.com https://s.ytimg.com https://www.google.com;';
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-    '<meta http-equiv="Content-Security-Policy" content="' +
-    previewCsp +
-    '">' +
     '<base target="_blank" rel="noopener noreferrer">' +
     '<style>body{margin:0;padding:16px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;color:#111;}img,table{max-width:100%;height:auto;}table{border-collapse:collapse;}.email-yt-preview-fallback{margin:12px 0;padding:10px 12px;border:1px dashed #94a3b8;border-radius:8px;background:#f8fafc;text-align:center;}.email-yt-preview-link{color:#1d4ed8;font-weight:600;text-decoration:none;}.email-yt-preview-link:hover{text-decoration:underline;}</style>' +
     '</head><body>' +
@@ -126,58 +118,38 @@ function viewEmail(emailId) {
         }
         
         const textEl = document.getElementById('emailContentText');
-        const htmlTabBtn = document.getElementById('htmlTabBtn');
         const htmlPane = document.getElementById('emailContentHtml');
         const htmlFrame = document.getElementById('emailContentHtmlFrame');
-        const textTabBtn = document.querySelector('#viewEmailModal .tab-btn[data-tab="text"]');
 
         const textContent = (email.content_text && email.content_text.trim())
           ? email.content_text
-          : 'Sin contenido de texto';
-        textEl.innerHTML = linkifyEmailPlainText(textContent);
-
+          : '';
         const hasHtml = email.content_html && String(email.content_html).trim();
 
-        document.querySelectorAll('#viewEmailModal .email-content-tabs .tab-btn').forEach((b) => b.classList.remove('active'));
-        document.querySelectorAll('#viewEmailModal .email-tab-content').forEach((pane) => {
-          pane.classList.remove('active');
-          pane.classList.add('hidden');
-          pane.setAttribute('aria-hidden', 'true');
-        });
+        textEl.classList.add('hidden');
+        textEl.setAttribute('aria-hidden', 'true');
+        htmlPane.classList.add('hidden');
+        htmlPane.setAttribute('aria-hidden', 'true');
 
         if (hasHtml) {
-          htmlTabBtn.classList.remove('hidden');
-          htmlTabBtn.style.display = '';
           if (htmlFrame) {
             htmlFrame.srcdoc = wrapEmailHtmlForIframe(email.content_html);
           }
-          htmlTabBtn.classList.add('active');
           htmlPane.classList.remove('hidden');
           htmlPane.classList.add('active');
           htmlPane.setAttribute('aria-hidden', 'false');
-          textEl.classList.add('hidden');
-          textEl.setAttribute('aria-hidden', 'true');
         } else {
-          htmlTabBtn.classList.add('hidden');
-          htmlTabBtn.style.display = 'none';
           if (htmlFrame) {
             htmlFrame.srcdoc = '';
           }
-          if (textTabBtn) textTabBtn.classList.add('active');
+          textEl.innerHTML = linkifyEmailPlainText(textContent || 'Sin contenido');
           textEl.classList.remove('hidden');
           textEl.classList.add('active');
           textEl.setAttribute('aria-hidden', 'false');
         }
         
         // Configurar botones según el estado del email
-        const markProcessedBtn = document.getElementById('markProcessedBtn');
         const moveToTrashBtn = document.getElementById('moveToTrashBtn');
-        
-        if (email.processed) {
-          markProcessedBtn.style.display = 'none';
-        } else {
-          markProcessedBtn.style.display = 'inline-block';
-        }
         
         if (email.deleted) {
           moveToTrashBtn.innerHTML = '<i class="fas fa-undo"></i> Restaurar';
@@ -2997,13 +2969,6 @@ document.addEventListener('DOMContentLoaded', function() {
     button.addEventListener('click', function() {
       const tab = this.getAttribute('data-tab');
       showEmailTab(tab, this);
-    });
-  });
-
-  // Botones de marcar como procesado y mover a papelera
-  document.querySelectorAll('[data-action="mark-processed"]').forEach(button => {
-    button.addEventListener('click', function() {
-      markEmailAsProcessed();
     });
   });
 

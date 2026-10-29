@@ -2661,6 +2661,34 @@ form {
   .email-page-layout {
     flex-direction: column;
   }
+
+  .email-main {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .email-toolbar,
+  .email-list {
+    min-width: 40rem;
+  }
+
+  .email-list {
+    overflow-x: visible;
+    overflow-y: auto;
+  }
+
+  .email-item {
+    flex-wrap: nowrap;
+  }
+
+  .email-subject {
+    flex: 0 1 auto;
+    overflow: visible;
+    text-overflow: unset;
+  }
   
   .email-sidebar {
     width: 100%;

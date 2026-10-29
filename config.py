@@ -218,7 +218,7 @@ class Config:
         "https://*.pplusstatic.com https://m.media-amazon.com https://*.primevideo.com "
         "https://*.scdn.co https://*.netflix.net https://*.nflxext.com https://*.nflximg.net "
         "https://image.tmdb.org https://openweathermap.org "
-        "https://lh3.googleusercontent.com https://drive.google.com; "
+        "https://lh3.googleusercontent.com https://*.googleusercontent.com https://drive.google.com; "
         "font-src 'self' https://fonts.gstatic.com https://*.scdn.co https://*.nflxext.com; "
         "connect-src 'self' https://www.googleapis.com https://api.themoviedb.org "
         "https://api.iconify.design https://tupremiumm.com wss://tupremiumm.com "
