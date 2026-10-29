@@ -144,47 +144,55 @@ def configured_telegram_group_ids() -> list[str]:
 
 
 def ad_group_chat_id(user) -> str:
-    """ID que puede estar en el grupo: usuario habilitado y con ID de Telegram válido."""
-    from app.store.telegram_bot_service import validate_chat_id
+    """Primer ID válido. El alta en el grupo usa todos los ID del usuario."""
+    ids = ad_group_chat_ids(user)
+    return ids[0] if ids else ''
+
+
+def ad_group_chat_ids(user) -> list[str]:
+    """ID que pueden estar en el grupo: usuario habilitado y con ID de Telegram válidos."""
+    from app.store.telegram_bot_service import user_chat_ids
     from app.store.whatsapp_user_notify_prefs import is_store_subuser
 
     if user is None or not getattr(user, 'enabled', True) or is_store_subuser(user):
-        return ''
-    chat_id, err = validate_chat_id(getattr(user, 'telegram_chat_id', None))
-    if err:
-        return ''
-    return chat_id
+        return []
+    return user_chat_ids(user)
 
 
 def sync_store_user_telegram_groups(user, previous_chat_id: str | None = None) -> None:
     """Mete o saca al usuario de los grupos de publicidad según si está habilitado y tiene ID."""
-    from app.store.telegram_bot_service import _saved_bot_token
+    from app.store.telegram_bot_service import _saved_bot_token, parse_chat_id_list
 
     token = _saved_bot_token()
     groups = configured_telegram_group_ids()
     if not token or not groups:
         return
-    allowed = ad_group_chat_id(user) if user is not None else ''
-    old = (previous_chat_id or '').strip()
-    current = (getattr(user, 'telegram_chat_id', None) or '').strip() if user is not None else ''
+    allowed = set(ad_group_chat_ids(user) if user is not None else [])
+    old_ids, _old_err = parse_chat_id_list(previous_chat_id)
+    current_ids, _cur_err = parse_chat_id_list(
+        (getattr(user, 'telegram_chat_id', None) or '') if user is not None else ''
+    )
     for group_id in groups:
-        if old and old != allowed:
-            _ban_from_group(token, group_id, old)
-        if allowed:
-            _allow_in_group(token, group_id, allowed)
-        elif current:
-            _ban_from_group(token, group_id, current)
+        for old in old_ids:
+            if old not in allowed:
+                _ban_from_group(token, group_id, old)
+        for chat_id in allowed:
+            _allow_in_group(token, group_id, chat_id)
+        if not allowed:
+            for current in current_ids:
+                _ban_from_group(token, group_id, current)
 
 
 def remove_chat_from_telegram_groups(chat_id: str | None) -> None:
-    from app.store.telegram_bot_service import _saved_bot_token
+    from app.store.telegram_bot_service import _saved_bot_token, parse_chat_id_list
 
     token = _saved_bot_token()
-    raw = (chat_id or '').strip()
-    if not token or not raw:
+    ids, _err = parse_chat_id_list(chat_id)
+    if not token or not ids:
         return
     for group_id in configured_telegram_group_ids():
-        _ban_from_group(token, group_id, raw)
+        for one in ids:
+            _ban_from_group(token, group_id, one)
 
 
 def _member_status(token: str, group_id: str, user_id: str) -> str:

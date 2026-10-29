@@ -853,6 +853,15 @@ def update_user_ajax():
         if new_full_name is not None:
             user_to_update.full_name = new_full_name
         if new_phone is not None:
+            from app.store.whatsapp_user_notify_prefs import _phone_digits, _phone_in_use_message, _phone_taken_by
+            phone_digits = _phone_digits(new_phone)
+            if phone_digits:
+                taken_phone = _phone_taken_by(phone_digits, exclude_user_id=user_to_update.id)
+                if taken_phone:
+                    return jsonify({
+                        "status": "error",
+                        "message": _phone_in_use_message(taken_phone, phone_digits),
+                    }), 400
             user_to_update.phone = new_phone
         if new_email is not None:
             user_to_update.email = new_email

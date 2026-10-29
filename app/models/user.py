@@ -149,8 +149,12 @@ class User(db.Model):
     # Campo para teléfono
     phone = db.Column(db.String(30), nullable=True)
     # ID de chat de Telegram (la persona tiene que haber abierto el bot)
-    telegram_chat_id = db.Column(db.String(32), nullable=True)
+    telegram_chat_id = db.Column(db.String(255), nullable=True)
     telegram_notify_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    # Sub-usuarios: el padre decide si pueden usar el bot. Sin ID guardado no conecta.
+    can_use_telegram_bot = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    # JSON { "prices": {"enabled": true}, ... }: botones del bot que el padre activa para este sub-usuario.
+    telegram_bot_menu_buttons = db.Column(db.Text, nullable=True)
     
     # Campo JSON para almacenar precios por usuario (tipo_precio, precio_original_cop, precio_original_usd, descuento_cop, descuento_usd)
     user_prices = db.Column(JSON, nullable=True)

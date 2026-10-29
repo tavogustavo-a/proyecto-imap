@@ -254,12 +254,13 @@
   margin: 0;
 }
 
-.codigos-services-wrap--view-grid .info-icon {
+.codigos-services-wrap--view-grid .service-btn .info-icon {
   position: absolute;
   top: 4px;
   right: 6px;
   margin-left: 0;
   font-size: 0.85rem;
+  transform: none;
 }
 
 @media (min-width: 601px) {
@@ -472,11 +473,12 @@
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.35);
 }
 
-.codigos-services-wrap--view-icons .info-icon {
+.codigos-services-wrap--view-icons .service-btn .info-icon {
   position: absolute;
   top: 3px;
   right: 4px;
   margin: 0;
+  transform: none;
   font-size: 0.78rem;
   line-height: 1;
 }

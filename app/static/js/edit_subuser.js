@@ -620,4 +620,207 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     })();
     // ======= FIN BOTÓN 'VOLVER' =======
+
+    const telegramBox = document.querySelector('.edit-subuser-telegram');
+    const telegramCheck = document.getElementById('canUseTelegramCheckbox');
+    const telegramIdBtn = document.getElementById('btnSubuserTelegramId');
+    const telegramModal = document.getElementById('subuserTelegramModal');
+    const telegramIdInput = document.getElementById('subuserTelegramIdInput');
+    const telegramSave = document.getElementById('saveSubuserTelegramId');
+    const telegramClose = document.getElementById('closeSubuserTelegramId');
+    const telegramPermStatus = document.getElementById('telegram-permission-status');
+    const telegramIdStatus = document.getElementById('subuserTelegramIdStatus');
+    const telegramMenuList = document.getElementById('subuserTelegramMenuList');
+    const telegramMenuStatus = document.getElementById('subuserTelegramMenuStatus');
+    const telegramSubId = telegramBox ? telegramBox.getAttribute('data-subuser-id') : '';
+
+    function setTelegramMenuStatus(text, bad) {
+      setTelegramStatus(telegramMenuStatus, text, bad);
+    }
+
+    function renderSubuserTelegramMenuButtons(buttons) {
+      if (!telegramMenuList) return;
+      telegramMenuList.innerHTML = '';
+      var items = Array.isArray(buttons) ? buttons : [];
+      if (!items.length) {
+        var empty = document.createElement('p');
+        empty.className = 'text-small text-center';
+        empty.style.margin = '0.5rem';
+        empty.textContent = 'No hay botones para gestionar.';
+        telegramMenuList.appendChild(empty);
+        return;
+      }
+      items.forEach(function (item) {
+        var row = document.createElement('div');
+        row.className = 'subuser-telegram-menu-row';
+        row.setAttribute('role', 'listitem');
+        row.dataset.key = item.key;
+
+        var name = document.createElement('span');
+        name.className = 'subuser-telegram-menu-name';
+        name.textContent = item.label || item.default_label || item.key;
+
+        var switchWrap = document.createElement('label');
+        switchWrap.className = 'subuser-telegram-menu-switch';
+        switchWrap.title = item.enabled ? 'Encendido' : 'Apagado';
+        var checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !!item.enabled;
+        checkbox.setAttribute('aria-label', 'Activar ' + (item.label || item.key));
+        var slider = document.createElement('span');
+        switchWrap.appendChild(checkbox);
+        switchWrap.appendChild(slider);
+        checkbox.addEventListener('change', function () {
+          if (!telegramSubId) return;
+          checkbox.disabled = true;
+          setTelegramMenuStatus('Guardando…', false);
+          fetch('/subusers/update_subuser_telegram_menu_button', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+              subuser_id: parseInt(telegramSubId, 10),
+              key: item.key,
+              enabled: !!checkbox.checked
+            })
+          })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+            .then(function (res) {
+              if (!res.ok || !res.data || res.data.status !== 'ok') {
+                throw new Error((res.data && res.data.message) || 'No se pudo guardar.');
+              }
+              renderSubuserTelegramMenuButtons(res.data.buttons);
+              setTelegramMenuStatus('Guardado.', false);
+              setTimeout(function () { setTelegramMenuStatus('', false); }, 1500);
+            })
+            .catch(function (err) {
+              checkbox.checked = !checkbox.checked;
+              setTelegramMenuStatus(err.message || 'Error al guardar.', true);
+            })
+            .finally(function () {
+              checkbox.disabled = false;
+            });
+        });
+
+        row.appendChild(name);
+        row.appendChild(switchWrap);
+        telegramMenuList.appendChild(row);
+      });
+    }
+
+    function loadSubuserTelegramMenuButtons() {
+      if (!telegramMenuList || !telegramSubId) return;
+      telegramMenuList.innerHTML = '';
+      setTelegramMenuStatus('Cargando botones…', false);
+      fetch('/subusers/subuser_telegram_menu_buttons?subuser_id=' + encodeURIComponent(telegramSubId), {
+        credentials: 'same-origin'
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || data.status !== 'ok') {
+            throw new Error((data && data.message) || 'No se pudo cargar.');
+          }
+          setTelegramMenuStatus('', false);
+          renderSubuserTelegramMenuButtons(data.buttons);
+        })
+        .catch(function (err) {
+          setTelegramMenuStatus(err.message || 'Error al cargar botones.', true);
+        });
+    }
+
+    function setTelegramStatus(el, text, bad) {
+      if (!el) return;
+      el.textContent = text || '';
+      el.style.color = bad ? '#b91c1c' : '#15803d';
+    }
+
+    if (telegramCheck && telegramSubId) {
+      telegramCheck.addEventListener('change', function () {
+        fetch('/subusers/update_subuser_telegram_permission', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            subuser_id: parseInt(telegramSubId, 10),
+            can_use_telegram_bot: telegramCheck.checked
+          })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data || data.status !== 'ok') {
+              telegramCheck.checked = !telegramCheck.checked;
+              setTelegramStatus(telegramPermStatus, (data && data.message) || 'Error al guardar', true);
+              return;
+            }
+            if (telegramIdBtn) telegramIdBtn.classList.toggle('hidden', !telegramCheck.checked);
+            setTelegramStatus(
+              telegramPermStatus,
+              telegramCheck.checked ? 'Bot de Telegram activado' : 'Bot de Telegram desactivado',
+              !telegramCheck.checked
+            );
+            setTimeout(function () { setTelegramStatus(telegramPermStatus, '', false); }, 2000);
+          })
+          .catch(function () {
+            telegramCheck.checked = !telegramCheck.checked;
+            setTelegramStatus(telegramPermStatus, 'Error de red al guardar', true);
+          });
+      });
+    }
+
+    function closeTelegramModal() {
+      if (telegramModal) telegramModal.hidden = true;
+    }
+
+    if (telegramIdBtn && telegramModal) {
+      telegramIdBtn.addEventListener('click', function () {
+        telegramModal.hidden = false;
+        loadSubuserTelegramMenuButtons();
+        if (telegramIdInput) telegramIdInput.focus();
+      });
+    }
+    if (telegramClose) telegramClose.addEventListener('click', closeTelegramModal);
+    if (telegramModal) {
+      telegramModal.addEventListener('click', function (e) {
+        if (e.target === telegramModal) closeTelegramModal();
+      });
+    }
+    if (telegramSave && telegramSubId) {
+      telegramSave.addEventListener('click', function () {
+        telegramSave.disabled = true;
+        setTelegramStatus(telegramIdStatus, 'Guardando…', false);
+        fetch('/subusers/update_subuser_telegram_chat_id', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+          },
+          body: JSON.stringify({
+            subuser_id: parseInt(telegramSubId, 10),
+            telegram_chat_id: telegramIdInput ? telegramIdInput.value : ''
+          })
+        })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+          .then(function (res) {
+            if (!res.ok || !res.data || res.data.status !== 'ok') {
+              throw new Error((res.data && res.data.message) || 'No se pudo guardar.');
+            }
+            if (telegramIdInput) telegramIdInput.value = res.data.telegram_chat_id || '';
+            setTelegramStatus(
+              telegramIdStatus,
+              res.data.telegram_chat_id ? 'ID guardado. El bot ya reconoce a este sub-usuario.' : 'ID borrado. El bot ya no lo reconoce.',
+              !res.data.telegram_chat_id
+            );
+          })
+          .catch(function (err) {
+            setTelegramStatus(telegramIdStatus, err.message || 'Error de red.', true);
+          })
+          .finally(function () {
+            telegramSave.disabled = false;
+          });
+      });
+    }
 }); 

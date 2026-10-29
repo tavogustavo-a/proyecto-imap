@@ -202,6 +202,14 @@
     </form>
 
     <div id="imapList">
+      <div class="imap-item mb-1 imap-admin-row" id="emailBuzonAdminRow">
+        <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn-blue text-decoration-none">
+          <i class="fas fa-envelope" aria-hidden="true"></i> Gestionar Buzón
+        </a>
+        <div class="imap-admin-row__actions">
+          {% call state_switch(site_settings.get('email_buzon_enabled', '1') == '1', '') %}id="toggleEmailBuzonBtn" data-enabled="{{ 'true' if site_settings.get('email_buzon_enabled', '1') == '1' else 'false' }}"{% endcall %}
+        </div>
+      </div>
       {% for s in servers %}
         <div class="imap-item mb-1 imap-admin-row">
           <span class="imap-admin-row__email">{{ s.username }}</span>
@@ -241,7 +249,6 @@
     <div class="mt-1">
     <form id="createImapForm" action="{{ url_for('admin_bp.manage_imap') }}" method="POST">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <h4 class="text-center">Crear Nuevo Servidor IMAP</h4>
       <!-- Descripción opcional -->
       <div class="mb-05">
         <label for="imap_description" class="sr-only">Descripción</label>
@@ -311,24 +318,10 @@
           class="flex-grow-1"
           autocomplete="off"
         >
-        <button type="submit" class="btn-green">Crear</button>
+        <button type="submit" class="btn-blue">Crear servidor</button>
       </div>
     </form>
     </div>
-
-  <hr class="mt-1 mb-1">
-
-  <!-- Buzón de Mensajes y Conexiones (movido dentro de Servidores IMAP) -->
-  <div class="mt-1 text-center">
-    <h4 class="mt-1-5 mb-05 text-dark">Buzón de Mensajes y Conexiones</h4>
-    
-    <div class="d-flex gap-1 align-items-center justify-content-center">
-      <a href="{{ url_for('admin_email_buzon.manage_email_buzon') }}" class="btn-blue text-decoration-none">
-        <i class="fas fa-envelope"></i> Gestionar Buzón
-      </a>
-      {% call state_switch(site_settings.get('email_buzon_enabled', '1') == '1', '') %}id="toggleEmailBuzonBtn" data-enabled="{{ 'true' if site_settings.get('email_buzon_enabled', '1') == '1' else 'false' }}"{% endcall %}
-    </div>
-  </div>
 
 </div> <!-- Cierre del admin-card de Servidores IMAP -->
 
@@ -503,7 +496,7 @@
           autocomplete="off"
         >
       </div>
-      <button type="submit" class="btn-green imap2-create-btn">Crear</button>
+      <button type="submit" class="btn-blue imap2-create-btn">Crear servidor</button>
     </div>
   </form>
   </div>
@@ -589,7 +582,7 @@
 
 </div> {# Fin contenedor principal .container #}
 
-<script src="{{ url_for('static', filename='js/admin_imap.js') }}?v=20261020-imap-row-line" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}?v=20261029-buzon-first" defer></script>
 <script src="{{ url_for('static', filename='js/admin_imap2.js') }}?v=20261020-imap-row-line" defer></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>

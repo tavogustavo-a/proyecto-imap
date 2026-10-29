@@ -439,6 +439,7 @@ def edit_subuser(sub_id):
     if not can_access_subusers():
         flash("No autorizado", "danger")
         return redirect(url_for("user_auth_bp.login"))
+    _ensure_can_use_telegram_bot_column()
 
     sub_user = User.query.get_or_404(sub_id)
 
@@ -521,6 +522,8 @@ def edit_subuser(sub_id):
         ApiInfo.users.any(id=sub_user.id)
     ).all()
 
+    from app.store.telegram_bot_service import user_telegram_chat_active
+
     return render_template("edit_subuser.html", 
                            sub_user=sub_user, 
                            assigned_emails=assigned_emails, # Lista de correos asignados al sub_user
@@ -535,7 +538,8 @@ def edit_subuser(sub_id):
                            parent_apis=parent_apis,
                            subuser_apis=subuser_apis,
                            parent_has_store_role=(parent_user.user_prices and isinstance(parent_user.user_prices, dict) and parent_user.user_prices.get('tipo_precio') in ['USD', 'COP']),
-                           parent_can_manage_subusers=parent_user.can_manage_subusers
+                           parent_can_manage_subusers=parent_user.can_manage_subusers,
+                           parent_has_telegram_id=user_telegram_chat_active(parent_user),
                            )
 
 
@@ -1947,6 +1951,24 @@ def _editable_subuser_or_error(subuser_id):
     return sub_user, parent_user, None
 
 
+def _subuser_telegram_parent_active(parent_user) -> bool:
+    from app.store.telegram_bot_service import user_telegram_chat_active
+
+    return user_telegram_chat_active(parent_user)
+
+
+def _subuser_telegram_parent_required(parent_user):
+    if _subuser_telegram_parent_active(parent_user):
+        return None
+    return (
+        jsonify({
+            "status": "error",
+            "message": "El usuario principal no tiene ID de Telegram activo.",
+        }),
+        400,
+    )
+
+
 @subuser_bp.route("/subuser_catalog/<int:subuser_id>", methods=["GET", "POST"])
 def subuser_catalog(subuser_id):
     """Catálogo de plataformas y precios del sub-usuario (modal en edición)."""
@@ -2078,6 +2100,137 @@ def update_subuser_chat_permission():
     return jsonify({"status": "ok", "can_chat": sub_user.can_chat})
 
 # --- Función Auxiliar para obtener y formatear sub-usuarios --- 
+# --- Función Auxiliar para obtener y formatear sub-usuarios ---
+def _ensure_can_use_telegram_bot_column():
+    from sqlalchemy import inspect, text
+
+    try:
+        insp = inspect(db.engine)
+        cols = {column['name'] for column in insp.get_columns('users')}
+        dialect = getattr(db.engine.dialect, 'name', '') or ''
+        if 'can_use_telegram_bot' not in cols:
+            ddl = (
+                'ALTER TABLE users ADD COLUMN can_use_telegram_bot BOOLEAN NOT NULL DEFAULT FALSE'
+                if dialect == 'postgresql'
+                else 'ALTER TABLE users ADD COLUMN can_use_telegram_bot INTEGER NOT NULL DEFAULT 0'
+            )
+            db.session.execute(text(ddl))
+            db.session.commit()
+            cols.add('can_use_telegram_bot')
+        if 'telegram_bot_menu_buttons' not in cols:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN telegram_bot_menu_buttons TEXT'))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('ensure can_use_telegram_bot')
+
+
+@subuser_bp.route("/update_subuser_telegram_permission", methods=["POST"])
+def update_subuser_telegram_permission():
+    """Activa o desactiva el bot de Telegram para un sub-usuario."""
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    _ensure_can_use_telegram_bot_column()
+    data = request.get_json() or {}
+    sub_user, _parent_user, error = _editable_subuser_or_error(data.get("subuser_id"))
+    if error:
+        return error
+    blocked = _subuser_telegram_parent_required(_parent_user)
+    if blocked:
+        return blocked
+    sub_user.can_use_telegram_bot = bool(data.get("can_use_telegram_bot", False))
+    db.session.commit()
+    return jsonify({"status": "ok", "can_use_telegram_bot": bool(sub_user.can_use_telegram_bot)})
+
+
+@subuser_bp.route("/update_subuser_telegram_chat_id", methods=["POST"])
+def update_subuser_telegram_chat_id():
+    """Guarda o borra el ID de Telegram del sub-usuario. Vacío = ya no conecta."""
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    _ensure_can_use_telegram_bot_column()
+    data = request.get_json() or {}
+    sub_user, _parent_user, error = _editable_subuser_or_error(data.get("subuser_id"))
+    if error:
+        return error
+    blocked = _subuser_telegram_parent_required(_parent_user)
+    if blocked:
+        return blocked
+    from app.store.telegram_bot_service import chat_id_taken_by, parse_chat_id_list, telegram_id_in_use_message
+
+    raw = str(data.get("telegram_chat_id") or "").strip()
+    if raw:
+        ids, err = parse_chat_id_list(raw)
+        if err:
+            return jsonify({"status": "error", "message": err}), 400
+        for one in ids:
+            taken = chat_id_taken_by(one, exclude_user_id=sub_user.id)
+            if taken:
+                return jsonify({
+                    "status": "error",
+                    "message": telegram_id_in_use_message(taken, one),
+                }), 400
+        raw = ",".join(ids)
+        sub_user.telegram_chat_id = raw
+    else:
+        sub_user.telegram_chat_id = None
+        raw = ""
+    db.session.commit()
+    return jsonify({"status": "ok", "telegram_chat_id": raw})
+
+
+@subuser_bp.route("/subuser_telegram_menu_buttons", methods=["GET"])
+def subuser_telegram_menu_buttons():
+    """Botones del bot que el padre puede activar para este sub-usuario."""
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    _ensure_can_use_telegram_bot_column()
+    subuser_id = request.args.get("subuser_id")
+    sub_user, _parent_user, error = _editable_subuser_or_error(subuser_id)
+    if error:
+        return error
+    blocked = _subuser_telegram_parent_required(_parent_user)
+    if blocked:
+        return blocked
+    from app.store.telegram_bot_service import subuser_menu_button_catalog
+
+    try:
+        buttons = subuser_menu_button_catalog(sub_user)
+    except Exception:
+        current_app.logger.exception("subuser telegram menu buttons")
+        return jsonify({"status": "error", "message": "No se pudo cargar la lista."}), 500
+    return jsonify({"status": "ok", "buttons": buttons})
+
+
+@subuser_bp.route("/update_subuser_telegram_menu_button", methods=["POST"])
+def update_subuser_telegram_menu_button():
+    if not can_access_subusers():
+        return jsonify({"status": "error", "message": "No autorizado"}), 403
+    _ensure_can_use_telegram_bot_column()
+    data = request.get_json() or {}
+    sub_user, _parent_user, error = _editable_subuser_or_error(data.get("subuser_id"))
+    if error:
+        return error
+    blocked = _subuser_telegram_parent_required(_parent_user)
+    if blocked:
+        return blocked
+    from app.store.telegram_bot_service import update_subuser_menu_button
+
+    try:
+        buttons = update_subuser_menu_button(
+            sub_user,
+            data.get("key"),
+            enabled=data.get("enabled"),
+        )
+    except ValueError:
+        return jsonify({"status": "error", "message": "Botón no válido."}), 400
+    except Exception:
+        current_app.logger.exception("update subuser telegram menu button")
+        db.session.rollback()
+        return jsonify({"status": "error", "message": "No se pudo guardar."}), 500
+    return jsonify({"status": "ok", "buttons": buttons})
+
+
 def _get_subusers_data(parent_id):
     """Consulta y formatea la lista de sub-usuarios de un padre específico."""
     sub_q = User.query.filter_by(parent_id=parent_id)

@@ -7,11 +7,10 @@
        data-original-to-email="{{ (email.original_to_email or '')|lower }}"
        role="listitem"
        data-action="view-email">
-    <input type="checkbox" id="email-checkbox-{{ email.id }}" name="email_select" value="{{ email.id }}" class="email-checkbox" data-action="stop-propagation" aria-label="Seleccionar correo de {{ email.from_email }}">
-    <div class="email-sender">{{ email.from_email }}</div>
+    <input type="checkbox" id="email-checkbox-{{ email.id }}" name="email_select" value="{{ email.id }}" class="email-checkbox" data-action="stop-propagation" aria-label="Seleccionar correo para {{ email.original_to_email or email.to_email }}">
+    <div class="email-sender">{{ email.original_to_email or email.to_email }}</div>
     <div class="email-subject">
-      {{ email.subject or '(Sin asunto)' }}
-      {% if email.content_html %}<i class="fas fa-paperclip email-attachment"></i>{% endif %}
+      <span class="email-subject-text">{{ email.subject or '(Sin asunto)' }}</span>
     </div>
     {% if email.tags %}
     <div class="email-tags">

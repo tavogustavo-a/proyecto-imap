@@ -52,7 +52,7 @@
           <span id="store-permission-status" class="text-success edit-subuser-store-status"></span>
         </div>
       </div>
-      <small class="text-secondary">El sub-usuario verá precios, recargar su propio saldo y comprar las plataformas que marques. Disney no está disponible para sub-usuarios.</small>
+      <small class="text-secondary">Verá precios, recargar su propio saldo y comprar las plataformas.</small>
     </div>
     <div class="form-section mt-1">
       <label class="d-flex align-items-center gap-03" for="canUseCouponsCheckbox">
@@ -60,7 +60,7 @@
         ¿Deseas que el sub-usuario pueda usar cupones?
         <span id="coupons-permission-status" class="ml-1 text-success"></span>
       </label>
-      <small class="text-secondary">Si está activado, el sub-usuario podrá aplicar cupones en la tienda.</small>
+      <small class="text-secondary">Podrá aplicar cupones en la tienda.</small>
     </div>
     <div class="form-section mt-1">
       <label class="d-flex align-items-center gap-03" for="canViewAnnouncementsCheckbox">
@@ -68,7 +68,7 @@
         ¿Deseas que el sub-usuario pueda ver los anuncios?
         <span id="announcements-permission-status" class="ml-1 text-success"></span>
       </label>
-      <small class="text-secondary">Si está activado, el sub-usuario verá los anuncios de la tienda. Si no, nunca se le mostrarán.</small>
+      <small class="text-secondary">Verá los anuncios de la tienda. Si no, nunca se le mostrarán.</small>
     </div>
   {% endif %}
   
@@ -82,6 +82,26 @@
       </label>
       <small class="text-secondary">Si está activado, el sub-usuario podrá ver y usar el botón de chat de soporte.</small>
     </div>
+  {% endif %}
+
+  {% if parent_has_telegram_id %}
+  <div class="form-section mt-1 edit-subuser-telegram" data-subuser-id="{{ sub_user.id }}">
+    <div class="edit-subuser-store-access-main">
+      <label class="edit-subuser-store-access-label" for="canUseTelegramCheckbox">
+        <input type="checkbox" id="canUseTelegramCheckbox" name="can_use_telegram_bot" {% if sub_user.can_use_telegram_bot %}checked{% endif %}>
+        <span class="edit-subuser-store-access-question">¿Deseas que el sub-usuario pueda usar el bot de Telegram?</span>
+      </label>
+      <button
+        type="button"
+        id="btnSubuserTelegramId"
+        class="btn-blue btn-small{% if not sub_user.can_use_telegram_bot %} hidden{% endif %}"
+        aria-haspopup="dialog"
+        aria-controls="subuserTelegramModal"
+      >ID de Telegram</button>
+      <span id="telegram-permission-status" class="text-success edit-subuser-store-status"></span>
+    </div>
+    <small class="text-secondary">Si está activo y tiene un ID, el bot usa los permisos y los correos de este sub-usuario.</small>
+  </div>
   {% endif %}
   </section> <!-- FIN TARJETA 1 -->
 
@@ -279,11 +299,34 @@
   </div>
 </div>
 
+{% if parent_has_telegram_id %}
+<div id="subuserTelegramModal" class="subuser-telegram-modal" hidden role="dialog" aria-modal="true" aria-labelledby="subuserTelegramTitle">
+  <div class="subuser-telegram-modal-card">
+    <h4 id="subuserTelegramTitle" class="mt-0 mb-05">ID de Telegram</h4>
+    <div class="subuser-telegram-id-row">
+      <label for="subuserTelegramIdInput">ID:</label>
+      <input type="text" id="subuserTelegramIdInput" class="subuser-telegram-id-input" inputmode="text" autocomplete="off" placeholder="Ej: 5811123456 o varios: 5811,5812" value="{{ sub_user.telegram_chat_id or '' }}">
+    </div>
+    <p class="text-secondary text-small">Si lo borras y guardas, este sub-usuario deja de estar conectado al bot.</p>
+    <div class="subuser-telegram-menu-block">
+      <p class="subuser-telegram-menu-title">Botones del bot</p>
+      <div id="subuserTelegramMenuList" class="subuser-telegram-menu-list" role="list"></div>
+      <p id="subuserTelegramMenuStatus" class="text-small subuser-telegram-menu-status" role="status"></p>
+    </div>
+    <p id="subuserTelegramIdStatus" class="text-small" role="status"></p>
+    <div class="edit-subuser-actions">
+      <button type="button" id="saveSubuserTelegramId" class="btn-green btn-small">Guardar</button>
+      <button type="button" id="closeSubuserTelegramId" class="btn-blue btn-small">Cerrar</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# --- AÑADIR CARGA DEL NUEVO SCRIPT EXTERNO --- #}
 {% endblock content %}
 
 {# Cargar el script específico DESPUÉS del bloque de contenido principal #}
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/edit_subuser.js') }}?v=20261020-subuser-form-ids"></script>
+<script src="{{ url_for('static', filename='js/edit_subuser.js') }}?v=20261029-subuser-telegram-menu"></script>
 {% endblock scripts %}

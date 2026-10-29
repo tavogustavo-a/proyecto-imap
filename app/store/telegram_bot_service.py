@@ -38,6 +38,11 @@ _pending_code_search = {}
 _pending_code_lock = threading.Lock()
 _code_email_by_chat = {}
 _code_email_lock = threading.Lock()
+_last_menu_message = {}
+_menu_message_ids = {}
+_menu_message_lock = threading.Lock()
+_twofa_watch = {}
+_twofa_watch_lock = threading.Lock()
 
 _schema_ready = False
 _detail_lock = threading.Lock()
@@ -815,10 +820,8 @@ def digest_chat_id_for_user(user) -> str:
         return ''
     if not user_telegram_notify_enabled_flag(user):
         return ''
-    chat_id, err = validate_chat_id(getattr(user, 'telegram_chat_id', None))
-    if err:
-        return ''
-    return chat_id
+    ids = user_chat_ids(user)
+    return ','.join(ids)
 
 
 def send_telegram_digest_message(chat_id: str, text: str) -> dict:
@@ -850,6 +853,76 @@ def validate_chat_id(raw: str | None) -> tuple[str, str | None]:
     if not _CHAT_ID_RE.match(chat_id):
         return chat_id, 'El ID tiene que ser numérico, por ejemplo 123456789.'
     return chat_id, None
+
+
+def parse_chat_id_list(raw: str | None) -> tuple[list[str], str | None]:
+    """Varios ID separados por coma. Cada uno numérico y sin repetir en la misma lista."""
+    text = str(raw or '').strip()
+    if not text:
+        return [], None
+    ids: list[str] = []
+    seen: set[str] = set()
+    for part in text.split(','):
+        piece = part.strip()
+        if not piece:
+            continue
+        normalized, err = validate_chat_id(piece)
+        if err:
+            return [], err
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        ids.append(normalized)
+    if not ids:
+        return [], 'Falta el ID.'
+    stored = ','.join(ids)
+    if len(stored) > 255:
+        return [], 'Hay demasiados ID para guardar.'
+    return ids, None
+
+
+def user_chat_ids(user) -> list[str]:
+    if user is None:
+        return []
+    ids, err = parse_chat_id_list(getattr(user, 'telegram_chat_id', None))
+    return [] if err else ids
+
+
+def chat_id_taken_by(chat_id: str, exclude_user_id=None):
+    """Usuario o sub-usuario que ya tiene ese ID. None si está libre."""
+    from app.models.user import User
+
+    wanted, err = validate_chat_id(chat_id)
+    if err or not wanted:
+        return None
+    rows = User.query.filter(
+        User.telegram_chat_id.isnot(None),
+        User.telegram_chat_id != '',
+    ).all()
+    for row in rows:
+        if exclude_user_id is not None and int(row.id) == int(exclude_user_id):
+            continue
+        if wanted in user_chat_ids(row):
+            return row
+    return None
+
+
+def telegram_id_in_use_message(owner, chat_id: str) -> str:
+    """Aviso con el dueño. Si es sub-usuario, incluye al padre."""
+    name = (getattr(owner, 'username', None) or '').strip() or 'otro'
+    if getattr(owner, 'parent_id', None):
+        parent = getattr(owner, 'parent', None)
+        parent_name = (getattr(parent, 'username', None) or '').strip() or 'desconocido'
+        return (
+            f'El sub-usuario {name} del padre usuario {parent_name} '
+            f'ya tiene ese ID {chat_id}.'
+        )
+    return f'El usuario {name} ya tiene ese ID {chat_id}.'
+
+
+def user_telegram_chat_active(user) -> bool:
+    """True si el usuario tiene al menos un ID de Telegram válido."""
+    return bool(user_chat_ids(user))
 
 
 def validate_topic_id(raw: str | None) -> tuple[str, str | None]:
@@ -964,7 +1037,6 @@ def send_telegram_test(chat_id_raw: str | None) -> dict:
 
 
 _poll_state = {'token_mark': '', 'offset': None, 'webhook_cleared': False}
-_last_menu_message = {}
 
 
 def reply_with_chat_id(token: str, chat_id) -> bool:
@@ -1221,6 +1293,80 @@ def _menu_key_enabled(key: str) -> bool:
     return bool(button['enabled'])
 
 
+def _load_subuser_menu_button_prefs(user) -> dict:
+    raw = getattr(user, 'telegram_bot_menu_buttons', None) or ''
+    try:
+        data = json.loads(raw) if raw else {}
+    except (TypeError, ValueError):
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def _subuser_menu_catalog_eligible(key: str) -> bool:
+    """Botones que el padre puede asignar a un sub-usuario (sin publicidad ni HTML solo admin)."""
+    clean = str(key or '').strip()
+    # 'id' es global: cualquier usuario lo ve si está encendido en BotFather.
+    if not clean or clean in ('ad', 'id'):
+        return False
+    if not clean.startswith('html:'):
+        return True
+    from app.store.html_presets import COMO_TRABAJO_KEY, MEDIOS_DE_PAGO_KEY
+    from app.store.models import HtmlInfo
+
+    try:
+        html_id = int(clean.split(':', 1)[1])
+    except (TypeError, ValueError):
+        return False
+    row = HtmlInfo.query.get(html_id)
+    if row is None:
+        return False
+    return row.preset_key not in (MEDIOS_DE_PAGO_KEY, COMO_TRABAJO_KEY)
+
+
+def subuser_menu_key_enabled(user, key: str) -> bool:
+    """Por defecto apagado hasta que el padre lo active en el modal del sub-usuario."""
+    clean = str(key or '').strip()
+    if clean in ('start', 'codes_section', 'id'):
+        return True
+    prefs = _load_subuser_menu_button_prefs(user)
+    pref = prefs.get(clean) if isinstance(prefs.get(clean), dict) else {}
+    return bool(pref.get('enabled', False))
+
+
+def subuser_menu_button_catalog(user) -> list:
+    """Lista para el modal del sub-usuario: mismos nombres que BotFather, estado individual."""
+    items = []
+    for item in menu_button_catalog():
+        if not _subuser_menu_catalog_eligible(item['key']):
+            continue
+        items.append({
+            'key': item['key'],
+            'label': item['label'],
+            'default_label': item['default_label'],
+            'enabled': subuser_menu_key_enabled(user, item['key']),
+        })
+    return items
+
+
+def update_subuser_menu_button(user, key: str, enabled=None) -> list:
+    clean_key = str(key or '').strip()
+    if not _subuser_menu_catalog_eligible(clean_key):
+        raise ValueError('boton')
+    if _menu_button(clean_key) is None:
+        raise ValueError('boton')
+    prefs = _load_subuser_menu_button_prefs(user)
+    stored = prefs.get(clean_key) if isinstance(prefs.get(clean_key), dict) else {}
+    if enabled is not None:
+        stored['enabled'] = bool(enabled)
+    if stored.get('enabled'):
+        prefs[clean_key] = stored
+    else:
+        prefs.pop(clean_key, None)
+    user.telegram_bot_menu_buttons = json.dumps(prefs, ensure_ascii=False) if prefs else None
+    db.session.commit()
+    return subuser_menu_button_catalog(user)
+
+
 def update_menu_button(key: str, enabled=None, label=None) -> list:
     clean_key = str(key or '').strip()
     current = _menu_button(clean_key)
@@ -1247,16 +1393,81 @@ def update_menu_button(key: str, enabled=None, label=None) -> list:
     return menu_button_catalog()
 
 
-def _visible_menu_entries(include_ad: bool) -> list:
-    """Botones encendidos. Publicidad solo si el chat tiene acceso; HTMLs ya vienen de BD."""
+def _visible_menu_entries(include_ad: bool, user=None) -> list:
+    """Botones encendidos. Publicidad solo si el chat tiene acceso; el sub-usuario ve solo lo permitido."""
     visible = []
     for item in menu_button_catalog():
         if not item['enabled']:
             continue
         if item['key'] == 'ad' and not include_ad:
             continue
+        if user is not None and not _menu_allowed_for_user(user, item['key']):
+            continue
         visible.append(item)
     return visible
+
+
+def _rich_center_html(inner_html: str, *, title: bool = False) -> str:
+    """Celda centrada. Telegram no centra un párrafo ni un h2 sueltos."""
+    cell = 'th' if title else 'td'
+    return (
+        '<table compact>'
+        f'<tr><{cell} align="center" valign="middle">{inner_html}</{cell}></tr>'
+        '</table>'
+    )
+
+
+def _rich_title(text: str, level: int = 3) -> str:
+    del level
+    return _rich_center_html(f'<b>{_html_text(text)}</b>', title=True)
+
+
+def _rich_error_title(text: str) -> str:
+    """Aviso de error/permiso: texto marcado (Telegram lo resalta en rojo/naranja)."""
+    return _rich_center_html(
+        f'<mark><b>{_html_text(text)}</b></mark>',
+        title=True,
+    )
+
+
+def _notice_is_error(text: str) -> bool:
+    low = (text or '').strip().lower()
+    return (
+        'no tienes permiso' in low
+        or 'cuenta está inhabilitada' in low
+        or 'no se pudo completar' in low
+    )
+
+
+def _rich_button_rows(buttons: list[tuple[str, str]]) -> list[str]:
+    """Dos botones por fila cuando caben; los textos largos van solos."""
+    rows: list[str] = []
+    pending: tuple[str, str] | None = None
+    for data, name in buttons:
+        if len(name) > 28:
+            if pending:
+                rows.append(_rich_button_row([pending]))
+                pending = None
+            rows.append(_rich_button_row([(data, name)]))
+            continue
+        if pending is None:
+            pending = (data, name)
+            continue
+        rows.append(_rich_button_row([pending, (data, name)]))
+        pending = None
+    if pending:
+        rows.append(_rich_button_row([pending]))
+    return rows
+
+
+def _rich_button_row(buttons: list[tuple[str, str]]) -> str:
+    cells = []
+    for data, name in buttons:
+        cells.append(
+            '<tg-button type="callback_data" style="primary" '
+            f'data="{data}">{_html_text(name)}</tg-button>'
+        )
+    return '<tg-button-row align="center">' + ''.join(cells) + '</tg-button-row>'
 
 
 def _code_service_button_rows(services: list) -> list:
@@ -1273,17 +1484,9 @@ def _code_service_button_rows(services: list) -> list:
 def _code_service_rows_html(services: list) -> str:
     if not services:
         return ''
-    chunks = [
-        f'<p style="text-align:center"><b>{_html_text(_CODES_SECTION_TITLE)}</b></p>'
-    ]
-    for service in services:
-        data = f"svc:{service['id']}"
-        name = _html_text(service['name'][:64])
-        chunks.append(
-            '<tg-button-row align="center">'
-            f'<tg-button type="callback_data" style="primary" data="{data}">{name}</tg-button>'
-            '</tg-button-row>'
-        )
+    buttons = [(f"svc:{service['id']}", service['name'][:64]) for service in services]
+    chunks = [_rich_title(_CODES_SECTION_TITLE)]
+    chunks.extend(_rich_button_rows(buttons))
     return ''.join(chunks)
 
 
@@ -1293,11 +1496,11 @@ def _medios_pago_menu_ready() -> bool:
     return bool(data and (data.get('main_title') or data.get('sections')))
 
 
-def _inline_menu_markup(include_ad: bool, code_services: list | None = None) -> dict:
+def _inline_menu_markup(include_ad: bool, code_services: list | None = None, user=None) -> dict:
     del code_services
     rows = []
     codes_title_added = False
-    for item in _visible_menu_entries(include_ad):
+    for item in _visible_menu_entries(include_ad, user):
         if item['key'].startswith('svc:') and not codes_title_added:
             rows.append([_inline_menu_button(_CODES_SECTION_TITLE, 'codes_section', '')])
             codes_title_added = True
@@ -1307,7 +1510,7 @@ def _inline_menu_markup(include_ad: bool, code_services: list | None = None) -> 
 
 def _menu_markup_for(chat_id) -> dict:
     include_ad = bool(_working_ad_group_id()) and _chat_belongs_to_store_user(chat_id)
-    return _inline_menu_markup(include_ad)
+    return _inline_menu_markup(include_ad, user=_enabled_user_for_chat(chat_id))
 
 
 def _markup_without_style(markup: dict) -> dict:
@@ -1343,53 +1546,40 @@ def _html_text(value: str) -> str:
     )
 
 
-def _menu_has_code_services(include_ad: bool) -> bool:
-    return any(item['key'].startswith('svc:') for item in _visible_menu_entries(include_ad))
-
-
 def _centered_menu_html(include_ad: bool, chat_id=None, code_services: list | None = None) -> str:
-    del code_services
-    rows = []
+    del code_services, chat_id
+    chunks: list[str] = []
+    batch: list[tuple[str, str]] = []
     codes_title_added = False
-    for item in _visible_menu_entries(include_ad):
+
+    def flush() -> None:
+        if batch:
+            chunks.extend(_rich_button_rows(batch))
+            batch.clear()
+
+    for item in _visible_menu_entries(include_ad, _enabled_user_for_chat(chat_id)):
         data = item['key']
-        name = _html_text(item['label'][:64])
+        name = item['label'][:64]
         if data.startswith('svc:') and not codes_title_added:
-            rows.append(
-                f'<p style="text-align:center"><b>{_html_text(_CODES_SECTION_TITLE)}</b></p>'
-            )
+            flush()
+            chunks.append(_rich_title(_CODES_SECTION_TITLE))
             codes_title_added = True
-        rows.append(
-            '<tg-button-row align="center">'
-            f'<tg-button type="callback_data" style="primary" data="{data}">{name}</tg-button>'
-            '</tg-button-row>'
-        )
-    if codes_title_added:
-        current = _get_code_email(chat_id) if chat_id is not None else ''
-        shown = _html_text(current or _CODE_FIELD)
-        rows.append(
-            f'<p style="text-align:center"><b>Correo</b></p>'
-            f'<p style="text-align:center">{shown}</p>'
-            f'<p style="text-align:center">Escribe el correo abajo y luego pulsa un servicio</p>'
-        )
-    return ''.join(rows)
+        batch.append((data, name))
+    flush()
+    return ''.join(chunks)
 
 
 def _send_with_menu(token: str, chat_id, text: str, include_menu: bool = True) -> dict:
     """Mensaje con los botones azules centrados. Si Telegram no acepta el formato, usa el teclado inline."""
     include_ad = bool(include_menu) and bool(_working_ad_group_id()) and _chat_belongs_to_store_user(chat_id)
+    menu_user = _enabled_user_for_chat(chat_id) if include_menu else None
+    if include_menu and menu_user is not None and getattr(menu_user, 'parent_id', None):
+        include_ad = False
     body = _html_text(text).replace('\n', '<br>')
     if text.strip() == 'Elige una opción:':
-        body = f'<pullquote>{body}</pullquote>'
+        body = _rich_title(text.strip(), level=2)
     buttons = _centered_menu_html(include_ad, chat_id) if include_menu else ''
-    has_services = bool(include_menu) and _menu_has_code_services(include_ad)
-    if has_services:
-        reply_markup = {
-            'force_reply': True,
-            'input_field_placeholder': _CODE_FIELD,
-        }
-    else:
-        reply_markup = {'remove_keyboard': True}
+    reply_markup = {'remove_keyboard': True}
     sent = _telegram_call(
         token,
         'sendRichMessage',
@@ -1400,40 +1590,70 @@ def _send_with_menu(token: str, chat_id, text: str, include_menu: bool = True) -
         },
     )
     if not sent.get('ok'):
-        markup = _inline_menu_markup(include_ad) if include_menu else None
-        if has_services and markup is not None:
-            sent = _send_text(
-                token,
-                chat_id,
-                text,
-                {
-                    'force_reply': True,
-                    'input_field_placeholder': _CODE_FIELD,
-                },
-            )
-            if sent.get('ok') and markup:
-                _send_text(token, chat_id, 'Elige un servicio:', markup)
-        else:
-            sent = _send_text(token, chat_id, text, markup)
+        markup = _inline_menu_markup(include_ad, user=_enabled_user_for_chat(chat_id)) if include_menu else None
+        sent = _send_text(token, chat_id, text, markup)
     if include_menu:
         _replace_previous_menu(token, chat_id, sent)
     return sent
 
 
+def _remember_menu_message(chat_id, message_id) -> None:
+    if not message_id:
+        return
+    key = str(chat_id)
+    with _menu_message_lock:
+        ids = _menu_message_ids.setdefault(key, [])
+        if message_id not in ids:
+            ids.append(message_id)
+        if len(ids) > 20:
+            del ids[:-20]
+        _last_menu_message[key] = message_id
+
+
+def _delete_previous_menus(token: str, chat_id, keep=None) -> None:
+    """Borra los menús de botones ya enviados. El resultado no se toca."""
+    key = str(chat_id)
+    with _menu_message_lock:
+        ids = list(_menu_message_ids.get(key) or [])
+        last = _last_menu_message.get(key)
+        if last and last not in ids:
+            ids.append(last)
+    for message_id in ids:
+        if keep and message_id == keep:
+            continue
+        _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': message_id})
+    with _menu_message_lock:
+        if keep:
+            _menu_message_ids[key] = [keep]
+            _last_menu_message[key] = keep
+        else:
+            _menu_message_ids.pop(key, None)
+            _last_menu_message.pop(key, None)
+
+
 def _replace_previous_menu(token: str, chat_id, sent: dict) -> None:
-    """Guarda el menú nuevo y borra el anterior cuando la respuesta ya se envió."""
+    """Guarda el menú nuevo y borra los menús de botones anteriores."""
     result = sent.get('result') if isinstance(sent.get('result'), dict) else {}
     new_id = result.get('message_id')
-    key = str(chat_id)
-    previous = _last_menu_message.get(key)
-    if new_id:
-        _last_menu_message[key] = new_id
-    if previous and previous != new_id:
-        _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': previous})
+    _delete_previous_menus(token, chat_id, keep=new_id)
 
 
 def _send_start_menu(token: str, chat_id) -> None:
     _send_with_menu(token, chat_id, 'Elige una opción:')
+
+
+def _send_centered_notice(token: str, chat_id, text: str, *, error: bool | None = None) -> None:
+    """Aviso corto centrado, igual que el título del menú."""
+    notice = (text or '').strip() or 'Sin datos.'
+    is_error = _notice_is_error(notice) if error is None else bool(error)
+    html = _rich_error_title(notice) if is_error else _rich_title(notice)
+    sent = _telegram_call(token, 'sendRichMessage', {
+        'chat_id': chat_id,
+        'rich_message': {'html': html, 'skip_entity_detection': True},
+    })
+    if not sent.get('ok'):
+        prefix = '⛔ ' if is_error else ''
+        _send_text(token, chat_id, prefix + notice)
 
 
 def _send_long_text(token: str, chat_id, text: str) -> None:
@@ -1463,6 +1683,21 @@ def _send_long_text(token: str, chat_id, text: str) -> None:
 
 def _enabled_user_for_chat(chat_id):
     """Usuario encendido cuyo ID de Telegram coincide. None si está apagado o no existe."""
+    user = _linked_user_for_chat(chat_id)
+    if user is None:
+        return None
+    if user.parent_id and not bool(getattr(user, 'can_use_telegram_bot', False)):
+        return None
+    if user.parent_id:
+        from app.models.user import User
+
+        parent = User.query.get(user.parent_id)
+        if parent is None or not user_telegram_chat_active(parent):
+            return None
+    return user
+
+
+def _linked_user_for_chat(chat_id):
     from app.models.user import User
 
     wanted, err = validate_chat_id(str(chat_id))
@@ -1476,10 +1711,24 @@ def _enabled_user_for_chat(chat_id):
     for user in rows:
         if not bool(user.enabled):
             continue
-        saved, saved_err = validate_chat_id(user.telegram_chat_id)
-        if not saved_err and saved == wanted:
+        saved_ids = user_chat_ids(user)
+        if wanted in saved_ids:
             return user
     return None
+
+
+def _menu_allowed_for_user(user, key: str) -> bool:
+    """Usuario principal: menú global. Sub-usuario: solo botones que el padre activó."""
+    if user is None or not getattr(user, 'parent_id', None):
+        return True
+    if not bool(getattr(user, 'can_use_telegram_bot', False)):
+        return False
+    action = str(key or '')
+    if action == 'id':
+        return True
+    if not _subuser_menu_catalog_eligible(action) and action not in ('start', 'codes_section'):
+        return False
+    return subuser_menu_key_enabled(user, action)
 
 
 def _final_price(base, discount) -> float:
@@ -2872,10 +3121,24 @@ def _lookup_code(user, service: dict, email: str):
             code = str(data.get('code') or '').strip()
             if not code:
                 return []
-            remaining = data.get('time_remaining')
-            when = f'2FA · vence en {remaining}s' if remaining is not None else '2FA'
-            item = _code_item(code, when)
-            return [item] if item else []
+            item = _code_item(code, '2FA')
+            if not item:
+                return []
+            secret = ''
+            try:
+                from app.store.models import TwoFAConfig
+
+                configs = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
+                for cfg in configs:
+                    emails_list = [str(e or '').strip().lower() for e in (cfg.get_emails_list() or [])]
+                    if email_normalized in emails_list:
+                        secret = str(cfg.secret_key or '').strip().upper().replace(' ', '').replace('-', '')
+                        break
+            except Exception:
+                logger.exception('telegram 2fa secret')
+            if secret:
+                item['totp_secret'] = secret
+            return [item]
         except Exception:
             logger.exception('telegram 2fa')
             return []
@@ -2899,13 +3162,13 @@ def _lookup_code(user, service: dict, email: str):
         return 'Tu cuenta está inhabilitada. No puedes realizar búsquedas.', []
     if not is_admin:
         if not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
-            return 'No tienes permiso para consultar este correo específico.', []
+            return 'No tienes permiso al consultar este correo.', []
         if not user.can_search_any and not _user_has_allowed_email(user, email_normalized):
             linked = search_linked_projects_only(email_raw, user, service_id=service['id'])
             items = _items_from_mail(linked) if linked else []
             if items:
                 return '', items
-            return 'No tienes permiso para consultar este correo específico.', []
+            return 'No tienes permiso al consultar este correo.', []
 
     mail = search_and_apply_filters(email_raw, service['id'], user=user)
     items = _items_from_mail(mail) if mail else []
@@ -2914,14 +3177,22 @@ def _lookup_code(user, service: dict, email: str):
     return '', items
 
 
-def _send_code_items(token: str, chat_id, items: list) -> None:
-    """Resultados de códigos: valor, Copiar y fecha centrados."""
+def _items_rich_html(items: list) -> str:
+    """Códigos, fecha y 2FA centrados. El secreto no sale en el mensaje."""
+    import pyotp
+
+    now = int(time.time())
     blocks = []
-    plain_lines = []
     for item in items:
         code = item['code']
+        date = item.get('date') or ''
+        secret = item.get('totp_secret') or ''
+        if secret:
+            code = pyotp.TOTP(secret).at(now)
+            remaining = 30 - (now % 30)
+            date = f'2FA · {remaining} s'
         shown = code if len(code) <= 50 else code[:47] + '...'
-        block = f'<p style="text-align:center"><b>{_html_text(shown)}</b></p>'
+        block = _rich_title(shown)
         buttons = ''
         if len(code) <= 256:
             buttons += f'<tg-button type="copy_text" text="{_html_text(code)}">Copiar</tg-button>'
@@ -2930,22 +3201,57 @@ def _send_code_items(token: str, chat_id, items: list) -> None:
             buttons += f'<tg-button type="url" url="{_html_text(link)}">Abrir Enlace</tg-button>'
         if buttons:
             block += f'<tg-button-row align="center">{buttons}</tg-button-row>'
-        if item.get('date'):
-            block += (
-                f'<p style="text-align:center">Fecha: {_html_text(item["date"])}</p>'
-            )
+        if date:
+            block += _rich_center_html(_html_text(date))
         blocks.append(block)
-        line = code
-        if item.get('date'):
-            line += f"\nFecha: {item['date']}"
-        plain_lines.append(line)
+    return ''.join(blocks)
+
+
+def _start_twofa_ticker(token: str, chat_id, message_id, items: list) -> None:
+    """Actualiza el código 2FA y los segundos que faltan. Se detiene al cabo de un minuto y medio."""
+    if not message_id or not any(item.get('totp_secret') for item in items):
+        return
+    stamp = time.time()
+    with _twofa_watch_lock:
+        _twofa_watch[str(chat_id)] = stamp
+
+    def run() -> None:
+        last = ''
+        for _ in range(90):
+            time.sleep(1)
+            with _twofa_watch_lock:
+                if _twofa_watch.get(str(chat_id)) != stamp:
+                    return
+            html = _items_rich_html(items)
+            if html == last:
+                continue
+            last = html
+            result = _telegram_call(token, 'editMessageText', {
+                'chat_id': chat_id,
+                'message_id': message_id,
+                'rich_message': {'html': html, 'skip_entity_detection': True},
+            })
+            if result.get('ok'):
+                continue
+            desc = (result.get('description') or '').lower()
+            if 'not modified' in desc:
+                continue
+            return
+
+    threading.Thread(target=run, daemon=True, name='tg-2fa').start()
+
+
+def _send_code_items(token: str, chat_id, items: list) -> None:
+    """Resultados de códigos: valor, Copiar y fecha centrados."""
+    html = _items_rich_html(items)
     sent = _telegram_call(token, 'sendRichMessage', {
         'chat_id': chat_id,
-        'rich_message': {'html': ''.join(blocks), 'skip_entity_detection': True},
+        'rich_message': {'html': html, 'skip_entity_detection': True},
     })
     if sent.get('ok'):
+        result = sent.get('result') if isinstance(sent.get('result'), dict) else {}
+        _start_twofa_ticker(token, chat_id, result.get('message_id'), items)
         return
-    # Fallback: mensaje + teclado con Copiar centrado
     for item in items:
         code = item['code']
         text = code
@@ -2980,11 +3286,12 @@ def _run_code_search(token: str, chat_id, service_id: int, email: str, prompt_id
         message, items = 'No se pudo completar esa opción. Intentalo de nuevo.', []
     if prompt_id:
         _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
+    _delete_previous_menus(token, chat_id)
     if items:
         _send_code_items(token, chat_id, items)
         _send_with_menu(token, chat_id, 'Elige una opción:')
         return
-    _send_long_text(token, chat_id, message or 'No se encontraron resultados.')
+    _send_centered_notice(token, chat_id, message or 'No se encontraron resultados.')
     _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
@@ -2999,6 +3306,10 @@ def _begin_code_service_search(token: str, chat_id, service_id: int) -> None:
     if service is None:
         return
     saved = _get_code_email(chat_id)
+    menu_user = _enabled_user_for_chat(chat_id)
+    if menu_user is not None and not _menu_allowed_for_user(menu_user, f'svc:{int(service_id)}'):
+        _send_centered_notice(token, chat_id, 'No tienes permiso para usar esa opción.')
+        return
     if saved:
         _run_code_search(token, chat_id, int(service_id), saved)
         return
@@ -3093,6 +3404,14 @@ def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
     action = text if text in known or raw.startswith('svc:') or raw.startswith('html:') else _menu_action(text)
     if not action:
         return 'skip'
+    menu_user = _enabled_user_for_chat(chat_id)
+    linked = _linked_user_for_chat(chat_id)
+    if linked is not None and getattr(linked, 'parent_id', None) and menu_user is None:
+        _send_centered_notice(token, chat_id, 'No tienes permiso para usar el bot.')
+        return 'sent'
+    if menu_user is not None and not _menu_allowed_for_user(menu_user, action):
+        _send_centered_notice(token, chat_id, 'No tienes permiso para usar esa opción.')
+        return 'sent'
     if not _menu_key_enabled(action):
         return 'skip'
     if str(action).startswith('svc:'):
@@ -3223,12 +3542,7 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
                 _finish_code_search(token, chat_id, pending_text)
                 continue
             if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is not None:
-                saved = _save_code_email(chat_id, pending_text)
-                _send_with_menu(
-                    token,
-                    chat_id,
-                    f'Correo listo: {saved}\nAhora pulsa un servicio de códigos.',
-                )
+                _save_code_email(chat_id, pending_text)
     if saved_through is not None:
         fresh = get_telegram_bot_config()
         if fresh is not None:

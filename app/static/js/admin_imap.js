@@ -58,9 +58,12 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function renderImapList(servers) {
-    // Limpiar lista usando removeChild (CSP compliant)
+    const buzonRow = document.getElementById("emailBuzonAdminRow");
     while (imapList.firstChild) {
       imapList.removeChild(imapList.firstChild);
+    }
+    if (buzonRow) {
+      imapList.appendChild(buzonRow);
     }
     
     servers.forEach(s => {

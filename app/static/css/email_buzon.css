@@ -353,11 +353,15 @@ form {
 
 .email-item {
   border-bottom: 1px solid #ecf0f1;
-  padding: 12px 15px;
+  padding: 5px 10px 5px 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .email-item:hover {
@@ -372,24 +376,40 @@ form {
 .email-checkbox {
   width: 16px;
   height: 16px;
+  flex: 0 0 auto;
 }
 
 .email-sender {
-  min-width: 200px;
+  flex: 0 1 200px;
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 500;
   color: #2c3e50;
 }
 
 .email-subject {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: #34495e;
-  white-space: nowrap;
+  overflow: hidden;
+}
+
+.email-subject-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .email-time {
-  min-width: 60px;
+  flex: 0 0 auto;
+  white-space: nowrap;
   text-align: right;
   color: #7f8c8d;
   font-size: 10px;
@@ -397,8 +417,9 @@ form {
 }
 
 .email-attachment {
+  flex: 0 0 auto;
   color: #e74c3c;
-  margin-left: 5px;
+  margin-left: 0;
 }
 
 /* Configuración de correo vía dominio */
@@ -2776,14 +2797,16 @@ form {
 @media (max-width: 768px) {
   .email-page-layout {
     flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .email-main {
     min-width: 0;
     width: 100%;
     max-width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: hidden;
   }
 
   .email-toolbar {
@@ -2791,22 +2814,32 @@ form {
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
+    overflow: hidden;
   }
 
+  .email-list-wrapper,
   .email-list {
-    min-width: 40rem;
-    overflow-x: visible;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
     overflow-y: auto;
   }
 
   .email-item {
     flex-wrap: nowrap;
+    gap: 2px;
+    padding: 3px 6px 3px 3px;
+  }
+
+  .email-sender {
+    flex: 0 1 7.4rem;
+    max-width: 42%;
   }
 
   .email-subject {
-    flex: 0 1 auto;
-    overflow: visible;
-    text-overflow: unset;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
   
   .email-sidebar {
@@ -3405,7 +3438,7 @@ form {
 @media (max-width: 640px) {
   .email-toolbar {
     padding: 6px 6px;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .toolbar-row-1 {

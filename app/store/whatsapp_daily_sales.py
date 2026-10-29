@@ -1702,14 +1702,14 @@ def record_daily_digest_connect_failures(
 
 def _telegram_block_reason(user) -> str:
     """Motivo si el usuario tiene Telegram marcado pero no se puede enviar. Vacío si no aplica."""
-    from app.store.telegram_bot_service import telegram_digest_ready, validate_chat_id
+    from app.store.telegram_bot_service import parse_chat_id_list, telegram_digest_ready
     from app.store.whatsapp_user_notify_prefs import user_telegram_notify_enabled_flag
 
     if not user_telegram_notify_enabled_flag(user):
         return ''
     if not telegram_digest_ready():
         return 'El bot de Telegram no está conectado o Activar Telegram está apagado.'
-    _, err = validate_chat_id(getattr(user, 'telegram_chat_id', None))
+    _, err = parse_chat_id_list(getattr(user, 'telegram_chat_id', None))
     if not err:
         return ''
     if err == 'Falta el ID.':
@@ -1719,19 +1719,30 @@ def _telegram_block_reason(user) -> str:
 
 def _telegram_digest_state(user, body: str) -> tuple[str, str]:
     """('sent'|'failed', mensaje de error). Comprueba el ID antes de enviar."""
-    from app.store.telegram_bot_service import probe_telegram_chat, send_telegram_digest_message
+    from app.store.telegram_bot_service import probe_telegram_chat, send_telegram_digest_message, user_chat_ids
 
-    chat_id = (getattr(user, 'telegram_chat_id', None) or '').strip()
-    probe = probe_telegram_chat(chat_id)
-    if not probe.get('connected'):
-        err = str(probe.get('message') or 'El bot no reconoce este ID.')
-        logger.warning('Telegram resumen no enviado user=%s: %s', getattr(user, 'username', ''), err)
-        return 'failed', err
-    result = send_telegram_digest_message(chat_id, body)
-    if result.get('success'):
+    ids = user_chat_ids(user)
+    if not ids:
+        return 'failed', 'Sin ID de Telegram.'
+    errors = []
+    sent_any = False
+    for chat_id in ids:
+        probe = probe_telegram_chat(chat_id)
+        if not probe.get('connected'):
+            errors.append(str(probe.get('message') or f'El bot no reconoce el ID {chat_id}.'))
+            continue
+        result = send_telegram_digest_message(chat_id, body)
+        if result.get('success'):
+            sent_any = True
+            continue
+        errors.append(str(result.get('error') or f'Telegram no pudo enviar al ID {chat_id}'))
+    if sent_any and not errors:
         logger.info('Telegram resumen user=%s', getattr(user, 'username', ''))
         return 'sent', ''
-    err = str(result.get('error') or 'Telegram no pudo enviar el resumen')
+    if sent_any:
+        logger.warning('Telegram resumen parcial user=%s: %s', getattr(user, 'username', ''), '; '.join(errors))
+        return 'sent', ''
+    err = '; '.join(errors) or 'Telegram no pudo enviar el resumen'
     logger.warning('Telegram resumen falló user=%s: %s', getattr(user, 'username', ''), err)
     return 'failed', err
 

@@ -42,11 +42,14 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   function renderList(servers) {
-    // Limpiar lista usando removeChild (CSP compliant)
+    const buzonRow = document.getElementById("observerBuzonAdminRow");
     while (listDiv.firstChild) {
       listDiv.removeChild(listDiv.firstChild);
     }
-    
+    if (buzonRow) {
+      listDiv.appendChild(buzonRow);
+    }
+
     servers.forEach(s => {
       const div = document.createElement("div");
       div.className = "imap-item mb-1 imap-admin-row";
