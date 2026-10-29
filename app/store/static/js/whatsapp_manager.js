@@ -81,19 +81,31 @@ function telegramBotFields() {
 
 function telegramBotFieldText(el) {
     if (!el) return '';
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        return String(el.value || '').replace(/\u00a0/g, ' ').trim();
+    }
     return String(el.textContent || '').replace(/\u00a0/g, ' ').trim();
 }
 
 function setTelegramBotFieldText(el, value) {
     if (!el) return;
-    el.textContent = value || '';
+    var text = value || '';
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        el.value = text;
+        return;
+    }
+    el.textContent = text;
 }
 
 function setTelegramBotFieldsEditable(editable) {
     var fields = telegramBotFields();
     [fields.nameInput, fields.tokenInput].forEach(function (input) {
         if (!input) return;
-        input.setAttribute('contenteditable', editable ? 'true' : 'false');
+        if (input.tagName === 'INPUT' || input.tagName === 'TEXTAREA') {
+            input.readOnly = !editable;
+        } else {
+            input.setAttribute('contenteditable', editable ? 'true' : 'false');
+        }
         input.setAttribute('aria-readonly', editable ? 'false' : 'true');
         if (!editable) input.blur();
     });
@@ -2206,6 +2218,7 @@ document.addEventListener('DOMContentLoaded', function () {
         telegramBotForm.addEventListener('paste', function (e) {
             var target = e.target;
             if (!target || !target.classList || !target.classList.contains('telegram-botfather-field')) return;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
             e.preventDefault();
             var text = '';
             try {
@@ -2214,11 +2227,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 text = '';
             }
             text = String(text).replace(/\r?\n/g, ' ').trim();
-            if (document.execCommand) {
-                document.execCommand('insertText', false, text);
-            } else {
-                target.textContent = text;
-            }
+            target.textContent = text;
         });
     }
     if (telegramBotModal) {

@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261022-botfather-modal9">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261029-botfather-label">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 {% block content %}
@@ -324,40 +324,40 @@
     <h4 id="telegramBotFatherTitle" class="whatsapp-user-phone-modal-title">Datos BotFather</h4>
     <div id="telegram-botfather-form" class="telegram-botfather-form" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other">
       <div class="telegram-botfather-row">
-        <label id="telegram-bot-alias-label" class="telegram-botfather-label">Nombre del bot</label>
-        <div
+        <label id="telegram-bot-alias-label" class="telegram-botfather-label" for="telegram-bot-alias">Nombre del bot</label>
+        <input
+          type="text"
           id="telegram-bot-alias"
           class="telegram-botfather-field"
-          role="textbox"
-          aria-labelledby="telegram-bot-alias-label"
-          contenteditable="false"
           spellcheck="false"
-          tabindex="0"
-          data-placeholder="MiBot"
+          placeholder="MiBot"
+          autocomplete="off"
           data-lpignore="true"
           data-1p-ignore="true"
           data-bwignore="true"
           data-form-type="other"
-          autocomplete="off"
-        ></div>
+          readonly
+        >
       </div>
       <div class="telegram-botfather-row">
-        <label id="telegram-bot-value-label" class="telegram-botfather-label">Token</label>
-        <div
+        <label id="telegram-bot-value-label" class="telegram-botfather-label" for="telegram-bot-value">Token</label>
+        <input
+          type="text"
           id="telegram-bot-value"
           class="telegram-botfather-field telegram-botfather-token-field"
-          role="textbox"
-          aria-labelledby="telegram-bot-value-label"
-          contenteditable="false"
           spellcheck="false"
-          tabindex="0"
-          data-placeholder="123456:ABC..."
+          placeholder="123456:ABC..."
+          autocomplete="off"
           data-lpignore="true"
           data-1p-ignore="true"
           data-bwignore="true"
           data-form-type="other"
-          autocomplete="off"
-        ></div>
+          readonly
+        >
+      </div>
+      <p id="telegram-botfather-status" class="telegram-botfather-status" role="status"></p>
+      <div class="whatsapp-user-phone-modal-actions telegram-botfather-save-row">
+        <button type="button" id="telegram-botfather-save-btn" class="btn-panel btn-green">Guardar</button>
       </div>
       <div class="telegram-group-extract">
         <div class="telegram-group-extract-field">
@@ -395,10 +395,6 @@
         </div>
         <p id="telegram-group-extract-status" class="telegram-botfather-status" role="status"></p>
       </div>
-    </div>
-    <p id="telegram-botfather-status" class="telegram-botfather-status" role="status"></p>
-    <div class="whatsapp-user-phone-modal-actions telegram-botfather-save-row">
-      <button type="button" id="telegram-botfather-save-btn" class="btn-panel btn-green">Guardar</button>
     </div>
     <div class="telegram-bot-menu-block">
       <p class="telegram-bot-menu-title">Botones del bot</p>
@@ -638,5 +634,5 @@
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261028-drive-media-src" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261022-botfather-modal8" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261029-botfather-label" defer></script>
 {% endblock %}

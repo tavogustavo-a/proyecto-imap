@@ -912,8 +912,13 @@
     { file: 'stream37.png', label: 'McAfee' },
     { file: 'stream38.png', label: 'Gemini' },
     { file: 'stream39.png', label: 'Proton VPN' },
-    { file: 'stream40.png', label: 'Surfshark VPN' },
-    { file: 'stream41.png', label: 'Adobe Photoshop' }
+    { file: 'stream40.png', label: 'Surfshark' },
+    { file: 'stream41.png', label: 'Adobe Photoshop' },
+    { file: 'stream42.png', label: 'Viaplay' },
+    { file: 'stream43.png', label: 'HBO Sports' },
+    { file: 'stream44.png', label: 'MultiTV IPTV' },
+    { file: 'stream45.png', label: 'CapCut' },
+    { file: 'stream46.png', label: 'Flujo TV' }
   ];
   fetch('/admin/list_icons_ajax')
     .then(function(r) { return r.json(); })

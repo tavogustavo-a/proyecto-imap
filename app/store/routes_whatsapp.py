@@ -632,7 +632,7 @@ def save_telegram_bot_route():
         row, check = save_telegram_bot(data.get('bot_username'), data.get('bot_token'))
     except Exception:
         db.session.rollback()
-        current_app.logger.warning('No se pudo guardar el bot de Telegram')
+        current_app.logger.exception('No se pudo guardar el bot de Telegram')
         return jsonify({'success': False, 'error': 'No se pudo guardar el bot.'}), 500
     connected = bool(check.get('connected'))
     return jsonify({

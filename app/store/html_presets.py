@@ -56,6 +56,8 @@ _TV_BRAND_SHORTCUTS: dict[str, str] = {
     'canva': 'www.canva.com',
     'youtube': 'www.youtube.com',
     'winplay': 'www.winplay.co',
+    'surfshark': 'www.surfshark.com',
+    'viaplay': 'www.viaplay.com',
 }
 
 
@@ -1155,7 +1157,7 @@ def screen_icon_dark_url(name: str) -> str:
     """URL del icono adaptado a fondo oscuro."""
     from flask import url_for
 
-    return url_for('store_bp.stream_icon', name=name, v='20261027-allblack3')
+    return url_for('store_bp.stream_icon', name=name, v='20261029-stream-round')
 
 
 def _clean_screen_icon(raw: str | None) -> str:
@@ -1189,7 +1191,7 @@ _TV_DOMAIN_ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     (('deezer.com',), 'stream20.png'),
     (('winplay.co', 'winplay', 'win sport', 'winsport'), 'stream25.png'),
     (('m365.cloud.microsoft', 'office.com', 'office365', 'microsoft365', 'microsoft.com/office'), 'stream23.png'),
-    (('surfshark.com',), 'stream40.png'),
+    (('surfshark.com',), 'stream40.png'),  # solo el dominio, no la palabra «vpn»
     (('xbox.com', 'gamepass', 'game pass'), 'stream24.png'),
     (('directvgo.com', 'directv go', 'directvgo'), 'stream27.png'),
     (('mcafee.com', 'id.mcafee'), 'stream37.png'),
@@ -1204,6 +1206,7 @@ _TV_DOMAIN_ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     (('emby.media', 'emby.'), 'stream34.png'),
     (('jellyfin',), 'stream35.png'),
     (('hulu.com',), 'stream26.png'),
+    (('viaplay.com',), 'stream42.png'),
     (('mubi.com',), 'stream22.png'),
 )
 
