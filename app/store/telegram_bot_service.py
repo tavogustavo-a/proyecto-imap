@@ -79,10 +79,13 @@ def _ensure_telegram_bot_enabled_column() -> None:
             if 'BOOL' in str(current.get('type') or '').upper():
                 return
             db.session.execute(
+                text('ALTER TABLE telegram_bot_configs ALTER COLUMN is_enabled DROP DEFAULT')
+            )
+            db.session.execute(
                 text(
                     'ALTER TABLE telegram_bot_configs '
                     'ALTER COLUMN is_enabled TYPE BOOLEAN '
-                    'USING CASE WHEN is_enabled IS NULL OR is_enabled = 0 THEN FALSE ELSE TRUE END'
+                    "USING CASE WHEN is_enabled::text IN ('1', 't', 'true') THEN TRUE ELSE FALSE END"
                 )
             )
             db.session.execute(
