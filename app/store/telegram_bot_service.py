@@ -69,15 +69,42 @@ def _ensure_telegram_update_offset_column() -> None:
 def _ensure_telegram_bot_enabled_column() -> None:
     try:
         insp = inspect(db.engine)
-        cols = {c['name'] for c in insp.get_columns('telegram_bot_configs')}
-        if 'is_enabled' in cols:
-            return
-        db.session.execute(
-            text(
-                'ALTER TABLE telegram_bot_configs ADD COLUMN is_enabled '
-                'INTEGER NOT NULL DEFAULT 0'
+        columns = insp.get_columns('telegram_bot_configs')
+        names = {c['name'] for c in columns}
+        dialect = getattr(db.engine.dialect, 'name', '') or ''
+        if 'is_enabled' in names:
+            if dialect != 'postgresql':
+                return
+            current = next(c for c in columns if c['name'] == 'is_enabled')
+            if 'BOOL' in str(current.get('type') or '').upper():
+                return
+            db.session.execute(
+                text(
+                    'ALTER TABLE telegram_bot_configs '
+                    'ALTER COLUMN is_enabled TYPE BOOLEAN '
+                    'USING CASE WHEN is_enabled IS NULL OR is_enabled = 0 THEN FALSE ELSE TRUE END'
+                )
             )
+            db.session.execute(
+                text(
+                    'ALTER TABLE telegram_bot_configs '
+                    'ALTER COLUMN is_enabled SET DEFAULT FALSE'
+                )
+            )
+            db.session.execute(
+                text(
+                    'ALTER TABLE telegram_bot_configs '
+                    'ALTER COLUMN is_enabled SET NOT NULL'
+                )
+            )
+            db.session.commit()
+            return
+        ddl = (
+            'ALTER TABLE telegram_bot_configs ADD COLUMN is_enabled BOOLEAN NOT NULL DEFAULT FALSE'
+            if dialect == 'postgresql'
+            else 'ALTER TABLE telegram_bot_configs ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 0'
         )
+        db.session.execute(text(ddl))
         db.session.commit()
     except Exception as exc:
         try:
@@ -130,7 +157,7 @@ def ensure_telegram_bot_schema() -> bool:
                     id SERIAL PRIMARY KEY,
                     bot_username VARCHAR(64) NOT NULL DEFAULT '',
                     bot_token VARCHAR(255) NOT NULL DEFAULT '',
-                    is_enabled INTEGER NOT NULL DEFAULT 0,
+                    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
                     connection_status VARCHAR(40),
                     last_health_at TIMESTAMP WITHOUT TIME ZONE,
                     last_health_error TEXT,
