@@ -28,7 +28,7 @@
 
       <!-- =========== CAMPO CONTRASEÑA =========== -->
       <label for="userPasswordField" class="label-block">Contraseña:</label>
-      <div class="d-flex justify-content-center mb-1">
+      <div class="login-password-row mb-1">
         <div class="password-input-wrapper">
           <input
             type="password"
@@ -41,29 +41,22 @@
           <span
             id="toggleUserPass"
             class="password-toggle-icon"
-          >👁</span>
+            role="button"
+            tabindex="0"
+            aria-label="Mostrar contraseña"
+          ><i class="fas fa-eye" aria-hidden="true"></i></span>
         </div>
       </div>
 
-      <!-- =========== BOTONES DE ACCIÓN =========== -->
-      <div class="d-flex gap-05 justify-content-center">
-        <!-- Botón Ingresar con bordes redondeados -->
-        <button
-          type="submit"
-          class="btn-search btn-rounded"
-        >
-          Ingresar
-        </button>
-        <!-- Botón Volver a la Búsqueda, solo visible si el acceso libre está habilitado -->
+      <div class="login-actions-row mb-1">
+        <button type="submit" class="btn-search btn-rounded">Ingresar</button>
         {% if public_access_enabled == 'true' %}
         <button
           id="btnVolverBusquedaUserLogin"
           type="button"
-          class="btn-blue btn-rounded"
+          class="btn-search btn-rounded"
           data-home-url="{{ url_for('main_bp.home') }}"
-        >
-          Volver a la Búsqueda
-        </button>
+        >Volver</button>
         {% endif %}
       </div>
     </form>
@@ -80,5 +73,5 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/logins.js') }}?v=20260719-admin-taps5"></script>
+<script src="{{ url_for('static', filename='js/logins.js') }}?v=20261028-login-eye"></script>
 {% endblock scripts %}

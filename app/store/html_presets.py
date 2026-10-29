@@ -38,8 +38,37 @@ _HEX_COLOR = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
 _DOMAIN_RE = re.compile(
     r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(?:/[^\s]*)?$'
 )
+# Atajos sin TLD (p. ej. primevideo/mytv → https://www.primevideo.com/mytv)
+_TV_BRAND_SHORTCUTS: dict[str, str] = {
+    'primevideo': 'www.primevideo.com',
+    'netflix': 'www.netflix.com',
+    'disneyplus': 'www.disneyplus.com',
+    'max': 'www.max.com',
+    'hbomax': 'www.max.com',
+    'hulu': 'www.hulu.com',
+    'crunchyroll': 'www.crunchyroll.com',
+    'paramountplus': 'www.paramountplus.com',
+    'plex': 'www.plex.tv',
+    'spotify': 'open.spotify.com',
+    'deezer': 'www.deezer.com',
+    'directvgo': 'www.directvgo.com',
+    'vix': 'www.vix.com',
+    'canva': 'www.canva.com',
+    'youtube': 'www.youtube.com',
+    'winplay': 'www.winplay.co',
+}
+
+
+def _tv_brand_linkify_alternation() -> str:
+    return '|'.join(
+        re.escape(key)
+        for key in sorted(_TV_BRAND_SHORTCUTS, key=len, reverse=True)
+    )
+
+
 _LINKIFY_RE = re.compile(
-    r'(https?://[^\s<]+|(?<![\w@])(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:/[^\s<]*)?)'
+    r'(https?://[^\s<]+|(?<![\w@])(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:/[^\s<]*)?'
+    r'|(?<![\w@/])(?:' + _tv_brand_linkify_alternation() + r')/[^\s<]+)'
 )
 _TV_JOIN_ONLY = re.compile(
     r'^(?:\s*(?:o|y|u|or|and|/|,|;|\||&)\s*)*$',
@@ -675,6 +704,27 @@ def _clip(raw: str | None, limit: int) -> str:
     return (raw or '').strip()[:limit]
 
 
+def _tv_shorthand_href(text: str) -> str | None:
+    """Convierte marca/ruta sin TLD (primevideo/mytv) en URL https."""
+    s = (text or '').strip()
+    if not s or any(ch.isspace() for ch in s):
+        return None
+    if s.lower().startswith(('http://', 'https://', 'javascript:', 'data:', 'vbscript:')):
+        return None
+    if '.' in s.split('/')[0]:
+        return None
+    if '/' not in s:
+        return None
+    brand, _, tail = s.partition('/')
+    host = _TV_BRAND_SHORTCUTS.get(brand.lower())
+    if not host or not tail.strip():
+        return None
+    path = '/' + tail.lstrip('/')
+    if any(ch in path for ch in (' ', '<', '>', '"', '\n', '\r')):
+        return None
+    return 'https://' + host + path
+
+
 def _safe_href(raw: str | None) -> str | None:
     text = (raw or '').strip()
     if not text or any(ch.isspace() for ch in text):
@@ -686,6 +736,9 @@ def _safe_href(raw: str | None) -> str | None:
         return text
     if _DOMAIN_RE.fullmatch(text):
         return 'https://' + text
+    shorthand = _tv_shorthand_href(text)
+    if shorthand:
+        return shorthand
     return None
 
 

@@ -1,7 +1,6 @@
 # app/auth/routes.py
 
 import random
-import smtplib
 from datetime import datetime, timedelta
 from secrets import token_urlsafe
 
@@ -22,8 +21,7 @@ from app.auth.security import (
 )
 from app.auth.totp import verify_totp_code
 from app.forms import LoginForm, ForgotPasswordForm
-from app.services.email_service import send_otp_email
-import os
+from app.services.email_service import send_otp_email, send_transactional_email
 
 from . import auth_bp
 
@@ -94,7 +92,8 @@ def login():
                 flash("Bienvenido (2FA omitido en este dispositivo).", "info")
                 _setup_session(user)
                 db.session.commit()
-                return make_response(_post_login_redirect(username))
+                resp = make_response(_post_login_redirect(username))
+                return _remember_username_cookie(resp, username)
 
             if user.twofa_method == "TOTP":
                 session.permanent = True
@@ -130,12 +129,7 @@ def login():
             _setup_session(user)
             db.session.commit()
             resp = make_response(_post_login_redirect(username))
-            remember_usr = request.form.get("remember_user")
-            if remember_usr == "on":
-                resp.set_cookie("remember_username", username, max_age=15*24*3600, httponly=True)
-            else:
-                resp.set_cookie("remember_username", "", expires=0)
-            return resp
+            return _remember_username_cookie(resp, username)
     else:
         if user:
             record_login_attempt(user.username, success=False)
@@ -167,6 +161,16 @@ def _post_login_redirect(username):
     return redirect(url_for("main_bp.home"))
 
 
+def _remember_username_cookie(resp, username):
+    resp.set_cookie(
+        "remember_username",
+        username,
+        max_age=15 * 24 * 3600,
+        httponly=True,
+    )
+    return resp
+
+
 @auth_bp.route("/twofa/<username>", methods=["GET", "POST"])
 def twofa(username):
     user_id_pending = session.get("2fa_user_id")
@@ -182,7 +186,6 @@ def twofa(username):
 
     if request.method == "POST":
         code = request.form.get("code", "").strip()
-        remember_device = request.form.get("remember_device")
 
         code_valid = False
         if user.twofa_method == "TOTP":
@@ -213,11 +216,8 @@ def twofa(username):
             reset_failed_attempts(user)
             db.session.commit()
 
-            if remember_device == "on":
-                token, resp = create_remember_cookie(user)
-                return resp
-            else:
-                return redirect(_post_2fa_redirect(username))
+            _, resp = create_remember_cookie(user)
+            return _remember_username_cookie(resp, user.username)
 
     return render_template("twofa.html", username=username)
 
@@ -343,33 +343,35 @@ def reset_password(token):
 
 
 def _send_reset_email(to_email, reset_link):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = os.getenv("SMTP_PORT", "465")
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-
-    from email.mime.text import MIMEText
-    from email.header import Header
-
-    subject = "Restablecer Contraseña"
+    subject = "Restablecer contraseña - Tu Premium"
     body_text = (
-        f"Has solicitado restablecer tu contraseña.\n"
-        f"Haz clic en este enlace: {reset_link}\n\n"
-        f"Si no fuiste tú, ignora este mensaje."
+        "Hola, Has solicitado restablecer la contraseña de tu cuenta.\n\n"
+        "Pulsa el botón en la versión HTML de este correo o abre este enlace:\n"
+        f"{reset_link}\n\n"
+        "Si no has sido tú, ignora este correo; tu contraseña no cambiará."
     )
-
-    msg = MIMEText(body_text, "plain", "utf-8")
-    msg["Subject"] = str(Header(subject, "utf-8"))
-    msg["From"] = smtp_user
-    msg["To"] = to_email
-
     try:
-        with smtplib.SMTP_SSL(smtp_host, int(smtp_port)) as server:
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_user, [to_email], msg.as_string())
+        body_html = render_template(
+            "email_reset_password_template.html",
+            reset_link=reset_link,
+        )
     except Exception as e:
-        # Error interno
-        pass
+        current_app.logger.error(
+            "Error renderizando plantilla de restablecimiento: %s", e
+        )
+        body_html = None
+
+    ok = send_transactional_email(
+        to_email,
+        subject,
+        body_text,
+        body_html,
+        from_display_name="Tu Premium",
+    )
+    if not ok:
+        current_app.logger.error(
+            "No se pudo enviar correo de restablecimiento a %s", to_email
+        )
 @auth_bp.route("/resend_2fa_email_user/<username>", methods=["POST"])
 def resend_2fa_email_user(username):
     user = User.query.filter_by(username=username).first_or_404()

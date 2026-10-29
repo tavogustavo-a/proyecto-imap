@@ -1999,14 +1999,18 @@ document.addEventListener("DOMContentLoaded", function() {
         const pid = String(p.id);
         const enabledId = 'subuser_catalog_global_enabled_' + pid;
         const saleId = 'subuser_catalog_global_sale_' + pid;
+        const safeName = String(p.name || '').replace(/[&<>"]/g, function (c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+          });
+        const ariaName = String(p.name || 'plataforma').replace(/"/g, "'");
         return (
           '<tr data-id="' + p.id + '" data-parent-price="' + parent + '" data-manual="' + (manual ? '1' : '0') + '"' +
           (manual ? ' class="is-manual"' : '') + '>' +
-          '<td><input type="checkbox" class="subuser-catalog-enabled" id="' + enabledId + '" name="' + enabledId + '"' +
-          (p.enabled ? ' checked' : '') + '></td>' +
-          '<td>' + String(p.name || '').replace(/[&<>"]/g, function (c) {
-            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
-          }) + '</td>' +
+          '<td class="subuser-catalog-platform-cell">' +
+          '<input type="checkbox" class="subuser-catalog-enabled" id="' + enabledId + '" name="' + enabledId + '"' +
+          ' aria-label="Mostrar ' + ariaName + '"' +
+          (p.enabled ? ' checked' : '') + '>' +
+          '<span class="subuser-catalog-platform-name">' + safeName + '</span></td>' +
           '<td>' + formatPrice(parent, currencyLabel) + '</td>' +
           '<td><input type="number" class="subuser-catalog-sale" id="' + saleId + '" name="' + saleId + '" min="' + parent + '" step="' +
           (currencyLabel === 'USD' ? '0.01' : '1') + '" value="' + sale + '"></td>' +

@@ -4,16 +4,15 @@ function initializePasswordToggle(passwordInputId, toggleButtonId) {
 
   if (toggleBtn && passField) {
     toggleBtn.addEventListener("click", function() {
-      if (passField.type === "password") {
-        passField.type = "text";
-        toggleBtn.textContent = "🙈"; // Ícono para ocultar
-      } else {
-        passField.type = "password";
-        toggleBtn.textContent = "👁"; // Ícono para mostrar
+      const icon = toggleBtn.querySelector("i");
+      const showing = passField.type === "password";
+      passField.type = showing ? "text" : "password";
+      if (icon) {
+        icon.classList.toggle("fa-eye", !showing);
+        icon.classList.toggle("fa-eye-slash", showing);
       }
+      toggleBtn.setAttribute("aria-label", showing ? "Ocultar contraseña" : "Mostrar contraseña");
     });
-  } else {
-    // Opcional: console.warn si no se encuentran, pero puede ser normal
   }
 }
 

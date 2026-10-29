@@ -23,6 +23,16 @@ from app.auth.security import (
     block_user
 )
 
+
+def _render_user_login(**extra):
+    from app.admin.site_settings import get_site_setting
+
+    extra.setdefault(
+        "public_access_enabled",
+        get_site_setting("public_access_enabled", "true"),
+    )
+    return render_template("user_login.html", **extra)
+
 # Importar el decorador de control de acceso a la tienda
 from app.store.routes import store_access_required
 
@@ -121,7 +131,7 @@ def login():
     if request.method == "GET":
         from app.admin.site_settings import get_site_setting
         public_access_enabled = get_site_setting('public_access_enabled', 'true')
-        return render_template("user_login.html", public_access_enabled=public_access_enabled)
+        return _render_user_login(public_access_enabled=public_access_enabled)
 
     # --- INICIO PROCESO POST --- 
     username = request.form.get("username", "").strip()
@@ -137,7 +147,7 @@ def login():
              flash(f"Cuenta bloqueada. Intenta de nuevo en {mins_restantes} min.", "warning")
         else:
              flash("Cuenta bloqueada temporalmente.", "warning")
-        return render_template("user_login.html")
+        return _render_user_login()
 
     # 2. Obtener usuario
     user = User.query.filter_by(username=username).first()
@@ -145,7 +155,7 @@ def login():
     # ✅ SEGURIDAD: El admin no puede loguearse en la plantilla de usuarios
     if user and username == current_app.config.get("ADMIN_USER"):
         flash("Acceso denegado.", "danger")
-        return render_template("user_login.html")
+        return _render_user_login()
 
     # 3. Validar contraseña y estado
     if user and user.enabled and check_password_hash(user.password, password):
@@ -180,7 +190,7 @@ def login():
         except Exception as e:
             db.session.rollback()
             flash("Error interno al iniciar sesión.", "danger")
-            return render_template("user_login.html")
+            return _render_user_login()
 
     else:
         # --- LOGIN FALLIDO --- 
@@ -209,7 +219,7 @@ def login():
              # Usuario no existe
              flash(flash_message, "danger") 
         
-        return render_template("user_login.html")
+        return _render_user_login()
 
 @user_auth_bp.route("/logout")
 def logout():

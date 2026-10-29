@@ -761,7 +761,7 @@
         <div class="email-content-body">
           <div id="emailContentText" class="email-tab-content email-tab-plain active"></div>
           <div id="emailContentHtml" class="email-tab-content email-tab-html hidden" aria-hidden="true">
-            <iframe id="emailContentHtmlFrame" class="email-html-frame" title="Vista previa del mensaje" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+            <iframe id="emailContentHtmlFrame" class="email-html-frame" title="Vista previa del mensaje" sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-presentation" referrerpolicy="no-referrer"></iframe>
           </div>
         </div>
       </div>
@@ -827,7 +827,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261023-linkify" defer></script>
+  <script src="{{ url_for('static', filename='js/email_buzon.js') }}?v=20261028-email-yt-csp" defer></script>
   <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}?v=20241220-original" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

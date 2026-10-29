@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block head %}
+  {{ super() }}
   <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 
@@ -28,7 +29,7 @@
 
       <!-- =========== CAMPO CONTRASEÑA =========== -->
       <label for="adminPasswordField" class="label-block">Contraseña:</label>
-      <div class="d-flex justify-content-center mb-1">
+      <div class="login-password-row mb-1">
         <div class="password-input-wrapper">
           {{
             form.password(
@@ -38,35 +39,15 @@
               autocomplete="current-password"
             )
           }}
-          <span id="toggleAdminPass" class="password-toggle-icon">👁</span>
+          <span id="toggleAdminPass" class="password-toggle-icon" role="button" tabindex="0" aria-label="Mostrar contraseña"><i class="fas fa-eye" aria-hidden="true"></i></span>
         </div>
       </div>
 
-      <!-- =========== RECORDAR USUARIO =========== -->
-      <div class="remember-user-container">
-        <input type="checkbox" name="remember_user" id="remember_user">
-        <label for="remember_user">Recordar usuario 15 días</label>
+      <div class="login-actions-row mb-1">
+        <button type="submit" class="btn-search btn-rounded">Ingresar</button>
+        <a href="{{ url_for('main_bp.home') }}" class="btn-search btn-rounded">Volver</a>
       </div>
 
-      <!-- =========== BOTONES: INGRESAR & VOLVER A LA BÚSQUEDA =========== -->
-      <div class="d-flex gap-05 justify-content-center">
-        <!-- Botón "Ingresar" con bordes redondeados -->
-        <button
-          type="submit"
-          class="btn-search btn-rounded"
-        >
-          Ingresar
-        </button>
-        <!-- Botón "Volver a la Búsqueda" también redondeado (Refactorizado) -->
-        <button
-          id="btnVolverBusquedaLogin"
-          type="button"
-          class="btn-blue btn-rounded"
-          data-url="{{ url_for('main_bp.home') }}"
-        >
-          Volver a la Búsqueda
-        </button>
-      </div>
     </form>
 
     <!-- Enlace '¿Olvidaste tu contraseña?' -->
@@ -82,5 +63,5 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('static', filename='js/logins.js') }}"></script>
+<script src="{{ url_for('static', filename='js/logins.js') }}?v=20261028-login-eye"></script>
 {% endblock scripts %}

@@ -6,20 +6,80 @@ let contextMenuEmailId = null;
 let contextMenu = null;
 
 /** Envuelve HTML de correo para mostrarlo en iframe (documento completo o fragmento). */
+function stripEmailCspMeta(html) {
+  return String(html || '').replace(
+    /<meta\b[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/gi,
+    ''
+  );
+}
+
+function youtubeWatchUrlFromEmbed(src) {
+  try {
+    const u = new URL(src, 'https://www.youtube.com');
+    const v = u.searchParams.get('v');
+    if (v) {
+      return 'https://www.youtube.com/watch?v=' + encodeURIComponent(v);
+    }
+    const embed = u.pathname.match(/\/embed\/([^/?#]+)/i);
+    if (embed && embed[1]) {
+      return 'https://www.youtube.com/watch?v=' + encodeURIComponent(embed[1]);
+    }
+    if (u.hostname.includes('youtu.be') && u.pathname.length > 1) {
+      return 'https://www.youtube.com/watch?v=' + encodeURIComponent(u.pathname.slice(1).split('/')[0]);
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  return src;
+}
+
+/** Evita iframes de YouTube bloqueados por CSP/sandbox; deja enlace para abrir fuera. */
+function replaceYoutubeIframesForPreview(html) {
+  return String(html || '').replace(
+    /<iframe\b[^>]*\ssrc\s*=\s*["']([^"']*(?:youtube\.com|youtube-nocookie\.com|youtu\.be)[^"']*)["'][^>]*>(?:\s*<\/iframe>)?/gi,
+    function (_full, src) {
+      const watch = youtubeWatchUrlFromEmbed(src);
+      const safe = escapeHtml(watch);
+      return (
+        '<p class="email-yt-preview-fallback">' +
+        '<a class="email-yt-preview-link" href="' +
+        safe +
+        '" target="_blank" rel="noopener noreferrer">' +
+        'Ver video en YouTube</a></p>'
+      );
+    }
+  );
+}
+
+function sanitizeEmailHtmlForPreview(html) {
+  let cleaned = stripEmailCspMeta(html);
+  cleaned = replaceYoutubeIframesForPreview(cleaned);
+  return cleaned;
+}
+
 function wrapEmailHtmlForIframe(html) {
-  if (!html || !String(html).trim()) {
+  const bodyHtml = sanitizeEmailHtmlForPreview(html);
+  if (!bodyHtml || !String(bodyHtml).trim()) {
     return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>';
   }
-  const t = String(html).trim();
+  const t = String(bodyHtml).trim();
   if (/^<!DOCTYPE/i.test(t) || /^<html[\s>]/i.test(t)) {
-    return t;
+    return sanitizeEmailHtmlForPreview(t);
   }
+  const previewCsp =
+    'default-src * data: blob:; img-src * data: blob:; media-src * data: blob:; ' +
+    'style-src * \'unsafe-inline\'; font-src * data:; connect-src *; ' +
+    'frame-src https://www.youtube.com https://www.youtube-nocookie.com https://*.youtube.com https://drive.google.com; ' +
+    'script-src \'unsafe-inline\' \'unsafe-eval\' https://www.youtube.com https://www.youtube-nocookie.com https://s.ytimg.com https://www.google.com;';
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    '<meta http-equiv="Content-Security-Policy" content="' +
+    previewCsp +
+    '">' +
     '<base target="_blank" rel="noopener noreferrer">' +
-    '<style>body{margin:0;padding:16px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;color:#111;}img,table{max-width:100%;height:auto;}table{border-collapse:collapse;}</style>' +
+    '<style>body{margin:0;padding:16px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;color:#111;}img,table{max-width:100%;height:auto;}table{border-collapse:collapse;}.email-yt-preview-fallback{margin:12px 0;padding:10px 12px;border:1px dashed #94a3b8;border-radius:8px;background:#f8fafc;text-align:center;}.email-yt-preview-link{color:#1d4ed8;font-weight:600;text-decoration:none;}.email-yt-preview-link:hover{text-decoration:underline;}</style>' +
     '</head><body>' +
-    html +
+    bodyHtml +
     '</body></html>'
   );
 }

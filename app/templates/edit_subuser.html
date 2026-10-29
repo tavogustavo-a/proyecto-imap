@@ -246,7 +246,7 @@
       <i class="fas fa-times" aria-hidden="true"></i>
     </button>
   </div>
-  <p class="text-small text-secondary mb-05 subuser-catalog-help">
+  <p class="text-small text-secondary subuser-catalog-help">
     Las plataformas chuleadas son las que verá. Disney (Standard, Premium o Básica) no está disponible para sub-usuarios.
     Una plataforma nueva no aparece hasta que la actives aquí. El recargo general se aplica a todas;
     si cambias un precio a mano, esa fila queda con el precio manual. No puede ser menor que el precio real.
@@ -260,10 +260,13 @@
     <table class="subuser-catalog-table" aria-label="Plataformas visibles y precios">
       <thead>
         <tr>
-          <th scope="col">Ver</th>
           <th scope="col">Plataforma</th>
-          <th scope="col">Precio real</th>
-          <th scope="col">Precio sub-usuario</th>
+          <th scope="col" class="subuser-catalog-th-icon" title="Precio real" aria-label="Precio real">
+            <span class="subuser-catalog-th-price-label">$ real</span>
+          </th>
+          <th scope="col" class="subuser-catalog-th-icon" title="Precio usuario" aria-label="Precio usuario">
+            <span class="subuser-catalog-th-price-label">$ usuario</span>
+          </th>
         </tr>
       </thead>
       <tbody id="subuserCatalogTableBody"></tbody>
