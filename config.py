@@ -210,6 +210,7 @@ class Config:
         "https://cdn.socket.io https://cdnjs.cloudflare.com https://code.iconify.design; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; "
         "img-src 'self' data: blob: https://cdn.jsdelivr.net https://api.iconify.design https://t2.gstatic.com "
+        "https://ssl.gstatic.com https://www.gstatic.com https://*.gstatic.com "
         "https://raw.githubusercontent.com https://github.com https://*.github.com "
         "https://*.disney-plus.net https://*.mail.disneyplus.com https://*.mail2.disneyplus.com "
         "https://*.hbo.com https://*.hbomax.com https://*.vix.com https://braze-images.com "
