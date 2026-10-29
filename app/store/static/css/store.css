@@ -8969,14 +8969,19 @@ select.license-split-editor__status-bad.license-split-editor__status--tier-soluc
 
   .public-tools-container .public-tools-search-wrap {
       width: 100%;
-      max-width: 22rem;
+      max-width: 26.5rem;
   }
 
   .public-tools-container .public-tools-search-wrap .search-input {
       width: 100%;
       max-width: 100%;
       min-width: 0;
-      padding-right: 2.25rem;
+      height: 26px !important;
+      min-height: 26px !important;
+      max-height: 26px !important;
+      padding: 0 2.1rem 0 0.75rem !important;
+      line-height: 26px !important;
+      font-size: 0.82rem;
       box-sizing: border-box;
       border: 1px solid rgba(0, 0, 0, 0.2) !important;
   }
@@ -50235,10 +50240,11 @@ table.tv-table {
 
 .accordion-body .tv-logo,
 .tv-logo {
-  width: 46px !important;
-  height: 46px !important;
+  width: 64px !important;
+  height: 64px !important;
   max-width: none !important;
-  min-width: 46px;
+  min-width: 64px;
+  min-height: 64px;
   padding: 2px;
   box-sizing: border-box;
   object-fit: contain;

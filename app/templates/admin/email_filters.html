@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261028-filters-mostrar">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261029-filters-actions-compact">
   {# store.css ya en admin_dashboard; email_buzon.css aporta estilos compartidos con el buzón #}
 {% endblock %}
 
@@ -137,7 +137,7 @@
       {% endif %}
       
       <!-- Botones de paginación para filtros -->
-      <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen">
+      <div id="filterPaginationNav" class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen hidden" style="display: none;" hidden>
         <button id="prevFilterPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
         <button id="nextFilterPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
       </div>
@@ -149,8 +149,8 @@
     <div class="blocked-senders-section">
       <div class="filters-header">
         <h4><i class="fas fa-paper-plane" aria-hidden="true"></i> Bloqueados</h4>
-        <button class="btn btn-red" id="createBlockedSenderBtn" data-action="create-blocked-sender" aria-label="Bloquear nuevo remitente">
-          <i class="fas fa-ban" aria-hidden="true"></i> Bloquear
+        <button class="btn btn-red" id="createBlockedSenderBtn" data-action="create-blocked-sender" aria-label="Crear nuevo bloqueador">
+          <i class="fas fa-ban" aria-hidden="true"></i> Nuevo bloqueador
         </button>
       </div>
 
@@ -221,7 +221,7 @@
       {% endif %}
       
       <!-- Botones de paginación para remitentes bloqueados -->
-      <div class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen">
+      <div id="blockedPaginationNav" class="d-flex justify-content-center mt-2 mb-2 pagination-buttons productos-paginacion-margen hidden" style="display: none;" hidden>
         <button id="prevBlockedPageBtn" class="btn-blue btn-panel" type="button">&lt; Anterior</button>
         <button id="nextBlockedPageBtn" class="btn-blue btn-panel" type="button">Siguiente &gt;</button>
       </div>
@@ -230,7 +230,7 @@
 </main>
 
 <!-- Modal para crear filtro -->
-<div id="createFilterModal" class="edit-modal" role="dialog" aria-labelledby="createFilterModalTitle" aria-hidden="true">
+<div id="createFilterModal" class="edit-modal" role="dialog" aria-labelledby="createFilterModalTitle" aria-modal="true" aria-hidden="true">
   <div class="edit-modal-content">
     <div class="edit-modal-header">
       <h3 id="createFilterModalTitle">Crear Nuevo Filtro</h3>
@@ -241,12 +241,12 @@
       
       <div class="edit-form-group">
         <label for="createFilterName">Nombre del filtro:</label>
-        <input type="text" id="createFilterName" name="name" placeholder="Ej: Correos de trabajo" required>
+        <input type="text" id="createFilterName" name="name" placeholder="Ej: Correos de trabajo" required autocomplete="off">
       </div>
       
       <div class="edit-form-group">
         <label for="createFilterTag">Etiqueta de destino:</label>
-        <select id="createFilterTag" name="tag_id" required>
+        <select id="createFilterTag" name="tag_id" required autocomplete="off">
           <option value="">Seleccionar destino...</option>
           <option value="trash" class="trash-option">🗑️ Papelera (Eliminar automáticamente)</option>
           {% for tag in tags %}
@@ -259,7 +259,7 @@
       
       <div class="edit-form-group">
         <label for="createFilterType">Tipo de filtro:</label>
-        <select id="createFilterType" name="filter_type" required>
+        <select id="createFilterType" name="filter_type" required autocomplete="off">
           <option value="">Seleccionar tipo de filtro...</option>
           <option value="from_email">📧 Remitente contiene</option>
           <option value="to_email">📨 Destinatario contiene</option>
@@ -270,7 +270,7 @@
       
       <div class="edit-form-group">
         <label for="createFilterValue">Valor del filtro:</label>
-        <input type="text" id="createFilterValue" name="filter_value" placeholder="Ingresa el texto a buscar..." required aria-describedby="createHelperText">
+        <input type="text" id="createFilterValue" name="filter_value" placeholder="Ingresa el texto a buscar..." required aria-describedby="createHelperText" autocomplete="off">
         <small id="createHelperText">Los correos que coincidan con este criterio se procesarán automáticamente</small>
       </div>
       
@@ -283,7 +283,7 @@
 </div>
 
 <!-- Modal para editar filtro -->
-<div id="editFilterModal" class="edit-modal" role="dialog" aria-labelledby="editFilterModalTitle" aria-hidden="true">
+<div id="editFilterModal" class="edit-modal" role="dialog" aria-labelledby="editFilterModalTitle" aria-modal="true" aria-hidden="true">
   <div class="edit-modal-content">
     <div class="edit-modal-header">
       <h3 id="editFilterModalTitle">Editar Filtro</h3>
@@ -296,12 +296,12 @@
       
       <div class="edit-form-group">
         <label for="editFilterName">Nombre del filtro:</label>
-        <input type="text" id="editFilterName" name="name" required>
+        <input type="text" id="editFilterName" name="name" required autocomplete="off">
       </div>
       
       <div class="edit-form-group">
         <label for="editFilterTag">Etiqueta de destino:</label>
-        <select id="editFilterTag" name="tag_id">
+        <select id="editFilterTag" name="tag_id" autocomplete="off">
           <option value="">Seleccionar destino...</option>
           <option value="trash" class="trash-option">🗑️ Papelera (Eliminar automáticamente)</option>
           {% for tag in tags %}
@@ -314,7 +314,7 @@
       
       <div class="edit-form-group">
         <label for="editFilterType">Tipo de filtro:</label>
-        <select id="editFilterType" name="filter_type" required>
+        <select id="editFilterType" name="filter_type" required autocomplete="off">
           <option value="">Seleccionar tipo de filtro...</option>
           <option value="from_email">📧 Remitente contiene</option>
           <option value="to_email">📨 Destinatario contiene</option>
@@ -325,7 +325,7 @@
       
       <div class="edit-form-group">
         <label for="editFilterValue">Valor del filtro:</label>
-        <input type="text" id="editFilterValue" name="filter_value" placeholder="Ingresa el texto a buscar..." required aria-describedby="editHelperText">
+        <input type="text" id="editFilterValue" name="filter_value" placeholder="Ingresa el texto a buscar..." required aria-describedby="editHelperText" autocomplete="off">
         <small id="editHelperText">Los correos que coincidan con este criterio se procesarán automáticamente</small>
       </div>
       
@@ -415,7 +415,7 @@ i{% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/email_filters.js') }}?v=20261016-switch" defer></script>
+  <script src="{{ url_for('static', filename='js/email_filters.js') }}?v=20261029-pagination" defer></script>
   <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 {% endblock %}

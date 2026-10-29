@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261029-list-scroll">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261029-row-ellipsis">
 {% endblock %}
 
 {% block content %}
@@ -140,7 +140,7 @@
   {% for forwarding in email_forwardings %}
   <div class="forwarding-item">
     <div class="forwarding-info">
-      <strong>{{ forwarding.source_email or forwarding.destination_email }}</strong>
+      <strong title="{{ forwarding.source_email or forwarding.destination_email }}">{{ forwarding.source_email or forwarding.destination_email }}</strong>
       {% if forwarding.title %}
       <small class="forwarding-title">{{ forwarding.title }}</small>
       {% endif %}
@@ -210,7 +210,7 @@
   {% for cleanup in auto_cleanups %}
   <div class="forwarding-item">
     <div class="forwarding-info">
-      <strong>{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}</strong>
+      <strong title="{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}">{{ cleanup.get_time_12h() }} - {{ cleanup.folder_name }}</strong>
     </div>
     <div class="forwarding-actions">
       <button class="btn btn-orange edit-cleanup-btn row-icon-btn" 

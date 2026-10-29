@@ -25,14 +25,25 @@ function updateHelperText(selectElement, helperElement) {
   helperElement.textContent = helpText;
 }
 
+function setFilterModalOpen(modal, open) {
+  if (!modal) return;
+  modal.style.display = open ? 'flex' : 'none';
+  modal.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
 // Funciones para el modal de crear filtro
 function openCreateFilterModal() {
-  document.getElementById('createFilterModal').style.display = 'flex';
+  const modal = document.getElementById('createFilterModal');
+  setFilterModalOpen(modal, true);
+  setTimeout(() => {
+    const firstField = document.getElementById('createFilterName');
+    if (firstField) firstField.focus();
+  }, 100);
 }
 
 function closeCreateFilterModal() {
-  document.getElementById('createFilterModal').style.display = 'none';
-  // Limpiar formulario
+  const modal = document.getElementById('createFilterModal');
+  setFilterModalOpen(modal, false);
   document.getElementById('createFilterForm').reset();
 }
 
@@ -82,11 +93,15 @@ function openEditFilterModal(filterId, name, tagId, fromEmail, toEmail, subject,
     updateHelperText(document.getElementById('editFilterType'), editFilterHelperText);
   }
   
-  modal.style.display = 'flex';
+  setFilterModalOpen(modal, true);
+  setTimeout(() => {
+    const firstField = document.getElementById('editFilterName');
+    if (firstField) firstField.focus();
+  }, 100);
 }
 
 function closeEditFilterModal() {
-  document.getElementById('editFilterModal').style.display = 'none';
+  setFilterModalOpen(document.getElementById('editFilterModal'), false);
 }
 
 function purgeOrphanFilters() {
@@ -334,9 +349,12 @@ document.addEventListener('DOMContentLoaded', function() {
   const modals = document.querySelectorAll('.edit-modal');
   modals.forEach(modal => {
     modal.addEventListener('click', function(e) {
-      if (e.target === modal) {
-        modal.style.display = 'none';
-      }
+      if (e.target !== modal) return;
+      if (modal.id === 'createFilterModal') closeCreateFilterModal();
+      else if (modal.id === 'editFilterModal') closeEditFilterModal();
+      else if (modal.id === 'createBlockedSenderModal') closeCreateBlockedSenderModal();
+      else if (modal.id === 'editBlockedSenderModal') closeEditBlockedSenderModal();
+      else setFilterModalOpen(modal, false);
     });
   });
   
@@ -405,10 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function openCreateBlockedSenderModal() {
   const modal = document.getElementById('createBlockedSenderModal');
-  
-  // Mostrar modal y actualizar aria-hidden
-  modal.style.display = 'flex';
-  modal.setAttribute('aria-hidden', 'false');
+  setFilterModalOpen(modal, true);
   
   // Focus en el primer campo después de un pequeño delay
   setTimeout(() => {
@@ -421,10 +436,7 @@ function openCreateBlockedSenderModal() {
 
 function closeCreateBlockedSenderModal() {
   const modal = document.getElementById('createBlockedSenderModal');
-  
-  // Ocultar modal y actualizar aria-hidden
-  modal.style.display = 'none';
-  modal.setAttribute('aria-hidden', 'true');
+  setFilterModalOpen(modal, false);
   
   // Resetear formulario
   document.getElementById('createBlockedSenderForm').reset();
@@ -462,11 +474,8 @@ function openEditBlockedSenderModal(senderId, senderEmail, senderDomain) {
     domainGroup.style.display = 'block';
   }
   
-  // Mostrar modal y actualizar aria-hidden
-  modal.style.display = 'flex';
-  modal.setAttribute('aria-hidden', 'false');
-  
-  // Focus después de un pequeño delay en el campo visible
+  setFilterModalOpen(modal, true);
+
   setTimeout(() => {
     if (senderEmail && senderEmail.trim() !== '') {
       emailInput.focus();
@@ -488,10 +497,8 @@ function closeEditBlockedSenderModal() {
   const emailGroup = document.getElementById('editSenderEmail').closest('.edit-form-group');
   const domainGroup = document.getElementById('editSenderDomain').closest('.edit-form-group');
   
-  // Ocultar modal y actualizar aria-hidden
-  modal.style.display = 'none';
-  modal.setAttribute('aria-hidden', 'true');
-  
+  setFilterModalOpen(modal, false);
+
   // Restaurar visibilidad de ambos campos para el próximo uso
   emailGroup.style.display = 'block';
   domainGroup.style.display = 'block';
@@ -658,11 +665,32 @@ let currentBlockedPage = 1;
 let filtersPerPage = 10;
 let blockedPerPage = 10;
 
+function syncFiltersPerPageFromSelect() {
+  const showFilterCount = document.getElementById('showFilterCount');
+  if (showFilterCount && showFilterCount.value !== 'all') {
+    filtersPerPage = parseInt(showFilterCount.value, 10) || filtersPerPage;
+  }
+  const showBlockedCount = document.getElementById('showBlockedCount');
+  if (showBlockedCount && showBlockedCount.value !== 'all') {
+    blockedPerPage = parseInt(showBlockedCount.value, 10) || blockedPerPage;
+  }
+}
+
+function setPaginationNavVisible(container, visible) {
+  if (!container) return;
+  container.style.display = visible ? 'flex' : 'none';
+  container.hidden = !visible;
+  container.classList.toggle('hidden', !visible);
+}
+
 // Función para filtrar tabla de filtros
 function filterFiltersTable() {
   const searchTerm = document.getElementById('searchFilterInput').value.toLowerCase();
   const table = document.getElementById('filters-table');
-  if (!table) return;
+  if (!table) {
+    updateFilterPaginationButtons(1, 0);
+    return;
+  }
   
   const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
   let visibleRows = [];
@@ -695,7 +723,10 @@ function filterFiltersTable() {
 function filterBlockedSendersTable() {
   const searchTerm = document.getElementById('searchBlockedInput').value.toLowerCase();
   const table = document.getElementById('blocked-senders-table');
-  if (!table) return;
+  if (!table) {
+    updateBlockedPaginationButtons(1, 0);
+    return;
+  }
   
   const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
   let visibleRows = [];
@@ -796,18 +827,16 @@ function clearBlockedSearch() {
 function updateFilterPaginationButtons(currentPage, totalPages) {
   const prevBtn = document.getElementById('prevFilterPageBtn');
   const nextBtn = document.getElementById('nextFilterPageBtn');
-  
+  const paginationContainer = document.getElementById('filterPaginationNav');
+  const showCountEl = document.getElementById('showFilterCount');
+  const showCount = showCountEl ? showCountEl.value : '20';
+  const needsPagination = showCount !== 'all' && totalPages > 1;
+
+  setPaginationNavVisible(paginationContainer, needsPagination);
+
   if (prevBtn && nextBtn) {
     prevBtn.disabled = currentPage <= 1;
     nextBtn.disabled = currentPage >= totalPages || totalPages === 0;
-    
-    // Mostrar/ocultar botones según si hay más de una página
-    const paginationContainer = prevBtn.parentElement;
-    if (totalPages <= 1) {
-      paginationContainer.style.display = 'none';
-    } else {
-      paginationContainer.style.display = 'flex';
-    }
   }
 }
 
@@ -815,18 +844,16 @@ function updateFilterPaginationButtons(currentPage, totalPages) {
 function updateBlockedPaginationButtons(currentPage, totalPages) {
   const prevBtn = document.getElementById('prevBlockedPageBtn');
   const nextBtn = document.getElementById('nextBlockedPageBtn');
-  
+  const paginationContainer = document.getElementById('blockedPaginationNav');
+  const showCountEl = document.getElementById('showBlockedCount');
+  const showCount = showCountEl ? showCountEl.value : '20';
+  const needsPagination = showCount !== 'all' && totalPages > 1;
+
+  setPaginationNavVisible(paginationContainer, needsPagination);
+
   if (prevBtn && nextBtn) {
     prevBtn.disabled = currentPage <= 1;
     nextBtn.disabled = currentPage >= totalPages || totalPages === 0;
-    
-    // Mostrar/ocultar botones según si hay más de una página
-    const paginationContainer = prevBtn.parentElement;
-    if (totalPages <= 1) {
-      paginationContainer.style.display = 'none';
-    } else {
-      paginationContainer.style.display = 'flex';
-    }
   }
 }
 
@@ -990,11 +1017,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Aplicar filtros iniciales
-  setTimeout(() => {
-    filterFiltersTable();
-    filterBlockedSendersTable();
-  }, 100);
+  // Paginación inicial según «Mostrar» y filas visibles
+  syncFiltersPerPageFromSelect();
+  updateFilterPaginationButtons(1, 0);
+  updateBlockedPaginationButtons(1, 0);
+  filterFiltersTable();
+  filterBlockedSendersTable();
 
   // Event listeners para data attributes
   const purgeOrphanBtn = document.getElementById('purgeOrphanFiltersBtn');

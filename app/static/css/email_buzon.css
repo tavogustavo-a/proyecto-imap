@@ -1155,9 +1155,12 @@ form {
   line-height: 1.2;
 }
 
-.smtp-address-add .smtp-folder-preview,
-.cleanup-create-form .smtp-folder-preview {
-  text-align: center;
+.edit-form-group .smtp-folder-preview,
+#editCleanupModal .smtp-folder-preview,
+#editForwardingModal .smtp-folder-preview {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .smtp-address-add .create-server-fields button.smtp-folder-select,
@@ -1397,6 +1400,86 @@ form {
 
 .cleanup-create-form .create-server-fields button.smtp-folder-select {
   padding: 0 1.8rem !important;
+}
+
+@media (max-width: 768px) {
+  .smtp-address-add .create-server-fields,
+  .cleanup-create-form .create-server-fields {
+    column-gap: 0.3rem;
+    row-gap: 0.22rem;
+    max-width: 100%;
+  }
+
+  .smtp-address-add .create-server-field input,
+  .smtp-address-add .create-server-fields button,
+  .smtp-address-add .create-server-fields button.smtp-folder-select,
+  .cleanup-create-form .create-server-field input,
+  .cleanup-create-form .create-server-field select,
+  .cleanup-create-form .create-server-fields button,
+  .cleanup-create-form .create-server-fields button.smtp-folder-select {
+    height: 1.75rem !important;
+    min-height: 1.75rem !important;
+    max-height: 1.75rem !important;
+    font-size: 0.75rem !important;
+    border-radius: 5px !important;
+  }
+
+  .smtp-address-add .create-server-field input,
+  .cleanup-create-form .create-server-field input,
+  .cleanup-create-form .create-server-field select {
+    padding: 0 0.35rem !important;
+  }
+
+  .email-forwarding-config .forwarding-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    gap: 6px;
+  }
+
+  .email-forwarding-config .forwarding-info {
+    min-width: 0;
+    flex: 1 1 auto;
+    text-align: left;
+  }
+
+  .email-forwarding-config .forwarding-info strong {
+    display: block;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .email-forwarding-config .forwarding-actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    gap: 4px;
+  }
+
+  .smtp-address-add .create-server-field input,
+  .smtp-address-add .create-server-fields button,
+  .smtp-address-add .create-server-fields button.smtp-folder-select,
+  .cleanup-create-form .create-server-field input,
+  .cleanup-create-form .create-server-field select,
+  .cleanup-create-form .create-server-fields button,
+  .cleanup-create-form .create-server-fields button.smtp-folder-select {
+    height: 1.6rem !important;
+    min-height: 1.6rem !important;
+    max-height: 1.6rem !important;
+  }
+
+  .smtp-folder-preview {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 /* Estilos para formularios inline */
@@ -1972,6 +2055,19 @@ form {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+#createFilterBtn,
+#createBlockedSenderBtn {
+  padding: 0.32rem 0.62rem;
+  font-size: 0.82rem;
+  line-height: 1.15;
+  border-radius: 5px;
+}
+
+#createFilterBtn i,
+#createBlockedSenderBtn i {
+  font-size: 0.85em;
 }
 
 .filters-list {
@@ -2588,19 +2684,39 @@ form {
   max-width: none;
 }
 
+.filters-main-area .productos-buscar-mostrar .search-container input[type="search"],
+.blocked-senders-section .productos-buscar-mostrar .search-container input[type="search"],
 .filters-main-area .productos-buscar-mostrar select,
 .blocked-senders-section .productos-buscar-mostrar select {
-  height: 38px;
-  padding: 6px 8px;
+  box-sizing: border-box;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  padding: 4px 8px !important;
   border: 2px solid #111 !important;
   border-radius: 5px;
   background: #fff;
-  box-sizing: border-box;
   font-size: 14px;
+  line-height: 1.2;
+}
+
+.filters-main-area .productos-buscar-mostrar .search-container input[type="search"],
+.blocked-senders-section .productos-buscar-mostrar .search-container input[type="search"] {
+  width: 100%;
+  padding-right: 35px !important;
+}
+
+.filters-main-area .productos-buscar-mostrar select,
+.blocked-senders-section .productos-buscar-mostrar select {
+  width: 80px !important;
+  flex: 0 0 auto;
+  padding-right: 8px !important;
 }
 
 .filters-main-area .productos-buscar-mostrar select:focus,
-.blocked-senders-section .productos-buscar-mostrar select:focus {
+.blocked-senders-section .productos-buscar-mostrar select:focus,
+.filters-main-area .productos-buscar-mostrar .search-container input[type="search"]:focus,
+.blocked-senders-section .productos-buscar-mostrar .search-container input[type="search"]:focus {
   outline: none;
   border-color: #111 !important;
   box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.15);
@@ -2670,12 +2786,15 @@ form {
     -webkit-overflow-scrolling: touch;
   }
 
-  .email-toolbar,
-  .email-list {
-    min-width: 40rem;
+  .email-toolbar {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .email-list {
+    min-width: 40rem;
     overflow-x: visible;
     overflow-y: auto;
   }

@@ -2448,7 +2448,7 @@ def render_pantallas_png(data: dict) -> bytes:
     headers = ('PLATAFORMA', 'PANTALLAS', 'PERFILES', 'PAGINA OFICIAL', 'ACTIVACION TELEVISOR')
     keys = ('pantallas', 'perfiles', 'pagina', 'activacion')
     fav_size = 84
-    logo_size = 60
+    logo_size = 84
     gap = 10
 
     head_a = (30, 58, 138)
@@ -2485,11 +2485,8 @@ def render_pantallas_png(data: dict) -> bytes:
             lines = wrap(cell_text(row, key), cell_font, col_w[index + 1] - 24)
             cells.append(lines)
             heights.append(block_h(lines, cell_font))
-        fav_page = favicon_source_page(row)
-        if fav_page:
-            icons = []
-        else:
-            icons = resolve_row_screen_icons(row)[:2]
+        icons = resolve_row_screen_icons(row)[:2]
+        fav_page = '' if icons else favicon_source_page(row)
         stack_h = (fav_size if fav_page else 0) + (logo_size if icons else 0) + (gap if fav_page and icons else 0)
         row_h = max(heights + [stack_h, 72]) + 28
         prepared.append((row, cells, row_h, fav_page, icons, stack_h))

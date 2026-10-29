@@ -1491,11 +1491,9 @@ def render_pantallas_html(saved: dict | None, heading: str = '') -> Markup:
 
     for row in rows:
         parts.append(Markup('<tr><td class="tv-icons"><div class="tv-icon-stack">'))
-        favicon_page = favicon_source_page(row)
-        if favicon_page:
-            icons = []
-        else:
-            icons = resolve_row_screen_icons(row)
+        icons = resolve_row_screen_icons(row)
+        # Si el link coincide con un stream local, ese icono manda. El favicon solo cubre lo que no tenemos.
+        favicon_page = '' if icons else favicon_source_page(row)
         if favicon_page:
             parts.append(_tv_platform_favicon_img(favicon_page, row))
         if icons:
