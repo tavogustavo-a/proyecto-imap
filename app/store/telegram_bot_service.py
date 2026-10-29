@@ -719,8 +719,25 @@ def apply_check(row: TelegramBotConfig, check: dict) -> None:
 
 def save_telegram_bot(username: str | None, token: str | None) -> tuple[TelegramBotConfig, dict]:
     row = _get_or_create()
-    row.bot_username = normalize_bot_username(username)
-    row.bot_token = (token or '').strip()
+    name = normalize_bot_username(username)
+    clean_token = (token or '').strip()
+    if not name and not clean_token:
+        row.bot_username = ''
+        row.bot_token = ''
+        row.is_enabled = False
+        row.connection_status = 'disconnected'
+        row.last_health_error = None
+        row.last_health_at = datetime.utcnow()
+        row.updated_at = datetime.utcnow()
+        db.session.commit()
+        return row, {
+            'connected': False,
+            'cleared': True,
+            'message': 'Datos de BotFather borrados.',
+            'telegram_username': '',
+        }
+    row.bot_username = name
+    row.bot_token = clean_token
     check = check_bot_credentials(row.bot_username, row.bot_token)
     apply_check(row, check)
     db.session.commit()

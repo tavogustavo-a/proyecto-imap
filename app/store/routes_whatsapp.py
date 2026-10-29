@@ -638,6 +638,7 @@ def save_telegram_bot_route():
     return jsonify({
         'success': True,
         'connected': connected,
+        'cleared': bool(check.get('cleared')),
         'message': check.get('message') or ('Conectado.' if connected else 'Desconectado.'),
         'config': serialize_telegram_bot(row),
     })

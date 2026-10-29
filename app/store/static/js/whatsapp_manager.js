@@ -359,8 +359,10 @@ async function saveTelegramBotFromModal() {
         if (result.config) {
             fillTelegramBotForm(result.config);
             updateTelegramHealthBanner(result.config);
+            var tgEnabled = document.getElementById('telegram-enabled');
+            if (tgEnabled) tgEnabled.checked = !!result.config.is_enabled;
         }
-        var ok = !!result.connected;
+        var ok = !!result.connected || !!result.cleared;
         setTelegramBotModalStatus(result.message || result.error || 'No se pudo guardar', ok);
         showWhatsAppStatus(result.message || result.error || 'No se pudo guardar', ok ? 'success' : 'error');
     } catch (error) {

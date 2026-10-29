@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261029-botfather-label">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261029-botfather-actions">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 {% block content %}
@@ -358,29 +358,27 @@
       <p id="telegram-botfather-status" class="telegram-botfather-status" role="status"></p>
       <div class="whatsapp-user-phone-modal-actions telegram-botfather-save-row">
         <button type="button" id="telegram-botfather-save-btn" class="btn-panel btn-green">Guardar</button>
+        <button type="button" id="telegram-group-extract-load-btn" class="btn-panel btn-blue telegram-group-extract-load">Extraer id de los grupos</button>
+        <span class="purchase-history-cleanup-info-wrap telegram-group-extract-info-wrap">
+          <button
+            type="button"
+            id="telegramGroupExtractInfoBtn"
+            class="info-icon info-icon-square"
+            aria-expanded="false"
+            aria-controls="telegramGroupExtractInfoBox"
+            aria-label="Información sobre extraer id de los grupos"
+            title="Más información"
+          >i</button>
+          <div id="telegramGroupExtractInfoBox" class="purchase-history-cleanup-info-box telegram-group-extract-info-box" hidden>
+            Nombre, cantidad de miembros e ID. Si el grupo tiene temas, salen debajo de una vez: tema1-nombre, tema2-nombre. Cuando se acaban, sigue el otro grupo. El ícono copia el ID.
+            <br><br>
+            Solo aparecen los grupos y canales de los que Telegram avisó al bot. La lista de la ficha del bot en Telegram no se puede pedir.
+            <br><br>
+            El bot se entera cuando lo agregan o cuando alguien lo menciona. Un tema entra cuando escriben en ese tema y mencionan al bot. Si falta, mencionalo ahí y tocá Extraer id de los grupos otra vez.
+          </div>
+        </span>
       </div>
       <div class="telegram-group-extract">
-        <div class="telegram-group-extract-field">
-          <button type="button" id="telegram-group-extract-load-btn" class="telegram-group-extract-load">Extraer id de los grupos</button>
-          <span class="purchase-history-cleanup-info-wrap telegram-group-extract-info-wrap">
-            <button
-              type="button"
-              id="telegramGroupExtractInfoBtn"
-              class="info-icon info-icon-square"
-              aria-expanded="false"
-              aria-controls="telegramGroupExtractInfoBox"
-              aria-label="Información sobre extraer id de los grupos"
-              title="Más información"
-            >i</button>
-            <div id="telegramGroupExtractInfoBox" class="purchase-history-cleanup-info-box telegram-group-extract-info-box" hidden>
-              Nombre, cantidad de miembros e ID. Si el grupo tiene temas, salen debajo de una vez: tema1-nombre, tema2-nombre. Cuando se acaban, sigue el otro grupo. El ícono copia el ID.
-              <br><br>
-              Solo aparecen los grupos y canales de los que Telegram avisó al bot. La lista de la ficha del bot en Telegram no se puede pedir.
-              <br><br>
-              El bot se entera cuando lo agregan o cuando alguien lo menciona. Un tema entra cuando escriben en ese tema y mencionan al bot. Si falta, mencionalo ahí y tocá Extraer id de los grupos otra vez.
-            </div>
-          </span>
-        </div>
         <div id="telegram-group-extract-table-wrap" class="telegram-group-extract-table-wrap" hidden>
           <table class="telegram-group-extract-table">
             <thead>
@@ -634,5 +632,5 @@
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261028-drive-media-src" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261029-botfather-label" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261029-botfather-clear" defer></script>
 {% endblock %}

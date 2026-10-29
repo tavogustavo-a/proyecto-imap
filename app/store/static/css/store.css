@@ -41517,8 +41517,33 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 }
 
 .telegram-botfather-save-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
   flex: 0 0 auto;
   margin-top: 0.65rem;
+}
+
+.telegram-botfather-modal .telegram-botfather-save-row #telegram-botfather-save-btn,
+.telegram-botfather-modal .telegram-botfather-save-row #telegram-group-extract-load-btn {
+  flex: 0 0 auto;
+  width: auto;
+  height: 2.2rem;
+  min-height: 2.2rem;
+  max-height: 2.2rem;
+  margin: 0;
+  padding: 0 0.85rem;
+  box-sizing: border-box;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.telegram-botfather-save-row .telegram-group-extract-info-wrap {
+  margin-left: 0;
 }
 
 .telegram-group-extract {
@@ -41588,30 +41613,20 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 1 1 auto;
   width: auto;
   min-width: 0;
-  height: 2.15rem;
-  min-height: 2.15rem;
   margin: 0;
-  padding: 0 0.75rem;
-  border: 2px solid #1256a6;
   border-radius: 4px;
-  background: #1976d2;
-  color: #fff;
-  font-size: 0.84rem;
-  font-weight: 700;
-  line-height: 1.2;
+  background: var(--ui-static-bg) !important;
+  border: 1px solid var(--ui-static-1) !important;
+  color: #fff !important;
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
 }
 
 .telegram-botfather-modal button.telegram-group-extract-load:hover,
 .telegram-botfather-modal button.telegram-group-extract-load:focus {
-  background: #1565c0;
+  filter: brightness(0.92);
   outline: none;
 }
 
