@@ -33,6 +33,23 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
+  function reloadFilterList() {
+    const query = filterSearchInput ? filterSearchInput.value.trim() : "";
+    return fetch(`/admin/search_filters_ajax?query=${encodeURIComponent(query)}`, {
+      method: "GET",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status !== "ok") {
+        throw new Error(data.message || "Error recargando lista");
+      }
+      if (filterListContainer) {
+        filterListContainer.innerHTML = renderFilterItems(data.filters);
+      }
+    });
+  }
+
   // --- Búsqueda instantánea de filtros ---
   if (filterSearchInput && filterListContainer) {
     let searchTimeout = null;
@@ -142,9 +159,9 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(res => res.json())
         .then(data => {
             if (data.status === "ok") {
-                if (filterListContainer) {
-                    filterListContainer.innerHTML = renderFilterItems(data.filters);
-                }
+                reloadFilterList().catch(function () {
+                    alert("Estado del filtro cambiado, pero hubo un error al recargar la lista.");
+                });
             } else {
                 alert("Error: " + data.message);
             }
@@ -178,9 +195,9 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(res => res.json())
         .then(data => {
           if (data.status === "ok") {
-             if (filterListContainer) {
-                  filterListContainer.innerHTML = renderFilterItems(data.filters);
-              }
+             reloadFilterList().catch(function () {
+                  alert("Filtro eliminado, pero hubo un error al recargar la lista.");
+              });
           } else {
             alert("Error: " + data.message);
           }

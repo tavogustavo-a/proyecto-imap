@@ -83,51 +83,22 @@ document.addEventListener("DOMContentLoaded", function() {
       return html;
     }
   
-    // EVENT LISTENER GLOBAL (Delegación) - SOLO PARA TOGGLE AHORA
-    document.addEventListener("click", (e) => {
-      const target = e.target.closest(".toggle-regex");
-  
-      // --- Botones Toggle (Solo Regex, ya que los otros se manejan en su contenedor) --- 
-      if (target) {
-          e.preventDefault();
-          const regexId = target.getAttribute("data-id");
-          const currentlyEnabled = (target.getAttribute("data-enabled") === "true");
-          fetch("/admin/toggle_regex_ajax", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRFToken": getCsrfToken()
-            },
-            body: JSON.stringify({ regex_id: parseInt(regexId), currently_enabled: currentlyEnabled })
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.status === "ok") {
-              if (regexListContainer) {
-                // Recargar la lista después de toggle
-                fetch("/admin/search_regex_ajax?query=", { 
-                    method: "GET", 
-                    headers: { "X-CSRFToken": getCsrfToken() }
-                })
-                .then(res => res.json())
-                .then(searchData => {
-                    if (searchData.status === 'ok') {
-                        regexListContainer.innerHTML = renderRegexItems(searchData.regexes);
-                    } else {
-                        throw new Error(searchData.message || 'Error recargando lista');
-                    }
-                })
-                .catch(reloadErr => {
-                    alert("Estado Regex cambiado, pero hubo un error al recargar la lista.");
-                });
-              }
-            } else {
-              alert("Error: " + data.message);
-            }
-          })
-          .catch(err => {});
-      }
-    }); // Fin Listener Global Document
+    function reloadRegexList() {
+      const query = regexSearchInput ? regexSearchInput.value.trim() : "";
+      return fetch(`/admin/search_regex_ajax?query=${encodeURIComponent(query)}`, {
+        method: "GET",
+        headers: { "X-CSRFToken": getCsrfToken() }
+      })
+      .then(res => res.json())
+      .then(searchData => {
+        if (searchData.status !== "ok") {
+          throw new Error(searchData.message || "Error recargando lista");
+        }
+        if (regexListContainer) {
+          regexListContainer.innerHTML = renderRegexItems(searchData.regexes);
+        }
+      });
+    }
   
     function getCsrfToken() {
       const csrfMeta = document.querySelector('meta[name="csrf_token"]');
@@ -177,9 +148,9 @@ document.addEventListener("DOMContentLoaded", function() {
           .then(res => res.json())
           .then(data => {
             if (data.status === "ok") {
-              if (regexListContainer) {
-                regexListContainer.innerHTML = renderRegexItems(data.regexes);
-              }
+              reloadRegexList().catch(function () {
+                alert("Estado Regex cambiado, pero hubo un error al recargar la lista.");
+              });
             } else {
               alert("Error: " + data.message);
             }
@@ -216,19 +187,7 @@ document.addEventListener("DOMContentLoaded", function() {
           })
           .then(data => {
             if (data.status === "ok") {
-              // Recargar la lista
-              fetch("/admin/search_regex_ajax?query=", { 
-                  method: "GET", 
-                  headers: { "X-CSRFToken": getCsrfToken() }
-              })
-              .then(res => res.json())
-              .then(searchData => {
-                  if (searchData.status === 'ok') {
-                      regexListContainer.innerHTML = renderRegexItems(searchData.regexes);
-                  } else {
-                      throw new Error(searchData.message || 'Error recargando lista');
-                  }
-              })
+              reloadRegexList()
               .catch(reloadErr => {
                   alert("Regex eliminado, pero hubo un error al recargar la lista.");
                   target.closest('.regex-item')?.remove(); 
