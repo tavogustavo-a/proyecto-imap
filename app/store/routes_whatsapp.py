@@ -167,6 +167,14 @@ def create_whatsapp_config():
 @admin_required
 def delete_whatsapp_config(config_id):
     config = WhatsAppConfig.query.get_or_404(config_id)
+    try:
+        from app.store.whatsapp_web_service import logout_config_evolution_instance
+        logout_config_evolution_instance(config, send_alerts=False)
+    except Exception:
+        current_app.logger.warning(
+            'No se pudo desconectar WhatsApp al borrar la configuración %s',
+            config_id,
+        )
     db.session.delete(config)
     db.session.commit()
     return jsonify({'success': True, 'message': 'Configuración eliminada.'})

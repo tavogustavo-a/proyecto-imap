@@ -9,7 +9,7 @@ class SecurityRule(db.Model):
     description = db.Column(db.String(255), nullable=True)
     trigger_pattern = db.Column(db.Text, nullable=False)
     observer_pattern = db.Column(db.Text, nullable=False) 
-    imap_server_id = db.Column(db.Integer, db.ForeignKey('imap_servers.id', ondelete='CASCADE'), nullable=True)
+    imap_server_id = db.Column(db.Integer, db.ForeignKey('imap_servers.id', ondelete='SET NULL'), nullable=True)
     imap_server = db.relationship('IMAPServer', backref=db.backref('security_rules', lazy=True))
     imap_folder = db.Column(db.String(255), nullable=True)  # Carpeta específica dentro del servidor
     enabled = db.Column(db.Boolean, default=True, nullable=False)

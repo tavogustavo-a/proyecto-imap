@@ -1623,11 +1623,24 @@ def _mark_channel_sent(snapshots: list[SalePurchaseSnapshot], field: str) -> Non
 def _telegram_chat_delivered_elsewhere(chat_id: str, user_id: int, co_date) -> str:
     """Usuario que ya recibió por Telegram ese ID en la misma fecha. Vacío si nadie."""
     from app.models.user import User
+    from app.store.telegram_bot_service import parse_chat_id_list, user_chat_ids
 
-    others = User.query.filter(User.telegram_chat_id == chat_id, User.id != int(user_id)).all()
-    if not others:
+    ids, err = parse_chat_id_list(chat_id)
+    if err or not ids:
+        one = str(chat_id or '').strip()
+        ids = [one] if one else []
+    if not ids:
         return ''
-    other_ids = [int(u.id) for u in others]
+    wanted = set(ids)
+    others = User.query.filter(
+        User.id != int(user_id),
+        User.telegram_chat_id.isnot(None),
+        User.telegram_chat_id != '',
+    ).all()
+    matched = [user for user in others if wanted.intersection(user_chat_ids(user))]
+    if not matched:
+        return ''
+    other_ids = [int(user.id) for user in matched]
     sent = (
         SalePurchaseSnapshot.query.filter(
             SalePurchaseSnapshot.user_id.in_(other_ids),
@@ -1638,7 +1651,7 @@ def _telegram_chat_delivered_elsewhere(chat_id: str, user_id: int, co_date) -> s
     )
     if not sent:
         return ''
-    owner = next((u for u in others if int(u.id) == int(sent.user_id)), None)
+    owner = next((user for user in matched if int(user.id) == int(sent.user_id)), None)
     return (owner.username if owner else '') or 'otro usuario'
 
 

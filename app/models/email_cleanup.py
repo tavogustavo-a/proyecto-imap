@@ -9,7 +9,7 @@ class EmailCleanup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     time = db.Column(db.Time, nullable=False)  # Hora diaria de ejecución
     folder_type = db.Column(db.String(20), nullable=False)  # 'inbox', 'trash', 'tag', 'spam'
-    tag_id = db.Column(db.Integer, db.ForeignKey('email_tags_table.id'), nullable=True)  # Solo para folder_type='tag'
+    tag_id = db.Column(db.Integer, db.ForeignKey('email_tags_table.id', ondelete='SET NULL'), nullable=True)
     folders_json = db.Column(db.Text, nullable=True)
     enabled = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

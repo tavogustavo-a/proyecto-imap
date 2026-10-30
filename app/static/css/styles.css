@@ -27,11 +27,12 @@ body.theme-active {
   background-size: cover;
 }
 
-/* Gestión de permisos: el fondo fijo del body congela el scroll de Chrome.
-   El tema se pinta en una capa fija para que siga viéndose al bajar. */
+/* Gestión de permisos: el fondo fijo del body congela el scroll y el menú
+   en Chrome (repinta la tabla entera). El tema va en una capa fija aparte. */
 body.theme-active:has(.perm-page) {
   background-image: none !important;
   background-color: transparent !important;
+  background-attachment: scroll !important;
 }
 
 body.theme-active:has(.perm-page)::before {
@@ -57,9 +58,13 @@ body.theme-active.tema3:has(.perm-page)::before {
   background-image: url("/static/images/tema3.png");
 }
 
-.perm-page .permissions-table tbody tr {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
+/* El shorthand de .tema1/.tema2/.tema3 vuelve a poner attachment:fixed
+   después de la regla de arriba. Aquí gana el modo scroll. */
+body.theme-active.tema1:has(.perm-page),
+body.theme-active.tema2:has(.perm-page),
+body.theme-active.tema3:has(.perm-page) {
+  background-image: none !important;
+  background-attachment: scroll !important;
 }
 
 /* LOG: Esta regla controla el ancho y margen general del contenedor principal. Si el layout se descuadra, revisa aqu�. */
@@ -932,6 +937,26 @@ noscript p {
 @media (max-width: 768px) {
   .change-creds-card {
     margin: 0.001rem auto !important;
+  }
+
+  .creds-verify-actions,
+  .change-creds-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .creds-verify-actions > .btn-link-style,
+  .change-creds-actions > .btn-link-style {
+    margin-left: 0;
+  }
+
+  .creds-verify-actions > *,
+  .change-creds-actions > * {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    white-space: normal;
   }
 }
 
@@ -2429,6 +2454,28 @@ noscript p {
   padding-right: 1.45rem;
 }
 
+.search-page .service-btn-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  line-height: 1.15;
+}
+
+@media (min-width: 601px) {
+  .search-page .service-btn-container {
+    box-sizing: border-box;
+    flex: 1 1 50%;
+    max-width: 50%;
+    padding: 0.28rem 0.15rem;
+  }
+}
+
+@media (min-width: 1000px) {
+  .search-page-container .admin-card {
+    max-width: min(880px, calc(100vw - 2rem));
+  }
+}
+
 
 .main-message-wrapper {
   max-width: 100%;
@@ -3403,6 +3450,25 @@ body .edit-service-page #aliasPopup {
   white-space: nowrap;
 }
 
+.usuarios-page #createUserBtn,
+.usuarios-page #bulkAddEmailsBtn,
+.usuarios-bulk-emails-section #bulkAddEmailsBtn {
+  background: var(--ui-static-bg) !important;
+  color: #fff !important;
+  border-color: var(--ui-static-1) !important;
+}
+
+.usuarios-page #createUserBtn:hover,
+.usuarios-page #createUserBtn:focus-visible,
+.usuarios-page #bulkAddEmailsBtn:hover,
+.usuarios-page #bulkAddEmailsBtn:focus-visible,
+.usuarios-bulk-emails-section #bulkAddEmailsBtn:hover,
+.usuarios-bulk-emails-section #bulkAddEmailsBtn:focus-visible {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+  color: #fff !important;
+}
+
 .usuarios-page .usuarios-bulk-emails-actions,
 .usuarios-bulk-emails-section .usuarios-bulk-emails-actions {
   margin-top: 0.4rem !important;
@@ -3529,6 +3595,38 @@ body .edit-service-page #aliasPopup {
 }
 
 /* Los botones regex con colores intercambiados */
+.regex-result-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.15rem;
+}
+
+.regex-result-approve-btn {
+  margin-left: 0 !important;
+  width: min(100%, 22rem);
+  min-width: 16rem;
+  background: #e11d2e !important;
+  border-color: #e11d2e !important;
+  color: #fff !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.regex-result-approve-btn:hover,
+.regex-result-approve-btn:focus {
+  background: #b91022 !important;
+  border-color: #b91022 !important;
+  color: #fff !important;
+}
+
+.regex-result-actions .regex-result-copy-btn {
+  margin-left: 0 !important;
+  width: auto;
+  min-width: 0;
+}
+
 .regex-result-copy-btn,
 .regex-result-open-link-btn {
   margin-left: 1rem;
@@ -7845,20 +7943,29 @@ html.usuarios-delete-keyboard-active .usuarios-bulk-emails-section {
   line-height: 1.45;
 }
 
+.parrafos-page-shell .paragraph-actions-row .paragraph-save-btn,
 .parrafos-page-shell .paragraph-actions-row .cycle-paragraph-mode-btn {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
   flex-shrink: 0;
-  min-width: 5.5rem;
-  padding: 2px 10px !important;
-  font-weight: 600;
-  font-size: 1rem;
-  line-height: 1.45rem;
+  box-sizing: border-box !important;
+  width: 7.15rem !important;
+  min-width: 7.15rem !important;
+  max-width: 7.15rem !important;
+  height: 2rem !important;
+  min-height: 2rem !important;
+  margin: 0 !important;
+  padding: 0 8px !important;
+  font-weight: 600 !important;
+  font-size: 1.08rem !important;
+  line-height: 1 !important;
   text-align: center;
+  border-radius: 6px !important;
+  border-width: 2px !important;
+  border-style: solid !important;
   cursor: pointer;
-  box-sizing: border-box;
   visibility: visible !important;
   opacity: 1 !important;
 }
@@ -8448,8 +8555,8 @@ body:not(.theme-active) .site-footer__social-config-btn {
   position: relative;
   justify-content: center;
   border-bottom: none;
-  padding-bottom: 0;
-  margin-bottom: 0;
+  padding: 0 1.6rem 0;
+  margin: 0 !important;
 }
 
 .subuser-catalog-modal .subuser-catalog-header h4 {
@@ -8457,23 +8564,55 @@ body:not(.theme-active) .site-footer__social-config-btn {
   text-align: center;
   line-height: 1.15;
   font-size: 1.05rem;
+  margin: 0 !important;
 }
 
 .subuser-catalog-modal .subuser-catalog-header .btn-close {
   position: absolute;
   right: 0;
-  top: 0;
-  width: 26px;
-  height: 26px;
-  padding: 2px;
-  font-size: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  margin: 0;
+  border: 2px solid #b91c1c !important;
+  border-radius: 50%;
+  background: #dc2626 !important;
+  color: #fff !important;
+  font-size: 0.85rem;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.subuser-catalog-modal .subuser-catalog-header .btn-close i {
+  display: none;
+}
+
+.subuser-catalog-modal .subuser-catalog-header .btn-close::before {
+  content: "\00d7";
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: #fff;
+}
+
+.subuser-catalog-modal .subuser-catalog-header .btn-close:hover,
+.subuser-catalog-modal .subuser-catalog-header .btn-close:focus {
+  background: #b91c1c !important;
+  color: #fff !important;
 }
 
 .subuser-catalog-modal .subuser-catalog-help {
   text-align: center;
-  margin-top: 0.1rem;
-  margin-bottom: 0.2rem;
-  line-height: 1.28;
+  margin: 0.15rem 0 0.25rem !important;
+  padding: 0;
+  line-height: 1.25;
   font-size: 0.72rem;
 }
 
@@ -8554,6 +8693,18 @@ body:not(.theme-active) .site-footer__social-config-btn {
   font-size: 0.72rem;
   font-weight: 600;
   padding: 0.12rem 0.22rem;
+}
+
+.subuser-catalog-table tbody tr:nth-child(odd) {
+  background: #fff;
+}
+
+.subuser-catalog-table tbody tr:nth-child(even) {
+  background: #e8edf3;
+}
+
+.subuser-catalog-table tbody tr:nth-child(even) input[type="number"] {
+  background: #f8fafc;
 }
 
 .subuser-catalog-table th:nth-child(2),

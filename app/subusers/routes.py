@@ -403,9 +403,9 @@ def delete_subuser_ajax():
             return jsonify({"status":"error","message":"No existe o no te pertenece"}),403
 
     try:
-        from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+        from app.services.user_deletion_cleanup import prepare_users_for_deletion
 
-        cleanup_disk_assets_for_user_ids(current_app._get_current_object(), sub_user.id)
+        prepare_users_for_deletion(current_app._get_current_object(), sub_user.id)
         # Eliminar el sub-usuario
         # Nota: RememberDevice se elimina automáticamente por CASCADE (ondelete='CASCADE')
         # CASCADE también eliminará automáticamente:

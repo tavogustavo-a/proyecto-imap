@@ -155,10 +155,28 @@ def delete_service_ajax():
         if srv.protected:
             return jsonify({"status": "error", "message": "Servicio protegido, no se puede eliminar."}), 400
 
+        from app.models.alias import ServiceAlias
+        from app.models.alias_icon import AliasIcon
+        from app.models.service import service_filter, service_regex
+        from app.models.service_icon import ServiceIcon
+        from app.models.user import user_service
+
+        alias_ids = [
+            row[0]
+            for row in db.session.query(ServiceAlias.id).filter_by(service_id=srv.id).all()
+        ]
+        if alias_ids:
+            AliasIcon.query.filter(AliasIcon.alias_id.in_(alias_ids)).delete(synchronize_session=False)
+            ServiceAlias.query.filter(ServiceAlias.id.in_(alias_ids)).delete(synchronize_session=False)
+        ServiceIcon.query.filter_by(service_id=srv.id).delete(synchronize_session=False)
+        db.session.execute(user_service.delete().where(user_service.c.service_id == srv.id))
+        db.session.execute(service_regex.delete().where(service_regex.c.service_id == srv.id))
+        db.session.execute(service_filter.delete().where(service_filter.c.service_id == srv.id))
         db.session.delete(srv)
         db.session.commit()
         return _refresh_services()
     except Exception as e:
+        db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 400
 
 def _refresh_services():
@@ -467,6 +485,7 @@ def delete_alias_ajax():
         delete_service_alias(alias_id)
         return _refresh_services()
     except Exception as e:
+        db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 400
 
 # =========== SERVICE ICONS ===========

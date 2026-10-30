@@ -137,6 +137,7 @@ def delete_security_rule_ajax():
     rule = SecurityRule.query.get(rule_id)
     if rule:
         try:
+            TriggerLog.query.filter_by(rule_id=rule.id).delete(synchronize_session=False)
             db.session.delete(rule)
             db.session.commit()
             rules_data = _get_all_security_rules_data() 

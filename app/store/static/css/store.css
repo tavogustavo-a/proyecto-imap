@@ -48894,9 +48894,46 @@ form[data-html-preset-form]:not([data-preset="foto_pantallas_perfiles_tv"]) [dat
 }
 
 .codigos-alias-preview {
-  padding: 0.55rem 0.7rem 0.65rem;
-  background: #f7f7f7;
-  border-top: 1px solid #e8e8e8;
+  padding: 0.2rem 0.15rem 0.45rem;
+  background: transparent;
+  border-top: none;
+  text-align: left;
+}
+
+[data-codigos-editor] .codigos-service-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 0.35rem 0.55rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #111;
+  background: transparent;
+  border: none;
+  cursor: default;
+  user-select: none;
+}
+
+.mdp-card-codigos .mdp-section-title {
+  text-align: left;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+}
+
+.mdp-card-codigos .mdp-section:not(:has(.mdp-subs)) {
+  padding-bottom: 0;
+}
+
+.mdp-card-codigos .mdp-subs {
+  margin-left: 0.45rem;
+  margin-right: 0.45rem;
+}
+
+.mdp-card-codigos .mdp-subs li {
+  padding-left: 0.85rem;
 }
 
 .mdp-section-edit input[readonly] {

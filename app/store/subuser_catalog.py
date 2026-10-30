@@ -520,3 +520,68 @@ def _editor_payload_from_cfg(
         'configured': configured,
         'products': rows,
     }
+
+
+def drop_product_from_user_price_maps(product_id) -> int:
+    """Quita un producto ya borrado de catálogos, permisos y descuentos en user_prices."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    try:
+        pid = int(product_id)
+    except (TypeError, ValueError):
+        return 0
+    pid_s = str(pid)
+    changed_users = 0
+    users = User.query.filter(User.user_prices.isnot(None)).all()
+    for user in users:
+        up = user.user_prices if isinstance(user.user_prices, dict) else None
+        if not up:
+            continue
+        new_up = dict(up)
+        changed = False
+        for key in (CATALOG_KEY, GLOBAL_CATALOG_KEY):
+            cat = new_up.get(key)
+            if not isinstance(cat, dict):
+                continue
+            prods = cat.get('products')
+            if not isinstance(prods, dict) or pid_s not in prods:
+                continue
+            cat = dict(cat)
+            prods = dict(prods)
+            prods.pop(pid_s, None)
+            cat['products'] = prods
+            new_up[key] = cat
+            changed = True
+        allowed = new_up.get('productos_permitidos')
+        if isinstance(allowed, list):
+            kept = []
+            removed = False
+            for item in allowed:
+                try:
+                    if int(item) == pid:
+                        removed = True
+                        continue
+                except (TypeError, ValueError):
+                    pass
+                kept.append(item)
+            if removed:
+                new_up['productos_permitidos'] = kept
+                changed = True
+        discounts = new_up.get('descuentos_productos')
+        if isinstance(discounts, dict) and (pid_s in discounts or pid in discounts):
+            discounts = dict(discounts)
+            discounts.pop(pid_s, None)
+            discounts.pop(pid, None)
+            new_up['descuentos_productos'] = discounts
+            changed = True
+        if not changed:
+            continue
+        try:
+            rev = int(new_up.get('catalog_revision') or 0)
+        except (TypeError, ValueError):
+            rev = 0
+        new_up['catalog_revision'] = rev + 1
+        user.user_prices = new_up
+        flag_modified(user, 'user_prices')
+        changed_users += 1
+    return changed_users

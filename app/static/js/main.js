@@ -963,6 +963,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     const isLink = /^(https?:\/\/|www\.)/i.test(codeStr);
+    const isNetflixApprove = isLink && /netflix\.com/i.test(codeStr);
     const MAX_LEN = 50;
     let displayText = codeStr;
     if (displayText.length > MAX_LEN) {
@@ -972,34 +973,52 @@ document.addEventListener("DOMContentLoaded", function () {
     const divContainer = document.createElement('div');
     divContainer.classList.add('regex-result-container');
     divContainer.classList.add('text-center');
+    if (isNetflixApprove) {
+      divContainer.classList.add('regex-result-container--netflix-approve');
+    }
 
-    const pCode = document.createElement('p');
-    pCode.classList.add('regex-result-code');
+    if (!isNetflixApprove) {
+      const pCode = document.createElement('p');
+      pCode.classList.add('regex-result-code');
 
-    const strongCode = document.createElement('strong');
-    strongCode.id = 'regex-code';
-    strongCode.textContent = displayText;
+      const strongCode = document.createElement('strong');
+      strongCode.id = 'regex-code';
+      strongCode.textContent = displayText;
 
-    pCode.appendChild(strongCode);
-    divContainer.appendChild(pCode);
+      pCode.appendChild(strongCode);
+      divContainer.appendChild(pCode);
+    }
 
     const buttonsContainer = document.createElement('div');
     buttonsContainer.classList.add('mt-05');
+    if (isNetflixApprove) {
+      buttonsContainer.classList.add('regex-result-actions');
+    }
 
     const copyButton = document.createElement('button');
     copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn');
     copyButton.id = 'copyRegexBtn';
     copyButton.setAttribute('data-valor', codeStr);
     copyButton.textContent = 'Copiar';
-    buttonsContainer.appendChild(copyButton);
 
-    if (isLink) {
-      const openLinkButton = document.createElement('button');
-      openLinkButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-open-link-btn');
-      openLinkButton.id = 'openLinkBtn';
-      openLinkButton.setAttribute('data-link', codeStr);
-      openLinkButton.textContent = 'Abrir Enlace';
-      buttonsContainer.appendChild(openLinkButton);
+    if (isNetflixApprove) {
+      const approveButton = document.createElement('button');
+      approveButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-approve-btn');
+      approveButton.id = 'openLinkBtn';
+      approveButton.setAttribute('data-link', codeStr);
+      approveButton.textContent = 'Aprobar';
+      buttonsContainer.appendChild(approveButton);
+      buttonsContainer.appendChild(copyButton);
+    } else {
+      buttonsContainer.appendChild(copyButton);
+      if (isLink) {
+        const openLinkButton = document.createElement('button');
+        openLinkButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-open-link-btn');
+        openLinkButton.id = 'openLinkBtn';
+        openLinkButton.setAttribute('data-link', codeStr);
+        openLinkButton.textContent = 'Abrir Enlace';
+        buttonsContainer.appendChild(openLinkButton);
+      }
     }
 
     divContainer.appendChild(buttonsContainer);

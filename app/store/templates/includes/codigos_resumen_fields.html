@@ -9,8 +9,7 @@
     <div class="mdp-section-edit">
       <div class="mdp-title-row">
         <input type="hidden" name="codigos_service_id" value="{{ button.id }}">
-        <label class="sr-only" for="codigos_title_{{ button.id }}">{{ button.title }}</label>
-        <input type="text" class="form-control" id="codigos_title_{{ button.id }}" value="{{ button.title }}" readonly>
+        <span class="codigos-service-name" id="codigos_title_{{ button.id }}">{{ button.title }}</span>
         <label class="sr-only" for="codigos_color_{{ button.id }}">Color de {{ button.title }}</label>
         <input type="color" name="codigos_color" id="codigos_color_{{ button.id }}" value="{{ button.color }}">
       </div>

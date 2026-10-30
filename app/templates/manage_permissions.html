@@ -5,8 +5,8 @@
 
 {% block head %}
 <meta name="csrf_token" content="{{ csrf_token() }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20261018-perm-bg">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}?v=20261030-perm-menu">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/manage_permissions.css') }}?v=20261030-perm-cols">
 <link rel="stylesheet" href="{{ url_for('static', filename='fontawesome/css/all.min.css') }}">
 {% endblock %}
 
@@ -391,8 +391,8 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
+<script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}?v=20261030-perm-menu" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20261014-scroll-vivo" defer></script>
+<script src="{{ url_for('static', filename='js/manage_permissions.js') }}?v=20261030-perm-scroll" defer></script>
 {% endblock %}

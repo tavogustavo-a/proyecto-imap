@@ -154,6 +154,16 @@ def delete_imap_server(server_id, model_cls=IMAPServer):
     y elimina todos los servidores IMAP vinculados.
     """
     srv = model_cls.query.get_or_404(server_id)
+
+    # Las reglas del observador ya no usan un IMAP concreto. Si una regla vieja
+    # todavía apunta a este servidor, se conserva y solo se suelta el vínculo.
+    if getattr(srv, '__tablename__', '') == 'imap_servers':
+        from app.models.security_rules import SecurityRule
+        SecurityRule.query.filter_by(imap_server_id=srv.id).update(
+            {SecurityRule.imap_server_id: None},
+            synchronize_session=False,
+        )
+        db.session.flush()
     
     # Si es IMAPServer2, eliminar todos los servidores IMAP vinculados primero
     if hasattr(srv, 'linked_imap_servers'):
@@ -180,6 +190,11 @@ def delete_imap_server(server_id, model_cls=IMAPServer):
         for user in linked_users:
             srv.allowed_users.remove(user)
         db.session.flush()  # Aplicar cambios antes de eliminar
+
+    if getattr(srv, '__tablename__', '') == 'imap_servers2':
+        from app.models.imap2 import IMAP2TwoFAConfig
+        IMAP2TwoFAConfig.query.filter_by(imap_server_id=srv.id).delete(synchronize_session=False)
+        db.session.flush()
     
     # Si es IMAPServer2 y tiene fondo personalizado, eliminarlo del sistema de archivos
     if hasattr(srv, 'background_image') and srv.background_image:

@@ -163,3 +163,19 @@ html body .mobile-menu-store .codigos-sidebar-codigos-row .mobile-menu-btn {
   margin-top: 0 !important;
   margin-bottom: 0 !important;
 }
+
+html body .regex-result-approve-btn,
+html body .regex-result-approve-btn:hover,
+html body .regex-result-approve-btn:focus,
+html body .regex-result-approve-btn:active {
+  background: #e11d2e !important;
+  border-color: #e11d2e !important;
+  color: #fff !important;
+}
+
+html body .regex-result-approve-btn:hover,
+html body .regex-result-approve-btn:focus,
+html body .regex-result-approve-btn:active {
+  background: #b91022 !important;
+  border-color: #b91022 !important;
+}

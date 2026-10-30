@@ -17,6 +17,43 @@ def csrf_exempt_api(func):
     func._csrf_exempt = True
     return func
 
+
+def _drop_worksheet_permissions(worksheet_id, access_types=None):
+    """Quita permisos de una hoja y los usuarios asignados a esos permisos."""
+    from app.store.models import worksheet_permission_users
+
+    q = db.session.query(WorksheetPermission.id).filter(
+        WorksheetPermission.worksheet_id == worksheet_id
+    )
+    if access_types is not None:
+        q = q.filter(WorksheetPermission.access_type.in_(list(access_types)))
+    perm_ids = [row[0] for row in q.all()]
+    if not perm_ids:
+        return 0
+    db.session.execute(
+        worksheet_permission_users.delete().where(
+            worksheet_permission_users.c.permission_id.in_(perm_ids)
+        )
+    )
+    WorksheetPermission.query.filter(
+        WorksheetPermission.id.in_(perm_ids)
+    ).delete(synchronize_session=False)
+    return len(perm_ids)
+
+
+def close_worksheet_shares_without_users():
+    """Cierra el enlace de las hojas compartidas solo con usuarios si la lista quedó vacía."""
+    closed = 0
+    for perm in WorksheetPermission.query.filter_by(access_type='users').all():
+        try:
+            count = perm.users.count()
+        except Exception:
+            count = 0
+        if count == 0 and perm.public_token:
+            perm.public_token = None
+            closed += 1
+    return closed
+
 # ⭐ NUEVO: Función para formatear fechas en zona horaria de Colombia
 def format_colombia_time(utc_datetime):
     """Convierte fecha UTC a zona horaria de Colombia con formato 12h"""
@@ -234,8 +271,10 @@ def delete_worksheet_template(template_id):
     template = WorksheetTemplate.query.get(template_id)
     if not template:
         return jsonify({'error': 'No existe la plantilla'}), 404
-    # Eliminar datos asociados
-    WorksheetData.query.filter_by(template_id=template_id).delete()
+    _drop_worksheet_permissions(template_id)
+    WorksheetCellHistory.query.filter_by(template_id=template_id).delete(synchronize_session=False)
+    WorksheetConnectionLog.query.filter_by(worksheet_id=template_id).delete(synchronize_session=False)
+    WorksheetData.query.filter_by(template_id=template_id).delete(synchronize_session=False)
     db.session.delete(template)
     db.session.commit()
     return jsonify({'ok': True})
@@ -633,10 +672,7 @@ def save_worksheet_permissions():
         # CORREGIDO: Sistema NO mutuamente exclusivo - permitir coexistencia
         if access_type == 'private':
             # Solo eliminar permisos públicos (view/edit), mantener users
-            WorksheetPermission.query.filter(
-                WorksheetPermission.worksheet_id == worksheet_id,
-                WorksheetPermission.access_type.in_(['view', 'edit'])
-            ).delete(synchronize_session=False)
+            _drop_worksheet_permissions(worksheet_id, ['view', 'edit'])
             
             # Buscar o crear permiso privado
             permission = WorksheetPermission.query.filter_by(
@@ -653,10 +689,7 @@ def save_worksheet_permissions():
             # Eliminar private, el tipo opuesto y users para evitar registros huérfanos.
             # Al cambiar a "Compartir para todos", los usuarios específicos asignados se revocan.
             opposite_type = 'edit' if access_type == 'view' else 'view'
-            WorksheetPermission.query.filter(
-                WorksheetPermission.worksheet_id == worksheet_id,
-                WorksheetPermission.access_type.in_(['private', opposite_type, 'users'])
-            ).delete(synchronize_session=False)
+            _drop_worksheet_permissions(worksheet_id, ['private', opposite_type, 'users'])
             
             # Buscar o crear permiso público
             permission = WorksheetPermission.query.filter_by(
@@ -675,10 +708,7 @@ def save_worksheet_permissions():
         elif access_type == 'users':
             # Eliminar permisos de "Compartir para todos" (view/edit) para evitar registros huérfanos.
             # Al cambiar a usuarios específicos, los enlaces públicos anteriores dejan de ser válidos.
-            WorksheetPermission.query.filter(
-                WorksheetPermission.worksheet_id == worksheet_id,
-                WorksheetPermission.access_type.in_(['view', 'edit'])
-            ).delete(synchronize_session=False)
+            _drop_worksheet_permissions(worksheet_id, ['view', 'edit'])
             
             # Buscar o crear permiso de usuarios
             permission = WorksheetPermission.query.filter_by(
@@ -691,16 +721,9 @@ def save_worksheet_permissions():
                 db.session.add(permission)
             
             # Manejar usuarios específicos
-            if users:
-                user_objects = User.query.filter(User.id.in_(users)).all()
-                permission.users = []  # Limpiar usuarios existentes
-                permission.users.extend(user_objects)  # Agregar nuevos usuarios
-            else:
-                permission.users = []
-            
-            # ⭐ CORREGIDO: Generar token para usuarios específicos siempre nuevo
-            # Regenerar token para asegurar que funcione correctamente
-            permission.public_token = secrets.token_urlsafe(32)
+            chosen = User.query.filter(User.id.in_(users)).all() if users else []
+            permission.users = chosen
+            permission.public_token = secrets.token_urlsafe(32) if chosen else None
         
         db.session.commit()
         
@@ -742,10 +765,8 @@ def delete_worksheet_permissions(worksheet_id):
         if not session.get("logged_in") or session.get("username") != admin_username:
             return jsonify({'error': 'No autorizado'}), 401
         
-        permission = WorksheetPermission.query.filter_by(worksheet_id=worksheet_id).first()
-        if permission:
-            db.session.delete(permission)
-            db.session.commit()
+        _drop_worksheet_permissions(worksheet_id)
+        db.session.commit()
         
         return jsonify({'success': True})
         

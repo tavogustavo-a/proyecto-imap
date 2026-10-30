@@ -1432,9 +1432,23 @@ function closeWhatsAppUserPhoneModal() {
     modal.setAttribute('aria-hidden', 'true');
     whatsappUserPhoneModalTrigger = null;
     whatsappUserPhoneModalContext = null;
+    setWhatsAppUserPhoneModalError('');
     if (trigger) {
         trigger.focus({ preventScroll: true });
     }
+}
+
+function setWhatsAppUserPhoneModalError(message) {
+    var el = document.getElementById('whatsapp-user-phone-modal-error');
+    if (!el) return;
+    var text = String(message || '').trim();
+    if (!text) {
+        el.textContent = '';
+        el.hidden = true;
+        return;
+    }
+    el.textContent = text;
+    el.hidden = false;
 }
 
 function setTelegramUserLinkState(state, message) {
@@ -1537,6 +1551,7 @@ function openWhatsAppUserPhoneModal(userId, username, currentPhone, telegramId, 
     input.value = whatsappUserPhoneModalContext.prevPhone;
     var telegramInput = document.getElementById('whatsapp-user-telegram-modal-input');
     if (telegramInput) telegramInput.value = whatsappUserPhoneModalContext.prevTelegram;
+    setWhatsAppUserPhoneModalError('');
     modal.classList.remove('d-none');
     modal.removeAttribute('hidden');
     modal.setAttribute('aria-hidden', 'false');
@@ -1569,6 +1584,8 @@ function saveWhatsAppUserPhoneFromModal() {
         saveBtn.disabled = true;
     }
     input.disabled = true;
+    if (telegramInput) telegramInput.disabled = true;
+    setWhatsAppUserPhoneModalError('');
 
     fetch('/tienda/admin/whatsapp/user-notify-prefs/' + encodeURIComponent(ctx.userId) + '/phone', {
         method: 'PUT',
@@ -1584,9 +1601,8 @@ function saveWhatsAppUserPhoneFromModal() {
         })
         .then(function (data) {
             if (!data || !data.success) {
-                showWhatsAppStatus(
-                    (data && data.error) || 'No se pudo guardar el teléfono.',
-                    'error'
+                setWhatsAppUserPhoneModalError(
+                    (data && data.error) || 'No se pudo guardar el teléfono.'
                 );
                 return;
             }
@@ -1601,10 +1617,11 @@ function saveWhatsAppUserPhoneFromModal() {
             closeWhatsAppUserPhoneModal();
         })
         .catch(function () {
-            showWhatsAppStatus('Error de red al guardar teléfono.', 'error');
+            setWhatsAppUserPhoneModalError('Error de red al guardar teléfono.');
         })
         .finally(function () {
             input.disabled = false;
+            if (telegramInput) telegramInput.disabled = false;
             if (saveBtn) {
                 delete saveBtn.dataset.saving;
                 saveBtn.disabled = false;
@@ -1654,11 +1671,17 @@ function setupWhatsAppUserPhoneModal() {
             closeWhatsAppUserPhoneModal();
         }
     }
-    if (input) input.addEventListener('keydown', onPhoneModalKeydown);
+    if (input) {
+        input.addEventListener('keydown', onPhoneModalKeydown);
+        input.addEventListener('input', function () {
+            setWhatsAppUserPhoneModalError('');
+        });
+    }
     if (telegramInput) {
         telegramInput.addEventListener('keydown', onPhoneModalKeydown);
         telegramInput.addEventListener('input', function () {
             setTelegramUserLinkState('idle', '');
+            setWhatsAppUserPhoneModalError('');
         });
     }
     var telegramLinkBtn = document.getElementById('telegram-user-link-btn');

@@ -727,10 +727,10 @@ def delete_user_ajax():
 
         # 1) Buscamos y eliminamos sub-usuarios primero (se eliminarán en cascada sus RememberDevice, AllowedEmail, etc.)
         # Nota: RememberDevice se elimina automáticamente por CASCADE (ondelete='CASCADE')
-        from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+        from app.services.user_deletion_cleanup import prepare_users_for_deletion
 
         subusers = User.query.filter_by(parent_id=user.id).all()
-        cleanup_disk_assets_for_user_ids(
+        prepare_users_for_deletion(
             current_app._get_current_object(),
             [user.id] + [s.id for s in subusers],
         )
@@ -901,9 +901,9 @@ def update_user_ajax():
             user_to_update.default_filters_for_subusers = []
             subusers = User.query.filter_by(parent_id=user_to_update.id).all()
             if subusers:
-                from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+                from app.services.user_deletion_cleanup import prepare_users_for_deletion
 
-                cleanup_disk_assets_for_user_ids(
+                prepare_users_for_deletion(
                     current_app._get_current_object(),
                     [su.id for su in subusers],
                 )

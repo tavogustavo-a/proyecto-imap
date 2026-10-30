@@ -105,27 +105,17 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
   
-  // Renderizar tabla de permisos
-  function renderTable() {
-    if (!permissionsTableBody) return;
-    
-    // Limpiar tabla
-    while(permissionsTableBody.firstChild) {
-      permissionsTableBody.removeChild(permissionsTableBody.firstChild);
-    }
-    
-    if (!filteredUsers || filteredUsers.length === 0) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 11;
-      cell.className = 'text-center text-secondary';
-      cell.textContent = 'No se encontraron usuarios.';
-      row.appendChild(cell);
-      permissionsTableBody.appendChild(row);
-      return;
-    }
-    
-    filteredUsers.forEach(user => {
+  function emptyPermRow(colspan, text, className) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = colspan;
+    cell.className = className;
+    cell.textContent = text;
+    row.appendChild(cell);
+    return row;
+  }
+
+  function buildPermissionRow(user) {
       const row = document.createElement('tr');
       row.dataset.userId = user.id;
       
@@ -148,7 +138,10 @@ document.addEventListener("DOMContentLoaded", function() {
         checkbox.name = `perm_${user.id}_${perm.key}`;
         
         // Establecer estado del checkbox según el permiso del usuario
-        const permValue = user[perm.key];
+        const pendingForUser = pendingChanges.get(user.id);
+        const permValue = pendingForUser && Object.prototype.hasOwnProperty.call(pendingForUser, perm.key)
+          ? pendingForUser[perm.key]
+          : user[perm.key];
         checkbox.checked = permValue === true || permValue === 1 || permValue === 'true';
         
         // Agregar listener para cambios
@@ -159,9 +152,24 @@ document.addEventListener("DOMContentLoaded", function() {
         cell.appendChild(checkbox);
         row.appendChild(cell);
       });
-      
-      permissionsTableBody.appendChild(row);
+
+      return row;
+  }
+
+  function renderTable() {
+    if (!permissionsTableBody) return;
+    const list = filteredUsers || [];
+    if (!list.length) {
+      permissionsTableBody.replaceChildren(
+        emptyPermRow(permissions.length + 1, 'No se encontraron usuarios.', 'text-center text-secondary')
+      );
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    list.forEach(function (user) {
+      fragment.appendChild(buildPermissionRow(user));
     });
+    permissionsTableBody.replaceChildren(fragment);
   }
   
   // Marcar cambios pendientes
@@ -450,48 +458,37 @@ document.addEventListener("DOMContentLoaded", function() {
   // Renderizar tabla de recursos (usuarios en filas, recursos en columnas)
   function renderResourcesTable(users) {
     if (!resourcesPermissionsTableBody || !users) return;
-    
-    // Limpiar tabla
-    while(resourcesPermissionsTableBody.firstChild) {
-      resourcesPermissionsTableBody.removeChild(resourcesPermissionsTableBody.firstChild);
-    }
-    
-    if (!users || users.length === 0) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      const headerRow = document.querySelector('#resourcesPermissionsTable thead tr');
-      const headerCount = headerRow ? headerRow.querySelectorAll('th').length : 1;
-      cell.colSpan = headerCount;
-      cell.className = 'text-center text-secondary';
-      cell.textContent = 'No se encontraron usuarios.';
-      row.appendChild(cell);
-      resourcesPermissionsTableBody.appendChild(row);
-      return;
-    }
-    
-    if (!allResources || allResources.length === 0) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      const headerRow = document.querySelector('#resourcesPermissionsTable thead tr');
-      const headerCount = headerRow ? headerRow.querySelectorAll('th').length : 1;
-      cell.colSpan = headerCount;
-      cell.className = 'text-center text-secondary';
-      cell.textContent = 'No se encontraron recursos.';
-      row.appendChild(cell);
-      resourcesPermissionsTableBody.appendChild(row);
-      return;
-    }
-    
-    const accessByResource = new Map();
+
+    resourceAccessByKey = new Map();
     allResources.forEach(resource => {
-      accessByResource.set(
+      resourceAccessByKey.set(
         resource.id + '-' + resource.type,
         new Set(resource.user_ids || [])
       );
     });
 
+    const headerRow = document.querySelector('#resourcesPermissionsTable thead tr');
+    const headerCount = headerRow ? headerRow.querySelectorAll('th').length : 1;
+    const list = (!allResources || !allResources.length) ? [] : (users || []);
+    if (!list.length) {
+      const emptyText = (!allResources || !allResources.length)
+        ? 'No se encontraron recursos.'
+        : 'No se encontraron usuarios.';
+      resourcesPermissionsTableBody.replaceChildren(
+        emptyPermRow(headerCount, emptyText, 'text-center text-secondary')
+      );
+      return;
+    }
     const fragment = document.createDocumentFragment();
-    users.forEach(user => {
+    list.forEach(function (user) {
+      fragment.appendChild(buildResourceRow(user));
+    });
+    resourcesPermissionsTableBody.replaceChildren(fragment);
+  }
+
+  let resourceAccessByKey = new Map();
+
+  function buildResourceRow(user) {
       const row = document.createElement('tr');
       row.dataset.userId = user.id;
 
@@ -518,7 +515,7 @@ document.addEventListener("DOMContentLoaded", function() {
           const pendingData = resourcesPendingChanges.get(key);
           hasAccess = pendingData.user_ids && pendingData.user_ids.indexOf(user.id) !== -1;
         } else {
-          const allowed = accessByResource.get(key);
+          const allowed = resourceAccessByKey.get(key);
           hasAccess = !!(allowed && allowed.has(user.id));
         }
         checkbox.checked = hasAccess;
@@ -530,9 +527,7 @@ document.addEventListener("DOMContentLoaded", function() {
         row.appendChild(cell);
       });
 
-      fragment.appendChild(row);
-    });
-    resourcesPermissionsTableBody.appendChild(fragment);
+      return row;
   }
   
   // Manejar cambios de permisos de recursos
@@ -1667,24 +1662,22 @@ document.addEventListener("DOMContentLoaded", function() {
   // Renderizar tabla de precios por usuario
   function renderUserPricesTable(users) {
     if (!userPricesTableBody) return;
-    
-    if (users.length === 0) {
-      while (userPricesTableBody.firstChild) {
-        userPricesTableBody.removeChild(userPricesTableBody.firstChild);
-      }
-      const tr = document.createElement('tr');
-      const td = document.createElement('td');
-      td.colSpan = 3;
-      td.className = 'text-center text-secondary';
-      td.textContent = 'No hay usuarios';
-      tr.appendChild(td);
-      userPricesTableBody.appendChild(tr);
+    const list = users || [];
+    if (!list.length) {
+      userPricesTableBody.replaceChildren(
+        emptyPermRow(3, 'No hay usuarios', 'text-center text-secondary')
+      );
       return;
     }
-    
     const fragment = document.createDocumentFragment();
-    
-    users.forEach(user => {
+    list.forEach(function (user) {
+      fragment.appendChild(buildUserPriceRow(user));
+    });
+    userPricesTableBody.replaceChildren(fragment);
+    bindUserPriceControls();
+  }
+
+  function buildUserPriceRow(user) {
       const userId = user.id;
       // Cargar datos de precios desde el usuario si existen, sino usar valores por defecto
       const userData = userPricesData[userId] || {
@@ -2057,17 +2050,12 @@ document.addEventListener("DOMContentLoaded", function() {
       }
       // Guardar datos iniciales
       userPricesData[userId] = userData;
-      
-      fragment.appendChild(tr);
-    });
-    
-    while (userPricesTableBody.firstChild) {
-      userPricesTableBody.removeChild(userPricesTableBody.firstChild);
-    }
-    userPricesTableBody.appendChild(fragment);
-    
-    // Agregar event listeners para checkboxes mutuamente excluyentes
-      document.querySelectorAll('.user-price-type-checkbox').forEach(checkbox => {
+
+      return tr;
+  }
+
+  function bindUserPriceControls() {
+    document.querySelectorAll('.user-price-type-checkbox').forEach(checkbox => {
       checkbox.addEventListener('change', function() {
         const userId = this.getAttribute('data-user-id');
         const tipo = this.getAttribute('data-tipo');
@@ -2486,6 +2474,11 @@ document.addEventListener("DOMContentLoaded", function() {
       balanceReq
       .then(data => {
         if (data.success) {
+          const userIndex = allUsersForPrices.findIndex(u => u.id === user.id);
+          if (userIndex !== -1) {
+            allUsersForPrices[userIndex].saldo_usd = data.new_saldo_usd;
+            allUsersForPrices[userIndex].saldo_cop = data.new_saldo_cop;
+          }
           const userRow = userPricesTableBody.querySelector(`tr[data-user-id="${user.id}"]`);
           if (userRow) {
             const saldoCell = userRow.children[2];
@@ -2503,12 +2496,6 @@ document.addEventListener("DOMContentLoaded", function() {
             }
             if (saldoWrap && tipoPrecio) {
               syncSaldoInactivoLine(saldoWrap, tipoPrecio, data.new_saldo_usd, data.new_saldo_cop);
-            }
-            // Actualizar también en allUsersForPrices
-            const userIndex = allUsersForPrices.findIndex(u => u.id === user.id);
-            if (userIndex !== -1) {
-              allUsersForPrices[userIndex].saldo_usd = data.new_saldo_usd;
-              allUsersForPrices[userIndex].saldo_cop = data.new_saldo_cop;
             }
           }
           modalBalanceForm.reset();

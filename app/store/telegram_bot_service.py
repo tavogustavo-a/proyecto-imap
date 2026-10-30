@@ -1401,7 +1401,7 @@ def _visible_menu_entries(include_ad: bool, user=None) -> list:
             continue
         if item['key'] == 'ad' and not include_ad:
             continue
-        if user is not None and not _menu_allowed_for_user(user, item['key']):
+        if not _menu_allowed_for_user(user, item['key']):
             continue
         visible.append(item)
     return visible
@@ -1547,7 +1547,7 @@ def _html_text(value: str) -> str:
 
 
 def _centered_menu_html(include_ad: bool, chat_id=None, code_services: list | None = None) -> str:
-    del code_services, chat_id
+    del code_services
     chunks: list[str] = []
     batch: list[tuple[str, str]] = []
     codes_title_added = False
@@ -1717,13 +1717,92 @@ def _linked_user_for_chat(chat_id):
     return None
 
 
+def _legacy_html_preset_for_menu_key(key: str) -> str | None:
+    from app.store.html_presets import COMO_TRABAJO_KEY, FOTO_PANTALLAS_KEY, MEDIOS_DE_PAGO_KEY
+
+    return {
+        'pantallas': FOTO_PANTALLAS_KEY,
+        'pagos': MEDIOS_DE_PAGO_KEY,
+        'trabajo': COMO_TRABAJO_KEY,
+    }.get(str(key or ''))
+
+
+def _user_can_open_html(user, row) -> bool:
+    """Mismo permiso que la página de herramientas: asignado, o admin."""
+    if user is None or row is None or not getattr(row, 'enabled', True):
+        return False
+    try:
+        return bool(row.user_has_access(user))
+    except Exception:
+        logger.exception('telegram html access')
+        return False
+
+
+def _user_has_html_id(user, html_id: int) -> bool:
+    from app.store.models import HtmlInfo
+
+    try:
+        row = HtmlInfo.query.get(int(html_id))
+    except (TypeError, ValueError):
+        return False
+    return _user_can_open_html(user, row)
+
+
+def _user_has_html_preset(user, preset_key: str) -> bool:
+    from app.store.models import HtmlInfo
+
+    if user is None or not preset_key:
+        return False
+    rows = (
+        HtmlInfo.query
+        .filter(HtmlInfo.enabled.is_(True), HtmlInfo.preset_key == preset_key)
+        .all()
+    )
+    return any(_user_can_open_html(user, row) for row in rows)
+
+
+def _user_can_see_store_ads(user) -> bool:
+    """Igual que los anuncios de la tienda: el sub-usuario necesita el permiso."""
+    if user is None or not bool(getattr(user, 'enabled', True)):
+        return False
+    try:
+        from flask import current_app
+        admin_username = (current_app.config.get('ADMIN_USER') or 'admin').strip()
+    except Exception:
+        admin_username = 'admin'
+    if (getattr(user, 'username', None) or '').strip() == admin_username:
+        return False
+    if getattr(user, 'parent_id', None) and not bool(getattr(user, 'can_view_announcements', False)):
+        return False
+    return True
+
+
+def _web_page_allows_menu_key(user, key: str) -> bool:
+    """Publicidad, guía rápida, pantallas y el resto de HTML: solo si la web se lo muestra."""
+    action = str(key or '')
+    if action == 'ad':
+        return _user_can_see_store_ads(user)
+    preset = _legacy_html_preset_for_menu_key(action)
+    if preset:
+        return _user_has_html_preset(user, preset)
+    if action.startswith('html:'):
+        try:
+            html_id = int(action.split(':', 1)[1])
+        except (TypeError, ValueError):
+            return False
+        return _user_has_html_id(user, html_id)
+    return True
+
+
 def _menu_allowed_for_user(user, key: str) -> bool:
-    """Usuario principal: menú global. Sub-usuario: solo botones que el padre activó."""
+    """Sin permiso en la web, el botón no existe. El sub-usuario además necesita el interruptor del padre."""
+    action = str(key or '')
+    if not _web_page_allows_menu_key(user, action):
+        return False
     if user is None or not getattr(user, 'parent_id', None):
         return True
     if not bool(getattr(user, 'can_use_telegram_bot', False)):
         return False
-    action = str(key or '')
     if action == 'id':
         return True
     if not _subuser_menu_catalog_eligible(action) and action not in ('start', 'codes_section'):
@@ -2133,12 +2212,12 @@ def render_codigos_png(data: dict) -> bytes:
     for button in buttons:
         color = _hex_rgb(button.get('color'))
         heading = ' '.join(str(button.get('title') or '').split()).upper()
-        head_lines, head_h = block_height(heading, section_font, inner - 28) if heading else ([], 0)
+        head_lines, head_h = block_height(heading, section_font, inner - 24) if heading else ([], 0)
         bar_h = head_h + 22 if heading else 0
         content_h = 16
         items = []
         for line in button.get('subtitles') or []:
-            wrapped, height = block_height(line, item_font, inner - 64)
+            wrapped, height = block_height(line, item_font, inner - 28)
             if wrapped:
                 items.append((wrapped, height))
                 content_h += height + 12
@@ -2194,18 +2273,15 @@ def render_codigos_png(data: dict) -> bytes:
             image.paste(bar, (x0 + 3, y + 3))
             text_y = y + 12
             for line in section['head_lines']:
-                line_w = draw.textlength(line, font=section_font)
-                draw.text(((width - line_w) / 2, text_y), line, font=section_font, fill=(255, 255, 255))
+                draw.text((x0 + 12, text_y), line, font=section_font, fill=(255, 255, 255))
                 text_y += _font_line_h(section_font) + line_gap
             cursor = y + section['bar_h'] + 10
         else:
             cursor = y + 12
         for wrapped, _height in section['items']:
-            dot_y = cursor + 8
-            draw.ellipse((x0 + 20, dot_y, x0 + 36, dot_y + 16), fill=color)
             line_y = cursor
             for line in wrapped:
-                _draw_mixed_text(draw, x0 + 48, line_y, line, item_font, (36, 48, 64), emoji_font)
+                _draw_mixed_text(draw, x0 + 14, line_y, line, item_font, (36, 48, 64), emoji_font)
                 line_y += _font_line_h(item_font) + line_gap
             cursor = line_y + 4
         y += box_h + 16

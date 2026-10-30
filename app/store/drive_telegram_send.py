@@ -96,12 +96,9 @@ def _targets(transfer, probe_telegram_chat, validate_chat_id, telegram_digest_re
         return targets, problems
     if not group_raw:
         return targets, problems
+    # Sin bot, token o interruptor no hay a quién mandar el archivo. Se ignora
+    # el envío y no se anota como fallo: Drive ya movió los archivos.
     if not telegram_digest_ready():
-        problems.append(_problem(
-            '',
-            'grupo',
-            'El bot no está conectado o Activar Telegram está apagado. Los archivos quedaron en Drive y no se enviaron al grupo.',
-        ))
         return targets, problems
     chat_id, err = validate_chat_id(group_raw)
     if err:

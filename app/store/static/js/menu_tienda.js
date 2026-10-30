@@ -25,55 +25,36 @@ document.addEventListener('DOMContentLoaded', function() {
     document.body.classList.toggle('store-side-menu-open', !!anyOpen);
   }
 
-  // Función para cerrar todos los menús
-  function closeAllMenus() {
-    if(mobileMenu) mobileMenu.classList.add('hidden');
-    if(mobileMenu2) mobileMenu2.classList.add('hidden');
-    if(mobileMenu3) mobileMenu3.classList.add('hidden');
-    if(mobileMenu4) mobileMenu4.classList.add('hidden');
-    if(menuOverlay) menuOverlay.classList.remove('active');
+  function setOpenMenu(menu) {
+    var menus = [mobileMenu, mobileMenu2, mobileMenu3, mobileMenu4];
+    for (var i = 0; i < menus.length; i++) {
+      var item = menus[i];
+      if (!item) continue;
+      if (menu && item === menu) item.classList.remove('hidden');
+      else item.classList.add('hidden');
+    }
+    if (menuOverlay) menuOverlay.classList.toggle('active', !!menu);
     syncSideMenuOpenState();
   }
 
-  // Menú original
-  if(menuBtn && mobileMenu) {
-    menuBtn.addEventListener('click', function() {
-      closeAllMenus(); // Cerrar otros menús primero
-      mobileMenu.classList.toggle('hidden');
-      if(menuOverlay) menuOverlay.classList.toggle('active');
-      syncSideMenuOpenState();
+  function closeAllMenus() {
+    setOpenMenu(null);
+  }
+
+  function bindMenuToggle(btn, menu) {
+    if (!btn || !menu) return;
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (menu.classList.contains('hidden')) setOpenMenu(menu);
+      else setOpenMenu(null);
     });
   }
 
-  // Menú 2
-  if(menu2Btn && mobileMenu2) {
-    menu2Btn.addEventListener('click', function() {
-      closeAllMenus(); // Cerrar otros menús primero
-      mobileMenu2.classList.toggle('hidden');
-      if(menuOverlay) menuOverlay.classList.toggle('active');
-      syncSideMenuOpenState();
-    });
-  }
-
-  // Menú 3
-  if(menu3Btn && mobileMenu3) {
-    menu3Btn.addEventListener('click', function() {
-      closeAllMenus(); // Cerrar otros menús primero
-      mobileMenu3.classList.toggle('hidden');
-      if(menuOverlay) menuOverlay.classList.toggle('active');
-      syncSideMenuOpenState();
-    });
-  }
-
-  // Menú 4
-  if(menu4Btn && mobileMenu4) {
-    menu4Btn.addEventListener('click', function() {
-      closeAllMenus(); // Cerrar otros menús primero
-      mobileMenu4.classList.toggle('hidden');
-      if(menuOverlay) menuOverlay.classList.toggle('active');
-      syncSideMenuOpenState();
-    });
-  }
+  bindMenuToggle(menuBtn, mobileMenu);
+  bindMenuToggle(menu2Btn, mobileMenu2);
+  bindMenuToggle(menu3Btn, mobileMenu3);
+  bindMenuToggle(menu4Btn, mobileMenu4);
 
   // Overlay
   if(menuOverlay) {
@@ -84,7 +65,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Cerrar menús al hacer clic fuera
   document.addEventListener('mousedown', function(e) {
-    const isMenuBtn = e.target === menuBtn || e.target === menu2Btn || e.target === menu3Btn || e.target === menu4Btn;
+    const isMenuBtn = (menuBtn && menuBtn.contains(e.target)) ||
+      (menu2Btn && menu2Btn.contains(e.target)) ||
+      (menu3Btn && menu3Btn.contains(e.target)) ||
+      (menu4Btn && menu4Btn.contains(e.target));
     const isInAnyMenu = (mobileMenu && mobileMenu.contains(e.target)) || 
                        (mobileMenu2 && mobileMenu2.contains(e.target)) ||
                        (mobileMenu3 && mobileMenu3.contains(e.target)) ||

@@ -112,7 +112,7 @@
                         >
                       {% endfor %}
                     {% endif %}
-                    {{ srv.name }}
+                    <span class="service-btn-label">{{ srv.name }}</span>
                     {% if srv.aliases and srv.aliases|length > 0 %}
                       <span class="info-icon">ℹ️</span>
                     {% endif %}
@@ -152,7 +152,7 @@
                         >
                       {% endfor %}
                     {% endif %}
-                    {{ srv.name }}
+                    <span class="service-btn-label">{{ srv.name }}</span>
                     {% if srv.aliases and srv.aliases|length > 0 %}
                       <span class="info-icon">ℹ️</span>
                     {% endif %}
@@ -194,7 +194,7 @@
                       {% endfor %}
                     ]'
                   >
-                    {{ srv.name }}
+                    <span class="service-btn-label">{{ srv.name }}</span>
                   </button>
                 </div>
               {% elif srv.visibility_mode == "on-no-usuarios" and not session.get("logged_in") %}
@@ -229,7 +229,7 @@
                         >
                       {% endfor %}
                     {% endif %}
-                    {{ srv.name }}
+                    <span class="service-btn-label">{{ srv.name }}</span>
                     {% if srv.aliases and srv.aliases|length > 0 %}
                       <span class="info-icon">ℹ️</span>
                     {% endif %}
@@ -267,7 +267,7 @@
                         >
                       {% endfor %}
                     {% endif %}
-                    {{ srv.name }}
+                    <span class="service-btn-label">{{ srv.name }}</span>
                     {% if srv.aliases and srv.aliases|length > 0 %}
                       <span class="info-icon">ℹ️</span>
                     {% endif %}
@@ -306,7 +306,7 @@
                         >
                       {% endfor %}
                     {% endif %}
-                    {{ srv.name }}
+                    <span class="service-btn-label">{{ srv.name }}</span>
                     {% if srv.aliases and srv.aliases|length > 0 %}
                       <span class="info-icon">ℹ️</span>
                     {% endif %}

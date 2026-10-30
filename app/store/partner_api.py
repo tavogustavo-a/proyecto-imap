@@ -83,6 +83,43 @@ def get_partner_settings():
     return {'enabled': enabled, 'ip_whitelist': _coerce_ip_bindings(raw_wl)}
 
 
+def drop_partner_ips_for_user_ids(user_ids) -> int:
+    """Quita de la lista blanca las IPs de usuarios que se van a borrar. No hace commit."""
+    import json
+
+    ids = set()
+    for raw in user_ids or []:
+        try:
+            ids.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return 0
+    settings = get_partner_settings()
+    kept = []
+    removed = 0
+    for entry in settings.get('ip_whitelist') or []:
+        try:
+            uid = int(entry.get('user_id') or 0)
+        except (TypeError, ValueError):
+            uid = 0
+        if uid in ids:
+            removed += 1
+            continue
+        kept.append(entry)
+    if not removed:
+        return 0
+    row = StoreSetting.query.filter_by(key=PARTNER_SETTING_KEY).first()
+    if row is None:
+        return 0
+    row.value = json.dumps(
+        {'enabled': bool(settings.get('enabled', True)), 'ip_whitelist': kept},
+        ensure_ascii=False,
+    )
+    db.session.add(row)
+    return removed
+
+
 def save_partner_settings(enabled, ip_whitelist):
     import json
 

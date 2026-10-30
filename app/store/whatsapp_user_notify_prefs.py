@@ -69,20 +69,17 @@ def _ensure_user_telegram_chat_id_column() -> None:
             )
             length = getattr(col.get('type'), 'length', None) if col else None
             if length is not None and int(length) < 255:
-                try:
-                    dialect = getattr(db.engine.dialect, 'name', '') or ''
-                    if dialect == 'postgresql':
+                dialect = getattr(db.engine.dialect, 'name', '') or ''
+                # SQLite no impone el largo de VARCHAR y no tiene ALTER COLUMN.
+                if dialect == 'postgresql':
+                    try:
                         db.session.execute(text(
                             'ALTER TABLE users ALTER COLUMN telegram_chat_id TYPE VARCHAR(255)'
                         ))
-                    else:
-                        db.session.execute(text(
-                            'ALTER TABLE users ALTER COLUMN telegram_chat_id VARCHAR(255)'
-                        ))
-                    db.session.commit()
-                except Exception as widen_exc:
-                    db.session.rollback()
-                    logger.warning('widen telegram_chat_id: %s', widen_exc)
+                        db.session.commit()
+                    except Exception as widen_exc:
+                        db.session.rollback()
+                        logger.warning('widen telegram_chat_id: %s', widen_exc)
         if 'telegram_notify_enabled' not in cols:
             dialect = getattr(db.engine.dialect, 'name', '') or ''
             if dialect == 'postgresql':

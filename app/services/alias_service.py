@@ -42,9 +42,12 @@ def update_service_alias_name_only(alias_id, new_name):
 
 def delete_service_alias(alias_id):
     """
-    Elimina un alias por su ID.
+    Elimina un alias y sus iconos.
     """
+    from app.models.alias_icon import AliasIcon
+
     alias_obj = ServiceAlias.query.get_or_404(alias_id)
+    AliasIcon.query.filter_by(alias_id=alias_obj.id).delete(synchronize_session=False)
     db.session.delete(alias_obj)
     db.session.commit()
     return True

@@ -473,6 +473,36 @@ def customer_renewal_recent_rejection_warning(product_id, email, user_id=None):
     return CUSTOMER_RENEWAL_RECENT_REJECT_WARNING
 
 
+def release_customer_renewal_orders_for_user_ids(user_ids) -> int:
+    """Borra los pedidos de renovación de esos usuarios y la línea pendiente del bloc admin.
+
+    El pedido guarda la contraseña que envió el cliente. No hace commit.
+    """
+    ids = []
+    for raw in user_ids or []:
+        try:
+            i = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if i not in ids:
+            ids.append(i)
+    if not ids:
+        return 0
+    ensure_customer_account_renewal_schema()
+    from app.store.models import CustomerAccountRenewalOrder
+
+    rows = CustomerAccountRenewalOrder.query.filter(
+        CustomerAccountRenewalOrder.user_id.in_(ids)
+    ).all()
+    for row in rows:
+        if (row.status or '') == 'pending':
+            remove_customer_renewal_email_from_product_notes(row.product_id, row.customer_email)
+    removed = CustomerAccountRenewalOrder.query.filter(
+        CustomerAccountRenewalOrder.user_id.in_(ids)
+    ).delete(synchronize_session=False)
+    return int(removed or 0)
+
+
 def remove_customer_renewal_email_from_product_notes(product_id, email) -> bool:
     """Quita el correo del bloc admin «Cuentas para renovar» (p. ej. tras rechazo)."""
     from app.store.user_license_line_parse import LICENSE_LINE_FIELD_SEP

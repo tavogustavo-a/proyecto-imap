@@ -2599,3 +2599,30 @@ def build_reservation_historial_items(user_id=None, all_users=False, utc_to_colo
             }
         )
     return out
+
+
+def release_product_reservations_for_user_ids(user_ids) -> int:
+    """Quita reservas de tienda y cuentas apartadas de esos usuarios. No hace commit."""
+    ids = []
+    for raw in user_ids or []:
+        try:
+            i = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if i not in ids:
+            ids.append(i)
+    if not ids:
+        return 0
+    ensure_product_reservation_schema()
+    from app.store.models import LicenseAccount, ProductReservation
+
+    held = LicenseAccount.query.filter(
+        LicenseAccount.renewal_reserved_user_id.in_(ids)
+    ).all()
+    for acc in held:
+        acc.renewal_reserved_user_id = None
+        acc.renewal_reserved_at = None
+    removed = ProductReservation.query.filter(
+        ProductReservation.user_id.in_(ids)
+    ).delete(synchronize_session=False)
+    return int(removed or 0)

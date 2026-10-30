@@ -214,6 +214,35 @@ def disable_2fa():
     return redirect(url_for("admin_bp.dashboard"))
 
 
+def _otp_digits(raw: str) -> str:
+    """Solo dígitos. En el celular el código a veces llega con espacios."""
+    return "".join(ch for ch in (raw or "") if ch.isdigit())
+
+
+def _open_change_creds_form():
+    """Respuesta 200 con la sesión ya guardada y luego abre el formulario.
+
+    Un redirect 302 guarda la cookie en la misma respuesta. Varios navegadores
+    del celular no aplican esa cookie y el formulario, al no ver la verificación,
+    devuelve al panel.
+    """
+    session["can_change_admin"] = True
+    session["2fa_verified_time"] = datetime.utcnow().isoformat()
+    session.modified = True
+    next_url = url_for("admin_bp.change_creds_form")
+    html = (
+        "<!DOCTYPE html><html lang=\"es\"><head>"
+        "<meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>Código correcto</title>"
+        f"<meta http-equiv=\"refresh\" content=\"0;url={next_url}\">"
+        "</head><body><p>Código correcto. Abriendo el formulario…</p>"
+        f"<script>window.location.replace({next_url!r});</script>"
+        "</body></html>"
+    )
+    return html
+
+
 @admin_bp.route("/start_change_admin", methods=["GET", "POST"])
 def start_change_admin():
     admin_user = User.query.filter_by(username=current_app.config["ADMIN_USER"]).first()
@@ -236,34 +265,31 @@ def start_change_admin():
 
         return render_template("verify_2fa_for_creds.html")
 
-    code = request.form.get("code", "").strip()
+    code = _otp_digits(request.form.get("code", ""))
     if admin_user.twofa_method == "TOTP":
         import pyotp
         totp = pyotp.TOTP(admin_user.twofa_secret)
-        if totp.verify(code):
-            session["can_change_admin"] = True
-            session["2fa_verified_time"] = datetime.utcnow().isoformat()
+        if code and totp.verify(code, valid_window=1):
             flash("Código TOTP correcto. Ahora cambia credenciales.", "success")
-            return redirect(url_for("admin_bp.change_creds_form"))
-        else:
-            flash("Código TOTP inválido.", "danger")
+            return _open_change_creds_form()
+        flash("Código TOTP inválido.", "danger")
+        return render_template("verify_2fa_for_creds.html")
 
-    elif admin_user.twofa_method == "EMAIL":
+    if admin_user.twofa_method == "EMAIL":
         if admin_user.pending_2fa_code_expires and admin_user.pending_2fa_code_expires < datetime.utcnow():
-            flash("El código ha expirado. Solicita otro OTP.", "danger")
+            flash("El código ha expirado. Pulsa Reenviar para pedir otro.", "danger")
             admin_user.pending_2fa_code = None
             admin_user.pending_2fa_code_expires = None
             db.session.commit()
-            return redirect(url_for("admin_bp.dashboard"))
+            return render_template("verify_2fa_for_creds.html")
 
-        if code == admin_user.pending_2fa_code:
-            session["can_change_admin"] = True
-            session["2fa_verified_time"] = datetime.utcnow().isoformat()
+        if code and code == _otp_digits(admin_user.pending_2fa_code or ""):
             flash("OTP de correo correcto. Ahora cambia credenciales.", "success")
-            return redirect(url_for("admin_bp.change_creds_form"))
-        else:
-            flash("Código OTP inválido.", "danger")
+            return _open_change_creds_form()
+        flash("Código OTP inválido.", "danger")
+        return render_template("verify_2fa_for_creds.html")
 
+    flash("No se pudo verificar el código.", "danger")
     return redirect(url_for("admin_bp.dashboard"))
 
 

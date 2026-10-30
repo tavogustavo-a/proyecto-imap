@@ -49,34 +49,37 @@ def update_tag_filters(tag_id, filter_from_email="", filter_to_email="", filter_
     return tag
 
 def delete_tag(tag_id):
-    """Eliminar una etiqueta, sus filtros huérfanos y todos los emails asociados"""
+    """Quita la etiqueta. El correo se queda: si no tiene otra etiqueta, vuelve a Recibidos.
+
+    La etiqueta spam sí borra esos correos, porque no son de la bandeja.
+    También se quitan los filtros y las limpiezas que apuntaban a esta etiqueta.
+    """
     from app.models.email_buzon import EmailFilter
+    from app.models.email_cleanup import EmailCleanup
     from app.services.email_buzon_service import permanently_delete_email
-    
+
     tag = EmailTag.query.get_or_404(tag_id)
-    
+    is_spam = (tag.name or '').strip().lower() == 'spam'
+    folder_key = f'tag:{int(tag.id)}'
+
     filters_with_tag = EmailFilter.query.filter_by(tag_id=tag_id).all()
     for filter_obj in filters_with_tag:
         db.session.delete(filter_obj)
-        print(f"🗑️ Filtro '{filter_obj.name}' eliminado (etiqueta borrada)")
-    
-    # Buscar todos los emails que tienen esta etiqueta
-    emails_with_tag = get_emails_by_tag(tag_id)
-    emails_count = len(emails_with_tag)
-    
-    # Eliminar todos los emails que tienen esta etiqueta
-    for email in emails_with_tag:
-        try:
+
+    for cleanup in EmailCleanup.query.all():
+        keys = [key for key in cleanup.folder_keys() if key != folder_key]
+        if cleanup.tag_id == tag.id or folder_key in cleanup.folder_keys():
+            if not keys:
+                db.session.delete(cleanup)
+            else:
+                cleanup.apply_folders(keys)
+
+    if is_spam:
+        for email in list(get_emails_by_tag(tag_id)):
             permanently_delete_email(email.id)
-            print(f"🗑️ Email ID {email.id} de '{email.from_email}' eliminado permanentemente")
-        except Exception as e:
-            print(f"❌ Error al eliminar email ID {email.id}: {str(e)}")
-    
-    # Eliminar la etiqueta
+
     db.session.delete(tag)
     db.session.commit()
-    
-    print(f"✅ Etiqueta '{tag.name}' eliminada. {len(filters_with_tag)} filtros eliminados. {emails_count} emails eliminados permanentemente")
     return True
 
 def get_tag(tag_id):

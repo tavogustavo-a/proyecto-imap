@@ -687,9 +687,9 @@ def import_config():
             # --- Borrar Usuarios (Excepto el admin principal) --- AHORA SÍ SE PUEDE
             users_to_drop = User.query.filter(User.username != admin_username).all()
             if users_to_drop:
-                from app.services.user_deletion_cleanup import cleanup_disk_assets_for_user_ids
+                from app.services.user_deletion_cleanup import prepare_users_for_deletion
 
-                cleanup_disk_assets_for_user_ids(
+                prepare_users_for_deletion(
                     current_app._get_current_object(),
                     [u.id for u in users_to_drop],
                 )

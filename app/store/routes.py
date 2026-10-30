@@ -2018,14 +2018,61 @@ def toggle_product(prod_id):
         flash(f'Error al cambiar visibilidad: {str(e)}', 'danger')
     return redirect(url_for('store_bp.admin_productos'))
 
+def _product_delete_block_message(product_id):
+    """El catálogo no puede borrarse si se llevaría licencias, ventas o pedidos."""
+    from app.store.models import CustomerAccountRenewalOrder, License, ProductReservation, Sale
+
+    parts = []
+    licenses = License.query.filter_by(product_id=product_id).count()
+    if licenses:
+        parts.append(f'{licenses} licencia(s) con inventario')
+    sales = Sale.query.filter_by(product_id=product_id).count()
+    if sales:
+        parts.append(f'{sales} venta(s)')
+    reservations = ProductReservation.query.filter_by(product_id=product_id).count()
+    if reservations:
+        parts.append(f'{reservations} reserva(s)')
+    renewals = CustomerAccountRenewalOrder.query.filter_by(product_id=product_id).count()
+    if renewals:
+        parts.append(f'{renewals} renovación(es) de cliente')
+    if not parts:
+        return None
+    return (
+        'No se puede borrar: tiene '
+        + ', '.join(parts)
+        + '. Puedes ocultarlo para que deje de venderse.'
+    )
+
+
+def _unlink_product_association_rows(product_id):
+    """Suelta cupones y roles antes de borrar el producto, aunque la base no tenga cascada."""
+    from app.store.models import role_products
+
+    db.session.execute(
+        coupon_products.delete().where(coupon_products.c.product_id == product_id)
+    )
+    db.session.execute(
+        role_products.delete().where(role_products.c.product_id == product_id)
+    )
+
+
 @store_bp.route('/admin/productos/<int:prod_id>/delete', methods=['POST'])
 @admin_required
 def delete_product(prod_id):
     product = Product.query.get_or_404(prod_id)
+    blocked = _product_delete_block_message(product.id)
+    if blocked:
+        flash(blocked, 'danger')
+        return redirect(url_for('store_bp.admin_productos'))
     try:
+        from app.store.subuser_catalog import drop_product_from_user_price_maps
+
+        drop_product_from_user_price_maps(product.id)
+        _unlink_product_association_rows(product.id)
+        name = product.name
         db.session.delete(product)
         db.session.commit()
-        flash(f'Producto {product.name} eliminado.', 'success')
+        flash(f'Producto {name} eliminado.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al eliminar producto: {str(e)}', 'danger')
@@ -2050,7 +2097,14 @@ def delete_product_ajax(prod_id):
     product = Product.query.get_or_404(prod_id)
     if not product:
         return jsonify({'success': False, 'error': 'Producto no encontrado.'}), 404
+    blocked = _product_delete_block_message(product.id)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 400
     try:
+        from app.store.subuser_catalog import drop_product_from_user_price_maps
+
+        drop_product_from_user_price_maps(product.id)
+        _unlink_product_association_rows(product.id)
         db.session.delete(product)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Producto eliminado exitosamente.'})
@@ -2548,10 +2602,22 @@ def toggle_coupon(coupon_id):
 @store_bp.route('/admin/coupons/delete/<int:coupon_id>', methods=['POST'])
 @admin_required
 def delete_coupon(coupon_id):
+    from app.store.models import CouponRedemption
+
     coupon = Coupon.query.get_or_404(coupon_id)
-    db.session.delete(coupon)
-    db.session.commit()
-    return jsonify({'success': True})
+    try:
+        _ensure_coupon_redemptions_table()
+        CouponRedemption.query.filter_by(coupon_id=coupon.id).delete(synchronize_session=False)
+        db.session.execute(
+            coupon_products.delete().where(coupon_products.c.coupon_id == coupon.id)
+        )
+        db.session.delete(coupon)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Error al eliminar cupón %s: %s', coupon_id, e)
+        return jsonify({'success': False, 'error': 'No se pudo eliminar el cupón.'}), 500
 
 @store_bp.route('/admin/coupons/edit/<int:coupon_id>', methods=['POST'])
 @admin_required
@@ -3224,10 +3290,18 @@ def toggle_api(api_id):
 @store_bp.route('/admin/api/<int:api_id>/delete', methods=['POST'])
 @admin_required
 def delete_api(api_id):
+    from app.store.models import apiinfo_users
+
     api = ApiInfo.query.get_or_404(api_id)
-    db.session.delete(api)
-    db.session.commit()
-    return jsonify({'success': True})
+    try:
+        db.session.execute(apiinfo_users.delete().where(apiinfo_users.c.apiinfo_id == api.id))
+        db.session.delete(api)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Error al eliminar API %s: %s', api_id, e)
+        return jsonify({'success': False, 'error': 'No se pudo eliminar la API.'}), 500
 
 @store_bp.route('/admin/youtube_listing', methods=['POST'])
 @admin_required
@@ -3265,10 +3339,23 @@ def toggle_youtube_listing(listing_id):
 @store_bp.route('/admin/youtube_listing/<int:listing_id>/delete', methods=['POST'])
 @admin_required
 def delete_youtube_listing(listing_id):
+    from app.store.models import ProductionLink, youtube_listing_users
+
     listing = YouTubeListing.query.get_or_404(listing_id)
-    db.session.delete(listing)
-    db.session.commit()
-    return jsonify({'success': True})
+    try:
+        db.session.execute(
+            youtube_listing_users.delete().where(
+                youtube_listing_users.c.youtube_listing_id == listing.id
+            )
+        )
+        ProductionLink.query.filter_by(youtube_listing_id=listing.id).delete(synchronize_session=False)
+        db.session.delete(listing)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Error al eliminar listado YouTube %s: %s', listing_id, e)
+        return jsonify({'success': False, 'error': 'No se pudo eliminar el listado.'}), 500
 
 @store_bp.route('/admin/youtube_listing/<int:listing_id>/edit', methods=['GET', 'POST'])
 @admin_required
@@ -3719,10 +3806,19 @@ def toggle_tool(tool_id):
 @store_bp.route('/admin/herramientas/delete/<int:tool_id>', methods=['POST'], endpoint='delete_tool')
 @admin_required
 def delete_tool(tool_id):
+    from app.store.models import toolinfo_users
+
     tool = ToolInfo.query.get_or_404(tool_id)
-    db.session.delete(tool)
-    db.session.commit()
-    flash(f"'{tool.title}' eliminado.", "success")
+    title = tool.title
+    try:
+        db.session.execute(toolinfo_users.delete().where(toolinfo_users.c.toolinfo_id == tool.id))
+        db.session.delete(tool)
+        db.session.commit()
+        flash(f"'{title}' eliminado.", "success")
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Error al eliminar herramienta %s: %s', tool_id, e)
+        flash('No se pudo eliminar la herramienta.', 'danger')
     return redirect(url_for('store_bp.admin_tools'))
 
 @store_bp.route('/admin/herramientas/editar/<int:tool_id>', methods=['GET', 'POST'], endpoint='edit_tool')
@@ -3960,13 +4056,17 @@ def toggle_html(html_id):
 @store_bp.route('/admin/html/<int:html_id>/delete', methods=['POST'])
 @admin_required
 def delete_html(html_id):
+    from app.store.models import htmlinfo_users
+
     html = HtmlInfo.query.get_or_404(html_id)
     try:
+        db.session.execute(htmlinfo_users.delete().where(htmlinfo_users.c.htmlinfo_id == html.id))
         db.session.delete(html)
         db.session.commit()
         return jsonify({'success': True, 'message': 'HTML eliminado correctamente.'})
-    except:
+    except Exception as e:
         db.session.rollback()
+        current_app.logger.error('Error al eliminar HTML %s: %s', html_id, e)
         return jsonify({'success': False, 'error': 'Error al eliminar el HTML.'})
 
 @store_bp.route('/admin/html/<int:html_id>/edit', methods=['GET', 'POST'])
@@ -12217,6 +12317,25 @@ def api_chatbot_respuestas_knowledge():
         return jsonify({'success': False, 'message': 'No se pudo guardar el conocimiento'}), 500
 
 
+def _users_share_closed(permission):
+    """El enlace de usuarios concretos se cierra cuando ya no hay nadie en la lista."""
+    if permission is None or permission.access_type != 'users':
+        return False
+    try:
+        count = permission.users.count()
+    except Exception:
+        count = 0
+    if count > 0:
+        return False
+    if permission.public_token:
+        permission.public_token = None
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    return True
+
+
 @store_bp.route('/share/worksheet/<int:worksheet_id>')
 def shared_worksheet_access(worksheet_id):
     """Acceso compartido a worksheets con token"""
@@ -12244,17 +12363,8 @@ def shared_worksheet_access(worksheet_id):
         
         if not permission:
             return "Enlace no válido - Token no encontrado", 400
-        
-        
-        # Verificar que el permiso esté activo
-        if permission.access_type == 'users':
-            try:
-                user_count = permission.users.count() if hasattr(permission, 'users') and permission.users else 0
-                # Los tokens de 'users' pueden funcionar sin usuarios específicos asignados
-                # El token en sí es válido para acceso compartido, independientemente de usuarios específicos
-            except Exception as e:
-                # Continuar - el token público sigue siendo válido
-                pass
+        if _users_share_closed(permission):
+            return "Enlace no válido", 403
         
         
         # ⭐ CORREGIDO: Verificar que el tipo de acceso coincida correctamente
@@ -12350,15 +12460,8 @@ def get_shared_worksheet_data(worksheet_id):
         
         if not permission:
             return jsonify({'error': 'Token inválido'}), 400
-        
-        # Verificar que el permiso esté activo (API datos)
-        if permission.access_type == 'users':
-            try:
-                user_count = permission.users.count() if hasattr(permission, 'users') and permission.users else 0
-                # Los tokens de 'users' pueden funcionar sin usuarios específicos asignados
-            except Exception as e:
-                # Continuar - el token público sigue siendo válido
-                pass
+        if _users_share_closed(permission):
+            return jsonify({'error': 'Enlace no válido'}), 403
         
         # ⭐ CORREGIDO: Verificar tipo de acceso correctamente
         # Para access_type 'readonly' acepta permisos 'view' y 'users'
@@ -12425,23 +12528,14 @@ def save_shared_worksheet_data(worksheet_id):
             public_token=token
         ).first()
         
-        # ⭐ CORREGIDO: Simplificar validación de permisos de edición
         if not permission:
             return jsonify({'error': 'Token inválido'}), 400
-            
-        # Solo permitir edición si el permiso lo permite
+        if _users_share_closed(permission):
+            return jsonify({'error': 'Enlace no válido'}), 403
+
         if permission.access_type not in ['edit', 'users']:
             return jsonify({'error': 'No tienes permisos de edición'}), 403
-        
-        # Verificar que el permiso esté activo (API guardado)
-        if permission.access_type == 'users':
-            try:
-                user_count = permission.users.count() if hasattr(permission, 'users') and permission.users else 0
-                # Los tokens de 'users' pueden funcionar sin usuarios específicos asignados
-            except Exception as e:
-                # Continuar - el token público sigue siendo válido
-                pass
-        
+
         # Obtener datos del request (soporta data completo o changes para merge)
         data = request.get_json()
         rows = data.get('data')
@@ -12532,6 +12626,8 @@ def check_shared_worksheet_changes(worksheet_id):
         
         if not permission:
             return jsonify({'error': 'Token inválido'}), 403
+        if _users_share_closed(permission):
+            return jsonify({'error': 'Enlace no válido'}), 403
         
         # Evitar caché de SQLAlchemy para devolver datos actuales
         db.session.expire_all()
@@ -12608,6 +12704,8 @@ def update_presence(worksheet_id):
         
         if not permission:
             return jsonify({'error': 'Token inválido'}), 400
+        if _users_share_closed(permission):
+            return jsonify({'error': 'Enlace no válido'}), 403
         
         # Obtener información del usuario/IP
         user_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'IP desconocida'))
@@ -12675,6 +12773,8 @@ def register_shared_user_activity(worksheet_id):
         
         if not permission:
             return jsonify({'error': 'Token inválido'}), 403
+        if _users_share_closed(permission):
+            return jsonify({'error': 'Enlace no válido'}), 403
         
         data = request.get_json()
         activity_type = data.get('activity_type', 'interaction')
@@ -12741,6 +12841,8 @@ def save_shared_worksheet_history(worksheet_id):
         
         if not permission:
             return jsonify({'error': 'Token inválido'}), 400
+        if _users_share_closed(permission):
+            return jsonify({'error': 'Enlace no válido'}), 403
         
         data = request.get_json()
         change = data.get('change')
@@ -12791,6 +12893,8 @@ def get_shared_worksheet_history(worksheet_id):
         
         if not permission:
             return jsonify({'error': 'Token inválido'}), 400
+        if _users_share_closed(permission):
+            return jsonify({'error': 'Enlace no válido'}), 403
         
         # Obtener historial del sistema unificado
         history = get_worksheet_history(worksheet_id)
@@ -16162,6 +16266,13 @@ def delete_sms_config(config_id):
         # Eliminar explícitamente todos los elementos relacionados para asegurar eliminación completa
         # Esto garantiza que todo se elimine incluso si hay problemas con las relaciones SQLAlchemy
         
+        User.query.filter(User.last_selected_sms_config_id == config_id).update(
+            {User.last_selected_sms_config_id: None},
+            synchronize_session=False,
+        )
+        if session.get('selected_sms_config_id') == config_id:
+            session.pop('selected_sms_config_id', None)
+
         # 1. Eliminar regex asociados
         SMSRegex.query.filter_by(sms_config_id=config_id).delete()
         
