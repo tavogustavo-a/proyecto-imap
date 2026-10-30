@@ -906,7 +906,7 @@ document.addEventListener("DOMContentLoaded", function () {
               appendFilterHtmlView();
             }
           } else if (regexWillRender) {
-            const regexElement = renderRegexMatches(regexDict, mailDateFormatted);
+            const regexElement = renderRegexMatches(regexDict, mailDateFormatted, mail.regex_link_actions);
             if (regexElement) {
               resultsDiv.appendChild(regexElement);
             }
@@ -941,7 +941,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  window.renderCodeResult = function(code, mailDateFormatted) {
+  window.renderCodeResult = function(code, mailDateFormatted, options) {
+    options = options || {};
     function unwrapAdminRedirectUrl(raw) {
       var s = String(raw != null ? raw : '').trim();
       if (!s) return s;
@@ -963,7 +964,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     const isLink = /^(https?:\/\/|www\.)/i.test(codeStr);
-    const isNetflixApprove = isLink && /netflix\.com/i.test(codeStr);
+    const isNetflixApprove = !!options.netflixApprove && isLink;
+    const approveLabel = options.actionLabel || 'Aprobar';
     const MAX_LEN = 50;
     let displayText = codeStr;
     if (displayText.length > MAX_LEN) {
@@ -1006,7 +1008,7 @@ document.addEventListener("DOMContentLoaded", function () {
       approveButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-approve-btn');
       approveButton.id = 'openLinkBtn';
       approveButton.setAttribute('data-link', codeStr);
-      approveButton.textContent = 'Aprobar';
+      approveButton.textContent = approveLabel;
       buttonsContainer.appendChild(approveButton);
       buttonsContainer.appendChild(copyButton);
     } else {
@@ -1040,30 +1042,52 @@ document.addEventListener("DOMContentLoaded", function () {
   };
 
   // Hacer disponible globalmente para páginas dinámicas
-  window.renderRegexMatches = function(regexMatches, mailDateFormatted) {
+  window.renderRegexMatches = function(regexMatches, mailDateFormatted, linkActions) {
     if (!regexMatches || typeof regexMatches !== 'object') {
       return null;
     }
-    
-    let allMatches = [];
-    for (const rId in regexMatches) {
-      if (Array.isArray(regexMatches[rId])) {
-        allMatches = allMatches.concat(regexMatches[rId]);
+
+    const actionById = {};
+    (linkActions || []).forEach(function (action) {
+      if (!action || action.id == null) return;
+      actionById[String(action.id)] = action.label || 'Aprobar';
+    });
+
+    function firstMatch(list) {
+      let value = list[0];
+      if (Array.isArray(value)) {
+        value = value.join('');
+      } else {
+        value = String(value);
       }
-    }
-    
-    if (allMatches.length === 0) {
-      return null;
+      return value;
     }
 
-    let primerCodigo = allMatches[0];
-    if (Array.isArray(primerCodigo)) {
-      primerCodigo = primerCodigo.join('');
-    } else {
-      primerCodigo = String(primerCodigo);
+    let primerCodigo = null;
+    let actionLabel = '';
+    for (const rId in regexMatches) {
+      const list = regexMatches[rId];
+      if (!Array.isArray(list) || !list.length || !actionById[String(rId)]) continue;
+      primerCodigo = firstMatch(list);
+      actionLabel = actionById[String(rId)];
+      break;
     }
 
-    return renderCodeResult(primerCodigo, mailDateFormatted);
+    if (primerCodigo == null) {
+      const allMatches = [];
+      for (const rId in regexMatches) {
+        if (Array.isArray(regexMatches[rId])) {
+          allMatches.push.apply(allMatches, regexMatches[rId]);
+        }
+      }
+      if (!allMatches.length) return null;
+      primerCodigo = firstMatch(allMatches);
+    }
+
+    return renderCodeResult(primerCodigo, mailDateFormatted, {
+      netflixApprove: !!actionLabel,
+      actionLabel: actionLabel
+    });
   };
 
   // Hacer disponible globalmente para páginas dinámicas

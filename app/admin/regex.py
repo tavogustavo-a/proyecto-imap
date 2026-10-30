@@ -67,6 +67,49 @@ def passes_any_regex(mail_dict, regexes):
     return False
 
 
+def netflix_link_action_label(regex_row):
+    """Botón rojo de enlace para los regex indicados. None si no aplica."""
+    description = re.sub(
+        r'\s+',
+        ' ',
+        str(getattr(regex_row, 'description', '') or ''),
+    ).casefold()
+    if 'restablecimiento de contraseña' in description:
+        return 'Restablecimiento de contraseña'
+    description_plain = (
+        description
+        .replace('á', 'a')
+        .replace('é', 'e')
+        .replace('í', 'i')
+        .replace('ó', 'o')
+        .replace('ú', 'u')
+    )
+    if 'iniciar sesion vix' in description_plain:
+        return 'Iniciar sesion vix'
+    sender = str(getattr(regex_row, 'sender', '') or '').lower()
+    pattern = str(getattr(regex_row, 'pattern', '') or '')
+    if 'info@account.netflix.com' not in sender:
+        return None
+    compact = re.sub(r'\s+', '', pattern).lower()
+    approve = re.sub(
+        r'\s+',
+        '',
+        r'(?i)(?:aprobar|approve)\s*\[\s*(https?://[^\]\s]+)\]',
+    ).lower()
+    if compact == approve:
+        return 'Aprobar'
+    if 'update-primary-location' in compact and 'operation=update' in compact:
+        return 'Actualizar tu hogar netflix'
+    if 'travel/verify' in compact or 'travel\\/verify' in compact:
+        return 'Actualiza tu viaje netflix'
+    return None
+
+
+def is_netflix_approve_access_regex(regex_row) -> bool:
+    """Solo el regex de aprobar acceso: info@account.netflix.com y el patrón Aprobar [url]."""
+    return netflix_link_action_label(regex_row) == 'Aprobar'
+
+
 def extract_regex(mail_dict, regexes):
     """
     Retorna un dict {regex_id: [coincidencias, ...], ...}

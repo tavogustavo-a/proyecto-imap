@@ -18,7 +18,7 @@ from app.models import (
     service_regex, service_filter,
 )
 from app.imap.advanced_imap import search_in_all_servers
-from app.admin.regex import passes_any_regex, extract_regex
+from app.admin.regex import passes_any_regex, extract_regex, netflix_link_action_label
 from app.services.sender_list import sender_parts
 from app.extensions import db
 from app.helpers import safe_regex_search
@@ -1281,6 +1281,17 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
             if passes_any_regex(mail, regexes):
                 found_regex = True
                 mail["regex_matches"] = extract_regex(mail, regexes)
+                mail["regex_link_actions"] = []
+                for regex_row in regexes:
+                    if regex_row.id not in mail["regex_matches"]:
+                        continue
+                    action_label = netflix_link_action_label(regex_row)
+                    if not action_label:
+                        continue
+                    mail["regex_link_actions"].append({
+                        'id': regex_row.id,
+                        'label': action_label,
+                    })
             else:
                 mail["regex_matches"] = {}
         else:

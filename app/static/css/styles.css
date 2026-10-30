@@ -2454,6 +2454,14 @@ noscript p {
   padding-right: 1.45rem;
 }
 
+.search-page .service-btn,
+.search-page .service-btn-label {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+}
+
 .search-page .service-btn-label {
   flex: 1 1 auto;
   min-width: 0;
@@ -3605,13 +3613,27 @@ body .edit-service-page #aliasPopup {
 
 .regex-result-approve-btn {
   margin-left: 0 !important;
-  width: min(100%, 22rem);
-  min-width: 16rem;
-  background: #e11d2e !important;
-  border-color: #e11d2e !important;
-  color: #fff !important;
+  width: max-content;
+  min-width: 26rem;
+  max-width: 100%;
+  padding-left: 1.6rem !important;
+  padding-right: 1.6rem !important;
+  white-space: nowrap;
+  height: 3.15rem !important;
+  border-radius: 26px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.025em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  caret-color: transparent;
+  background: #e11d2e !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+  color: #fff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(2, 6, 23, 0.45);
 }
 
 .regex-result-approve-btn:hover,
@@ -3619,6 +3641,15 @@ body .edit-service-page #aliasPopup {
   background: #b91022 !important;
   border-color: #b91022 !important;
   color: #fff !important;
+}
+
+.regex-result-actions .regex-result-copy-btn,
+.regex-result-copy-btn,
+.regex-result-open-link-btn {
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  caret-color: transparent;
 }
 
 .regex-result-actions .regex-result-copy-btn {
@@ -7064,6 +7095,18 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
 }
 
 /* Asegurar que el texto dentro de alias-popup-item tambi�n sea blanco */
+#aliasPopup #aliasListContainer .alias-popup-item,
+#aliasPopup .alias-popup-item,
+.alias-popup-item,
+#aliasPopup #aliasListContainer .alias-popup-item span,
+#aliasPopup .alias-popup-item span,
+.alias-popup-item span {
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  caret-color: transparent;
+}
+
 #aliasPopup #aliasListContainer .alias-popup-item span,
 #aliasPopup .alias-popup-item span,
 .alias-popup-item span {

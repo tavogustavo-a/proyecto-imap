@@ -11,7 +11,7 @@
   {% endblock %}
 
   <link rel="icon" href="{{ url_for('static', filename='images/favicon.svg') }}?v=20241220" type="image/svg+xml">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20261030-nf-aprobar-only">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20261030-reset-btn">
   <style id="ui-chrome-vars">
     :root {
       --ui-static-1: {{ ui_chrome.static1 if ui_chrome is defined else '#1e3a8a' }};
@@ -72,7 +72,7 @@
   
   <script src="{{ url_for('static', filename='js/session_back_check.js') }}?v=20261018-session-back"></script>
   <script src="{{ url_for('static', filename='js/register_service_worker.js') }}?v=20260730-csp" defer></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=20261030-nf-aprobar" defer></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=20261030-nf-hogar" defer></script>
   <script src="{{ url_for('static', filename='js/loading_overlay.js') }}?v=20260730-csp" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_fetch_json.js') }}?v=20260610" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/store_sse_realtime.js') }}?v=20260622-sse-unified" defer></script>
