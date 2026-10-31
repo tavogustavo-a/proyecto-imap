@@ -3602,45 +3602,117 @@ body .edit-service-page #aliasPopup {
   word-break: break-all; /* Romper texto largo si es necesario */
 }
 
-/* Los botones regex con colores intercambiados */
-.regex-result-actions {
+.regex-result-code-row {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 0.65rem;
+  gap: 1rem;
+  margin: 0 0 0.15rem;
+}
+
+.regex-result-code-row .regex-result-code {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: var(--ui-static-2);
+  font-family: 'Courier New', monospace;
+  margin: 0;
+  display: inline-block;
+  line-height: 1.1;
+}
+
+.regex-result-container .regex-result-code-row button.regex-result-copy-btn {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  border-radius: 30px !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.9rem !important;
+}
+
+/* Los botones regex con colores intercambiados */
+.regex-result-container--netflix-approve {
+  padding-top: 0.55rem;
+  padding-bottom: 0.4rem;
   margin-top: 0.15rem;
 }
 
-.regex-result-approve-btn {
-  margin-left: 0 !important;
-  width: max-content;
-  min-width: 26rem;
-  max-width: 100%;
-  padding-left: 1.6rem !important;
-  padding-right: 1.6rem !important;
+.regex-result-actions {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0;
+}
+
+.regex-result-container .regex-result-actions button {
+  margin: 0 !important;
+}
+
+.regex-btn-icon {
+  margin-right: 0.42rem;
+  font-size: 0.92em;
+  line-height: 1;
+}
+
+.regex-result-container--netflix-approve .regex-result-date {
+  margin-top: 0.28rem;
+  margin-bottom: 0;
+}
+
+.regex-result-container button.regex-result-approve-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: calc(100% - 4.4rem) !important;
+  margin: 0 !important;
+  padding: 0.72rem 1.55rem !important;
   white-space: nowrap;
-  height: 3.15rem !important;
-  border-radius: 26px !important;
+  height: auto !important;
+  min-height: 2.65rem;
+  border-radius: 999px !important;
+  font-size: 0.92rem !important;
   font-weight: 700 !important;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.045em;
+  line-height: 1.15;
   text-transform: uppercase;
   cursor: pointer !important;
   user-select: none !important;
   -webkit-user-select: none !important;
   caret-color: transparent;
-  background: #e11d2e !important;
-  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+  background: linear-gradient(180deg, #ff4d5c 0%, #e11d2e 58%, #c41020 100%) !important;
+  border: none !important;
+  outline: none !important;
   color: #fff !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 10px 24px rgba(2, 6, 23, 0.45);
+  transition: none !important;
+  box-shadow: 0 8px 16px rgba(225, 29, 46, 0.22) !important;
 }
 
-.regex-result-approve-btn:hover,
-.regex-result-approve-btn:focus {
-  background: #b91022 !important;
-  border-color: #b91022 !important;
+.regex-result-container button.regex-result-approve-btn:hover,
+.regex-result-container button.regex-result-approve-btn:focus,
+.regex-result-container button.regex-result-approve-btn:active {
+  background: linear-gradient(180deg, #ff4d5c 0%, #e11d2e 58%, #c41020 100%) !important;
+  border: none !important;
+  outline: none !important;
   color: #fff !important;
+  transform: none !important;
+  transition: none !important;
+  box-shadow: 0 8px 16px rgba(225, 29, 46, 0.22) !important;
+}
+
+@media (max-width: 600px) {
+  .regex-result-container button.regex-result-approve-btn {
+    max-width: calc(100% - 4.2rem) !important;
+    white-space: nowrap;
+    font-size: 0.76rem !important;
+    letter-spacing: 0.02em;
+    padding-left: 0.95rem !important;
+    padding-right: 0.95rem !important;
+  }
 }
 
 .regex-result-actions .regex-result-copy-btn,
@@ -3652,10 +3724,35 @@ body .edit-service-page #aliasPopup {
   caret-color: transparent;
 }
 
-.regex-result-actions .regex-result-copy-btn {
-  margin-left: 0 !important;
-  width: auto;
-  min-width: 0;
+.regex-result-container .regex-result-actions .regex-result-copy-icon {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 2.65rem !important;
+  height: 2.65rem !important;
+  min-width: 2.65rem !important;
+  min-height: 2.65rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 999px !important;
+  flex: 0 0 auto;
+}
+
+.regex-result-container .regex-result-actions .regex-result-copy-icon .regex-btn-icon {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.regex-result-container .regex-result-actions .regex-result-copy-btn:hover,
+.regex-result-container .regex-result-actions .regex-result-copy-btn:focus,
+.regex-result-container .regex-result-actions .regex-result-copy-btn:active {
+  border: none !important;
+  outline: none !important;
+  transform: none !important;
+  transition: none !important;
+  box-shadow: none !important;
+  background: var(--ui-static-bg) !important;
 }
 
 .regex-result-copy-btn,
@@ -3858,6 +3955,12 @@ body .edit-service-page #aliasPopup {
      font-size: 1.2rem; /* Reducir tama�o fuente c�digo */
      display: block; /* Hacer que ocupe su l�nea */
      margin-bottom: 0.75rem; /* M�s margen inferior */
+  }
+
+  .regex-result-code-row .regex-result-code {
+    font-size: 1.8rem !important;
+    display: inline-block !important;
+    margin-bottom: 0 !important;
   }
   
   /* Asegurar que sms-code-text dentro de sms-code-container mantenga inline/inline-block */

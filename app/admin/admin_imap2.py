@@ -142,6 +142,7 @@ DEFAULT_IMAP2_REGEX_DESCRIPTIONS = (
     "codigo netflix hogar",
     "codigo netflix viaje",
     "confirma tu nuevo inicio de sesion en crunchyroll",
+    "ingreso sesion netflix 6 digitos",
 )
 
 
@@ -149,6 +150,29 @@ def _normalize_assoc_description(value):
     text = unicodedata.normalize("NFD", str(value or "").strip().lower())
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
     return " ".join(text.split())
+
+
+def build_imap2_consultas_rows(filters, regexes, associated_filter_ids, associated_regex_ids):
+    """Una sola lista de filtros y regex, ordenada por descripción."""
+    filter_ids = set(associated_filter_ids or [])
+    regex_ids = set(associated_regex_ids or [])
+    rows = []
+    for item in filters or []:
+        rows.append({
+            "kind": "filter",
+            "id": item.id,
+            "description": item.description or "Sin descripción",
+            "checked": item.id in filter_ids,
+        })
+    for item in regexes or []:
+        rows.append({
+            "kind": "regex",
+            "id": item.id,
+            "description": item.description or "Sin descripción",
+            "checked": item.id in regex_ids,
+        })
+    rows.sort(key=lambda row: (_normalize_assoc_description(row["description"]), row["kind"], row["id"]))
+    return rows
 
 
 def apply_default_imap2_filter_regex(srv):
@@ -272,6 +296,9 @@ def edit_imap2(server_id):
         all_regexes=all_regexes,
         associated_filter_ids=associated_filter_ids,
         associated_regex_ids=associated_regex_ids,
+        consultas_rows=build_imap2_consultas_rows(
+            all_filters, all_regexes, associated_filter_ids, associated_regex_ids
+        ),
         all_imap_servers=all_imap_servers,
         linked_imap_ids=linked_imap_ids,
         allowed_users=allowed_users

@@ -795,31 +795,62 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
         
-        // Si hay resultados, ocultar el spinner inmediatamente
+        // Verificar si es resultado SMS antes de pintar un vacío.
+        const mail = results[0];
+        if (mail.is_sms_result) {
+          const smsMessages = mail.sms_messages || [];
+          const emailToCheck = mail.email_searched || emailSearched;
+          const shouldCheck2FA = !!(emailToCheck && !isImap2DynamicPage && isSelectedServiceSMS());
+
+          const hideSearchSpinner = () => {
+            if (!spinner) return;
+            spinner.classList.add('d-none');
+            spinner.classList.remove('d-block');
+          };
+          const showSmsNoResults = () => {
+            hideSearchSpinner();
+            if (!resultsDiv) return;
+            resultsDiv.innerHTML = '';
+            resultsDiv.classList.remove('d-none');
+            resultsDiv.classList.add('d-block');
+            const noResultsP = document.createElement('p');
+            noResultsP.classList.add('text-center');
+            noResultsP.textContent = 'No se encontraron resultados.';
+            resultsDiv.appendChild(noResultsP);
+          };
+
+          // Sin mensajes: esperar el 2FA con el spinner. No pintar el aviso vacío en el medio.
+          if (!smsMessages.length && shouldCheck2FA) {
+            checkAndDisplay2FACode(emailToCheck).then((hasContent) => {
+              if (hasContent) {
+                hideSearchSpinner();
+                if (resultsDiv) {
+                  resultsDiv.classList.remove('d-none');
+                  resultsDiv.classList.add('d-block');
+                }
+                return;
+              }
+              showSmsNoResults();
+            });
+            return;
+          }
+
+          hideSearchSpinner();
+          if (smsMessages.length) {
+            renderSMSMessages(smsMessages, mail.sms_config_phone, mail.email_searched);
+            if (shouldCheck2FA) {
+              checkAndDisplay2FACode(emailToCheck);
+            }
+            return;
+          }
+          showSmsNoResults();
+          return;
+        }
+
+        // Si hay resultados de correo, ocultar el spinner
         if (spinner) {
           spinner.classList.add('d-none');
           spinner.classList.remove('d-block');
-        }
-
-        // Verificar si es resultado SMS
-        const mail = results[0];
-        if (mail.is_sms_result) {
-          // Verificar si hay mensajes SMS (puede ser array vacío)
-          const smsMessages = mail.sms_messages || [];
-          const emailToCheck = mail.email_searched || emailSearched;
-          
-          // Renderizar mensajes SMS primero
-          renderSMSMessages(smsMessages, mail.sms_config_phone, mail.email_searched);
-          
-          // También buscar y mostrar código 2FA si existe (SOLO si el servicio seleccionado es SMS)
-          // Usar setTimeout para asegurar que renderSMSMessages termine primero
-          // NO hacer esto en páginas dinámicas de IMAP2 (usan su propio sistema de 2FA)
-          if (emailToCheck && !isImap2DynamicPage && isSelectedServiceSMS()) {
-            setTimeout(() => {
-              checkAndDisplay2FACode(emailToCheck);
-            }, 200);
-          }
-          return;
         }
         
         // Verificar si hay código 2FA para el correo buscado (SOLO si es servicio SMS)
@@ -941,6 +972,51 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  function setCopyButtonState(btn, label, isError) {
+    if (btn.classList.contains('regex-result-copy-icon')) {
+      const icon = btn.querySelector('i');
+      let iconName = 'fa-copy';
+      if (isError) iconName = 'fa-xmark';
+      else if (label === (btn.getAttribute('data-done-label') || '')) iconName = 'fa-check';
+      if (icon) icon.className = 'fas ' + iconName + ' regex-btn-icon';
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+      return;
+    }
+    fillButtonLabel(btn, label);
+  }
+
+  function redActionIcon(label) {
+    const plain = String(label || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (plain.indexOf('hogar') !== -1) return 'fa-house';
+    if (plain.indexOf('viaje') !== -1) return 'fa-plane';
+    if (plain.indexOf('contrasena') !== -1) return 'fa-key';
+    if (plain.indexOf('inicio de sesion') !== -1) return 'fa-right-to-bracket';
+    return '';
+  }
+
+  function fillButtonLabel(btn, label, iconClass) {
+    const span = btn.querySelector('.regex-btn-label');
+    if (span) {
+      span.textContent = label;
+      return;
+    }
+    btn.textContent = '';
+    if (iconClass) {
+      const icon = document.createElement('i');
+      icon.className = 'fas ' + iconClass + ' regex-btn-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      btn.appendChild(icon);
+    }
+    const text = document.createElement('span');
+    text.className = 'regex-btn-label';
+    text.textContent = label;
+    btn.appendChild(text);
+  }
+
   window.renderCodeResult = function(code, mailDateFormatted, options) {
     options = options || {};
     function unwrapAdminRedirectUrl(raw) {
@@ -979,7 +1055,26 @@ document.addEventListener("DOMContentLoaded", function () {
       divContainer.classList.add('regex-result-container--netflix-approve');
     }
 
-    if (!isNetflixApprove) {
+    if (!isNetflixApprove && !isLink) {
+      const codeRow = document.createElement('div');
+      codeRow.classList.add('regex-result-code-row');
+
+      const strongCode = document.createElement('strong');
+      strongCode.classList.add('regex-result-code');
+      strongCode.id = 'regex-code';
+      strongCode.textContent = displayText;
+      codeRow.appendChild(strongCode);
+
+      const copyButton = document.createElement('button');
+      copyButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-copy-btn', 'twofa-copy-btn');
+      copyButton.id = 'copyRegexBtn';
+      copyButton.setAttribute('data-valor', codeStr);
+      copyButton.textContent = 'Copiar';
+      copyButton.setAttribute('data-idle-label', 'Copiar');
+      copyButton.setAttribute('data-done-label', 'COPIADO');
+      codeRow.appendChild(copyButton);
+      divContainer.appendChild(codeRow);
+    } else if (!isNetflixApprove) {
       const pCode = document.createElement('p');
       pCode.classList.add('regex-result-code');
 
@@ -991,6 +1086,7 @@ document.addEventListener("DOMContentLoaded", function () {
       divContainer.appendChild(pCode);
     }
 
+    if (isNetflixApprove || isLink) {
     const buttonsContainer = document.createElement('div');
     buttonsContainer.classList.add('mt-05');
     if (isNetflixApprove) {
@@ -1004,11 +1100,21 @@ document.addEventListener("DOMContentLoaded", function () {
     copyButton.textContent = 'Copiar';
 
     if (isNetflixApprove) {
+      copyButton.classList.add('regex-result-copy-icon');
+      copyButton.textContent = '';
+      copyButton.setAttribute('data-idle-label', 'Copiar link');
+      copyButton.setAttribute('data-done-label', 'Link copiado');
+      copyButton.setAttribute('aria-label', 'Copiar link');
+      copyButton.setAttribute('title', 'Copiar link');
+      const copyIcon = document.createElement('i');
+      copyIcon.className = 'fas fa-copy regex-btn-icon';
+      copyIcon.setAttribute('aria-hidden', 'true');
+      copyButton.appendChild(copyIcon);
       const approveButton = document.createElement('button');
       approveButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-approve-btn');
       approveButton.id = 'openLinkBtn';
       approveButton.setAttribute('data-link', codeStr);
-      approveButton.textContent = approveLabel;
+      fillButtonLabel(approveButton, approveLabel, redActionIcon(approveLabel));
       buttonsContainer.appendChild(approveButton);
       buttonsContainer.appendChild(copyButton);
     } else {
@@ -1024,6 +1130,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     divContainer.appendChild(buttonsContainer);
+    }
 
     if (mailDateFormatted) {
       const pDate = document.createElement('p');
@@ -1065,12 +1172,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let primerCodigo = null;
     let actionLabel = '';
-    for (const rId in regexMatches) {
-      const list = regexMatches[rId];
-      if (!Array.isArray(list) || !list.length || !actionById[String(rId)]) continue;
+    for (let i = 0; i < (linkActions || []).length; i++) {
+      const action = linkActions[i];
+      if (!action || action.id == null) continue;
+      const list = regexMatches[action.id] || regexMatches[String(action.id)];
+      if (!Array.isArray(list) || !list.length) continue;
       primerCodigo = firstMatch(list);
-      actionLabel = actionById[String(rId)];
+      actionLabel = action.label || 'Aprobar';
       break;
+    }
+    if (primerCodigo == null) {
+      for (const rId in regexMatches) {
+        const list = regexMatches[rId];
+        if (!Array.isArray(list) || !list.length || !actionById[String(rId)]) continue;
+        primerCodigo = firstMatch(list);
+        actionLabel = actionById[String(rId)];
+        break;
+      }
     }
 
     if (primerCodigo == null) {
@@ -1096,26 +1214,22 @@ document.addEventListener("DOMContentLoaded", function () {
     if (copyBtn) {
       copyBtn.addEventListener("click", function() {
         const valorACopiar = copyBtn.getAttribute("data-valor") || "";
+        const idleLabel = copyBtn.getAttribute("data-idle-label") || "COPIAR";
+        const doneLabel = copyBtn.getAttribute("data-done-label") || "COPIADO";
         copyTextToClipboard(valorACopiar)
           .then(() => {
-            copyBtn.textContent = "COPIADO";
-            // Mantener las clases btn-search btn-rounded y agregar estado copiado
+            setCopyButtonState(copyBtn, doneLabel, false);
             copyBtn.classList.add('copied-state');
-            
-            // Volver al estado normal después de 2 segundos
             setTimeout(() => {
-              copyBtn.textContent = "COPIAR";
+              setCopyButtonState(copyBtn, idleLabel, false);
               copyBtn.classList.remove('copied-state');
             }, 2000);
           })
           .catch((err) => {
-            copyBtn.textContent = "ERROR";
-            // Agregar clase de error manteniendo btn-search btn-rounded
+            setCopyButtonState(copyBtn, "ERROR", true);
             copyBtn.classList.add('error-state');
-            
-            // Volver al estado normal después de 2 segundos
             setTimeout(() => {
-              copyBtn.textContent = "COPIAR";
+              setCopyButtonState(copyBtn, idleLabel, false);
               copyBtn.classList.remove('error-state');
             }, 2000);
           });

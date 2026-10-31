@@ -75,7 +75,7 @@ def netflix_link_action_label(regex_row):
         str(getattr(regex_row, 'description', '') or ''),
     ).casefold()
     if 'restablecimiento de contraseña' in description:
-        return 'Restablecimiento de contraseña'
+        return 'Restablece tu contraseña'
     description_plain = (
         description
         .replace('á', 'a')
@@ -85,11 +85,11 @@ def netflix_link_action_label(regex_row):
         .replace('ú', 'u')
     )
     if 'iniciar sesion vix' in description_plain:
-        return 'Iniciar sesion vix'
+        return 'Aprobar inicio de sesión'
     if 'confirma tu nuevo inicio de sesion en crunchyroll' in description_plain:
-        return 'Confirmar la sesion crunchyroll'
+        return 'Aprobar inicio de sesión'
     if 'ingresar con link ha spotify' in description_plain:
-        return 'Ingresa la sesion spotify'
+        return 'Aprobar inicio de sesión'
     sender = str(getattr(regex_row, 'sender', '') or '').lower()
     pattern = str(getattr(regex_row, 'pattern', '') or '')
     if 'info@account.netflix.com' not in sender:
@@ -101,17 +101,47 @@ def netflix_link_action_label(regex_row):
         r'(?i)(?:aprobar|approve)\s*\[\s*(https?://[^\]\s]+)\]',
     ).lower()
     if compact == approve:
-        return 'Aprobar'
+        return 'Aprobar inicio de sesión'
     if 'update-primary-location' in compact and 'operation=update' in compact:
-        return 'Actualizar tu hogar netflix'
+        return 'Obtener codigo hogar'
     if 'travel/verify' in compact or 'travel\\/verify' in compact:
-        return 'Actualiza tu viaje netflix'
+        return 'Obtener codigo viaje'
     return None
 
 
 def is_netflix_approve_access_regex(regex_row) -> bool:
     """Solo el regex de aprobar acceso: info@account.netflix.com y el patrón Aprobar [url]."""
-    return netflix_link_action_label(regex_row) == 'Aprobar'
+    sender = str(getattr(regex_row, 'sender', '') or '').lower()
+    pattern = str(getattr(regex_row, 'pattern', '') or '')
+    if 'info@account.netflix.com' not in sender:
+        return False
+    compact = re.sub(r'\s+', '', pattern).lower()
+    approve = re.sub(
+        r'\s+',
+        '',
+        r'(?i)(?:aprobar|approve)\s*\[\s*(https?://[^\]\s]+)\]',
+    ).lower()
+    return compact == approve
+
+
+def link_action_rank(label):
+    """Viaje y hogar ganan. Restablecimiento de contraseña queda de último si hay otro enlace."""
+    text = re.sub(r'\s+', ' ', str(label or '')).casefold()
+    plain = (
+        text
+        .replace('á', 'a')
+        .replace('é', 'e')
+        .replace('í', 'i')
+        .replace('ó', 'o')
+        .replace('ú', 'u')
+    )
+    if 'codigo viaje' in plain or ('viaje' in plain and 'netflix' in plain):
+        return 0
+    if 'codigo hogar' in plain or ('hogar' in plain and 'netflix' in plain):
+        return 1
+    if 'restablece tu contraseña' in text or 'restablecimiento de contraseña' in text:
+        return 80
+    return 40
 
 
 def extract_regex(mail_dict, regexes):

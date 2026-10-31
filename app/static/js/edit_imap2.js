@@ -7,19 +7,22 @@ document.addEventListener("DOMContentLoaded", function() {
   function filterFiltersRegexTableRows() {
     if (!filtersRegexTableBody) return;
     const searchTerm = searchFiltersRegexInput ? searchFiltersRegexInput.value.trim().toLowerCase() : '';
+    let visible = 0;
     filtersRegexTableBody.querySelectorAll('tr').forEach(function (row) {
-      if (!searchTerm) {
-        row.style.display = '';
-        return;
-      }
       const haystack = row.getAttribute('data-search-text') || row.textContent.toLowerCase();
-      row.style.display = haystack.includes(searchTerm) ? '' : 'none';
+      const show = !searchTerm || haystack.includes(searchTerm);
+      row.style.display = show ? '' : 'none';
+      row.classList.remove('consultas-row-white', 'consultas-row-gray');
+      if (!show) return;
+      row.classList.add(visible % 2 === 0 ? 'consultas-row-white' : 'consultas-row-gray');
+      visible += 1;
     });
   }
 
   if (searchFiltersRegexInput) {
     searchFiltersRegexInput.addEventListener('input', filterFiltersRegexTableRows);
   }
+  filterFiltersRegexTableRows();
 
   function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf_token"]');

@@ -342,7 +342,8 @@ def manage_my_page(server_id):
     # Obtener IDs de filtros y regex asociados a este servidor IMAP2
     associated_filter_ids = [f.id for f in imap_server.filters]
     associated_regex_ids = [r.id for r in imap_server.regexes]
-    
+    from app.admin.admin_imap2 import build_imap2_consultas_rows
+
     return render_template(
         "manage_my_page.html",
         imap_server=imap_server,
@@ -351,6 +352,9 @@ def manage_my_page(server_id):
         all_regexes=allowed_regexes,
         associated_filter_ids=associated_filter_ids,
         associated_regex_ids=associated_regex_ids,
+        consultas_rows=build_imap2_consultas_rows(
+            allowed_filters, allowed_regexes, associated_filter_ids, associated_regex_ids
+        ),
         current_user=user,
     )
 

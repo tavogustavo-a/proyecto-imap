@@ -1,0 +1,62 @@
+<div class="card mt-2 filters-regex-section twofa-section-card">
+  <div class="imap2-consultas-wrap">
+    <div class="imap2-consultas-col">
+    <div class="d-flex gap-05 align-items-center mb-1 twofa-compact-row twofa-list-toolbar filters-regex-search-toolbar">
+      <label for="searchFiltersRegexInput" class="sr-only">Buscar consultas</label>
+      <input
+        type="search"
+        id="searchFiltersRegexInput"
+        class="flex-grow-1 twofa-field-control"
+        placeholder="Buscar..."
+        autocomplete="off"
+      >
+    </div>
+    <table class="imap2-filters-regex-table">
+      <thead>
+        <tr>
+          <th>Consultar codigos</th>
+          <th>Activar</th>
+        </tr>
+      </thead>
+      <tbody id="filtersRegexTableBody">
+        {% for item in consultas_rows %}
+          <tr data-search-text="{{ item.description|lower }}">
+            <td>
+              {% if item.kind == 'filter' %}
+                <div class="filter-info">
+                  <div class="filter-description"><strong>{{ item.description }}</strong></div>
+                </div>
+              {% else %}
+                <div class="regex-info">
+                  <div class="regex-description"><strong>{{ item.description }}</strong></div>
+                </div>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if item.kind == 'filter' %}
+                <input
+                  type="checkbox"
+                  class="filter-checkbox"
+                  data-filter-id="{{ item.id }}"
+                  data-server-id="{{ server_id }}"
+                  {% if item.checked %}checked{% endif %}
+                  autocomplete="off"
+                >
+              {% else %}
+                <input
+                  type="checkbox"
+                  class="regex-checkbox"
+                  data-regex-id="{{ item.id }}"
+                  data-server-id="{{ server_id }}"
+                  {% if item.checked %}checked{% endif %}
+                  autocomplete="off"
+                >
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>

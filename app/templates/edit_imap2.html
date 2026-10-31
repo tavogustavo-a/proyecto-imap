@@ -251,83 +251,9 @@
     </div>
   </div>
 
-  <!-- Card separado para Filtros y Expresiones Regulares -->
-  <div class="card mt-2 filters-regex-section twofa-section-card">
-    <h3 class="text-center mb-05">Filtros y Expresiones Regulares</h3>
-    <div class="d-flex gap-05 align-items-center mb-1 twofa-compact-row twofa-list-toolbar filters-regex-search-toolbar">
-      <label for="searchFiltersRegexInput" class="sr-only">Buscar filtros y expresiones regulares</label>
-      <input
-        type="search"
-        id="searchFiltersRegexInput"
-        class="flex-grow-1 twofa-field-control"
-        placeholder="Buscar..."
-        autocomplete="off"
-      >
-    </div>
-    <div class="table-responsive">
-      <table class="imap2-filters-regex-table">
-        <thead>
-          <tr>
-            <th>Filtros</th>
-            <th>Activar</th>
-            <th>Regex</th>
-            <th>Activar</th>
-          </tr>
-        </thead>
-        <tbody id="filtersRegexTableBody">
-          {% set max_rows = [all_filters|length, all_regexes|length]|max %}
-          {% for i in range(max_rows) %}
-            {% set filter_row_desc = (all_filters[i].description if i < all_filters|length else '') or '' %}
-            {% set regex_row_desc = (all_regexes[i].description if i < all_regexes|length else '') or '' %}
-            <tr data-search-text="{{ (filter_row_desc ~ ' ' ~ regex_row_desc)|lower }}">
-              <!-- Columna Filtros -->
-              <td>
-                {% if i < all_filters|length %}
-                  <div class="filter-info">
-                    <div class="filter-description"><strong>{{ all_filters[i].description if all_filters[i].description else 'Sin descripción' }}</strong></div>
-                  </div>
-                {% endif %}
-              </td>
-              <!-- Columna Checkbox Filtros -->
-              <td class="text-center">
-                {% if i < all_filters|length %}
-                  <input
-                    type="checkbox"
-                    class="filter-checkbox"
-                    data-filter-id="{{ all_filters[i].id }}"
-                    data-server-id="{{ srv.id }}"
-                    {% if all_filters[i].id in associated_filter_ids %}checked{% endif %}
-                    autocomplete="off"
-                  >
-                {% endif %}
-              </td>
-              <!-- Columna Regex -->
-              <td>
-                {% if i < all_regexes|length %}
-                  <div class="regex-info">
-                    <div class="regex-description"><strong>{{ all_regexes[i].description if all_regexes[i].description else 'Sin descripción' }}</strong></div>
-                  </div>
-                {% endif %}
-              </td>
-              <!-- Columna Checkbox Regex -->
-              <td class="text-center">
-                {% if i < all_regexes|length %}
-                  <input
-                    type="checkbox"
-                    class="regex-checkbox"
-                    data-regex-id="{{ all_regexes[i].id }}"
-                    data-server-id="{{ srv.id }}"
-                    {% if all_regexes[i].id in associated_regex_ids %}checked{% endif %}
-                    autocomplete="off"
-                  >
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
+  {% with server_id=srv.id %}
+    {% include 'includes/imap2_consultas_table.html' %}
+  {% endwith %}
 
   <!-- Card separado para Gestión de 2FA por Correo (específico para este servidor IMAP2) -->
   <div class="admin-card twofa-section-card mt-2">
@@ -554,7 +480,7 @@
 {% block head %}
 {{ super() }}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/store.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/edit_imap2.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/edit_imap2.css') }}?v=20261031-consultas-search">
 <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/sms.css') }}">
 {% endblock %}
 
@@ -563,7 +489,7 @@
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/edit_imap2.js') }}?v=20261020-filters-regex-search" defer></script>
+<script src="{{ url_for('static', filename='js/edit_imap2.js') }}?v=20261031-consultas-search" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2_twofa.js') }}?v=20261028-qr-app-picker" defer></script>
 <script src="{{ url_for('static', filename='js/edit_imap2_linked.js') }}?v=20261020-imap-user-only" defer></script>
 {% endblock %}

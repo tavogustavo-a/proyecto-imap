@@ -18,7 +18,12 @@ from app.models import (
     service_regex, service_filter,
 )
 from app.imap.advanced_imap import search_in_all_servers
-from app.admin.regex import passes_any_regex, extract_regex, netflix_link_action_label
+from app.admin.regex import (
+    passes_any_regex,
+    extract_regex,
+    netflix_link_action_label,
+    link_action_rank,
+)
 from app.services.sender_list import sender_parts
 from app.extensions import db
 from app.helpers import safe_regex_search
@@ -1292,6 +1297,18 @@ def _process_mails(all_mails, filters, regexes, user_searching, searched_address
                         'id': regex_row.id,
                         'label': action_label,
                     })
+                mail["regex_link_actions"].sort(
+                    key=lambda item: (link_action_rank(item.get('label')), item.get('id') or 0)
+                )
+                if mail["regex_link_actions"]:
+                    preferred_id = mail["regex_link_actions"][0]['id']
+                    matches = mail.get("regex_matches") or {}
+                    if preferred_id in matches:
+                        ordered = {preferred_id: matches[preferred_id]}
+                        for match_id, values in matches.items():
+                            if match_id != preferred_id:
+                                ordered[match_id] = values
+                        mail["regex_matches"] = ordered
             else:
                 mail["regex_matches"] = {}
         else:

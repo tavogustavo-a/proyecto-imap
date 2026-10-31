@@ -130,6 +130,7 @@ html body .site-back-link,
 html body .privacy-page__back,
 html body .privacy-page a,
 html body .twofa-code-value,
+html body .regex-result-code-row .regex-result-code,
 html body .carrito-producto-precio,
 html body .carrito-precio-total {
   color: var(--ui-static-2) !important;
@@ -164,18 +165,28 @@ html body .mobile-menu-store .codigos-sidebar-codigos-row .mobile-menu-btn {
   margin-bottom: 0 !important;
 }
 
-html body .regex-result-approve-btn,
-html body .regex-result-approve-btn:hover,
-html body .regex-result-approve-btn:focus,
-html body .regex-result-approve-btn:active {
-  background: #e11d2e !important;
-  border-color: #e11d2e !important;
+html body .regex-result-container button.regex-result-approve-btn,
+html body .regex-result-container button.regex-result-approve-btn:hover,
+html body .regex-result-container button.regex-result-approve-btn:focus,
+html body .regex-result-container button.regex-result-approve-btn:active {
+  background: linear-gradient(180deg, #ff4d5c 0%, #e11d2e 58%, #c41020 100%) !important;
+  border: none !important;
+  outline: none !important;
   color: #fff !important;
+  transition: none !important;
+  transform: none !important;
+  box-shadow: 0 8px 16px rgba(225, 29, 46, 0.22) !important;
 }
 
-html body .regex-result-approve-btn:hover,
-html body .regex-result-approve-btn:focus,
-html body .regex-result-approve-btn:active {
-  background: #b91022 !important;
-  border-color: #b91022 !important;
+html body .regex-result-container .regex-result-copy-btn,
+html body .regex-result-container .regex-result-copy-btn:hover,
+html body .regex-result-container .regex-result-copy-btn:active,
+html body .regex-result-container .regex-result-copy-btn:focus,
+html body .regex-result-container .regex-result-copy-btn.copied-state {
+  border: none !important;
+  outline: none !important;
+  transition: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+  background: var(--ui-static-bg) !important;
 }
