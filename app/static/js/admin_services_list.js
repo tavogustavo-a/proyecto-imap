@@ -53,6 +53,9 @@ document.addEventListener("DOMContentLoaded", function() {
   let allFilterOptions = [];
   let selectedRegexIdsPending = new Set();
   let selectedFilterIdsPending = new Set();
+  let lockedRegexIds = new Set();
+  let lockedFilterIds = new Set();
+  let servicesById = new Map();
 
   function renderRegexSelectList() {
     if (!regexSelectList) return;
@@ -70,8 +73,13 @@ document.addEventListener("DOMContentLoaded", function() {
       btn.textContent = rx.description || "(sin descripción)";
       btn.setAttribute("role", "option");
       const selected = selectedRegexIdsPending.has(rx.id);
+      const locked = lockedRegexIds.has(rx.id);
       btn.setAttribute("aria-selected", selected ? "true" : "false");
       if (selected) btn.classList.add("is-selected");
+      if (locked) {
+        btn.classList.add("is-locked");
+        btn.title = "Ya vinculado. Solo se quita desde Editar.";
+      }
       regexSelectList.appendChild(btn);
     });
   }
@@ -92,8 +100,13 @@ document.addEventListener("DOMContentLoaded", function() {
       btn.textContent = ft.description || "(sin descripción)";
       btn.setAttribute("role", "option");
       const selected = selectedFilterIdsPending.has(ft.id);
+      const locked = lockedFilterIds.has(ft.id);
       btn.setAttribute("aria-selected", selected ? "true" : "false");
       if (selected) btn.classList.add("is-selected");
+      if (locked) {
+        btn.classList.add("is-locked");
+        btn.title = "Ya vinculado. Solo se quita desde Editar.";
+      }
       filterSelectList.appendChild(btn);
     });
   }
@@ -572,6 +585,7 @@ document.addEventListener("DOMContentLoaded", function() {
       e.stopPropagation();
       const id = parseInt(item.dataset.id, 10);
       if (Number.isNaN(id)) return;
+      if (lockedRegexIds.has(id)) return;
       if (selectedRegexIdsPending.has(id)) selectedRegexIdsPending.delete(id);
       else selectedRegexIdsPending.add(id);
       renderRegexSelectList();
@@ -585,6 +599,7 @@ document.addEventListener("DOMContentLoaded", function() {
       e.stopPropagation();
       const id = parseInt(item.dataset.id, 10);
       if (Number.isNaN(id)) return;
+      if (lockedFilterIds.has(id)) return;
       if (selectedFilterIdsPending.has(id)) selectedFilterIdsPending.delete(id);
       else selectedFilterIdsPending.add(id);
       renderFilterSelectList();
@@ -620,6 +635,7 @@ document.addEventListener("DOMContentLoaded", function() {
           popupRegex.classList.add("modal-hidden");
           currentServiceIdForRegex=null;
           selectedRegexIdsPending = new Set();
+          lockedRegexIds = new Set();
           initServicesList();
         } else {
           alert("Error: " + data.message);
@@ -632,6 +648,7 @@ document.addEventListener("DOMContentLoaded", function() {
       popupRegex.classList.add("modal-hidden");
       currentServiceIdForRegex=null;
       selectedRegexIdsPending = new Set();
+      lockedRegexIds = new Set();
     });
   }
 
@@ -664,6 +681,7 @@ document.addEventListener("DOMContentLoaded", function() {
           popupFilter.classList.add("modal-hidden");
           currentServiceIdForFilter=null;
           selectedFilterIdsPending = new Set();
+          lockedFilterIds = new Set();
           initServicesList();
         } else {
           alert("Error: " + data.message);
@@ -676,6 +694,7 @@ document.addEventListener("DOMContentLoaded", function() {
       popupFilter.classList.add("modal-hidden");
       currentServiceIdForFilter=null;
       selectedFilterIdsPending = new Set();
+      lockedFilterIds = new Set();
     });
   }
 
@@ -725,7 +744,9 @@ document.addEventListener("DOMContentLoaded", function() {
     if(target.classList.contains("link-regex-service")){
       e.preventDefault();
       currentServiceIdForRegex = target.getAttribute("data-id");
-      selectedRegexIdsPending = new Set();
+      const linkedRegex = linkedIdsForService(currentServiceIdForRegex, "regex_ids");
+      lockedRegexIds = linkedRegex;
+      selectedRegexIdsPending = new Set(linkedRegex);
       renderRegexSelectList();
       popupRegex.classList.remove("modal-hidden");
       popupRegex.classList.add("modal-visible");
@@ -733,7 +754,9 @@ document.addEventListener("DOMContentLoaded", function() {
     if(target.classList.contains("link-filter-service")){
       e.preventDefault();
       currentServiceIdForFilter = target.getAttribute("data-id");
-      selectedFilterIdsPending = new Set();
+      const linkedFilters = linkedIdsForService(currentServiceIdForFilter, "filter_ids");
+      lockedFilterIds = linkedFilters;
+      selectedFilterIdsPending = new Set(linkedFilters);
       renderFilterSelectList();
       popupFilter.classList.remove("modal-hidden");
       popupFilter.classList.add("modal-visible");
@@ -779,6 +802,7 @@ document.addEventListener("DOMContentLoaded", function() {
       popupRegex.classList.add("modal-hidden");
       currentServiceIdForRegex = null;
       selectedRegexIdsPending = new Set();
+      lockedRegexIds = new Set();
     }
     // Filtro
     if (popupFilter && popupFilter.classList.contains('modal-visible') && !popupFilter.contains(event.target) && !event.target.classList.contains('link-filter-service')) {
@@ -786,6 +810,7 @@ document.addEventListener("DOMContentLoaded", function() {
       popupFilter.classList.add("modal-hidden");
       currentServiceIdForFilter = null;
       selectedFilterIdsPending = new Set();
+      lockedFilterIds = new Set();
     }
     // Iconos
     const iconGridContainer = document.getElementById('iconGridContainer');
@@ -1033,7 +1058,19 @@ document.addEventListener("DOMContentLoaded", function() {
     return Boolean(service && service.service_icons && service.service_icons.length >= 1);
   }
 
+  function linkedIdsForService(serviceId, key) {
+    const svc = servicesById.get(String(serviceId));
+    const raw = svc && Array.isArray(svc[key]) ? svc[key] : [];
+    const ids = new Set();
+    raw.forEach((value) => {
+      const id = parseInt(value, 10);
+      if (!Number.isNaN(id)) ids.add(id);
+    });
+    return ids;
+  }
+
   function renderServiceItems(services){
+    servicesById = new Map((services || []).map((s) => [String(s.id), s]));
     let html = "";
     let popupsHtml = "";
 

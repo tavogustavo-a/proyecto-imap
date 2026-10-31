@@ -48,7 +48,9 @@ def search_services_ajax():
     query = request.args.get("query", "").strip().lower()
     srv_q = ServiceModel.query.options(
         selectinload(ServiceModel.aliases).selectinload(ServiceAlias.alias_icons),
-        selectinload(ServiceModel.service_icons)
+        selectinload(ServiceModel.service_icons),
+        selectinload(ServiceModel.regexes),
+        selectinload(ServiceModel.filters),
     )
     if query:
         srv_q = srv_q.filter(ServiceModel.name.ilike(f"%{query}%"))
@@ -88,7 +90,9 @@ def search_services_ajax():
             "protected": s.protected,
             "visibility_mode": s.visibility_mode,
             "service_icons": service_icons_data,
-            "aliases": alias_list
+            "aliases": alias_list,
+            "regex_ids": [r.id for r in s.regexes],
+            "filter_ids": [f.id for f in s.filters],
         })
 
     return jsonify({"status": "ok", "services": data}), 200
@@ -180,7 +184,12 @@ def delete_service_ajax():
         return jsonify({"status": "error", "message": str(e)}), 400
 
 def _refresh_services():
-    all_srv = ServiceModel.query.order_by(ServiceModel.id.desc()).all()
+    all_srv = ServiceModel.query.options(
+        selectinload(ServiceModel.aliases).selectinload(ServiceAlias.alias_icons),
+        selectinload(ServiceModel.service_icons),
+        selectinload(ServiceModel.regexes),
+        selectinload(ServiceModel.filters),
+    ).order_by(ServiceModel.id.desc()).all()
     output = []
     for s in all_srv:
         alias_list = []
@@ -215,7 +224,9 @@ def _refresh_services():
             "protected": s.protected,
             "visibility_mode": s.visibility_mode,
             "service_icons": service_icons_data,
-            "aliases": alias_list
+            "aliases": alias_list,
+            "regex_ids": [r.id for r in s.regexes],
+            "filter_ids": [f.id for f in s.filters],
         })
     return jsonify({"status": "ok", "services": output})
 

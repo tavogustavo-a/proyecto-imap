@@ -141,7 +141,6 @@ DEFAULT_IMAP2_REGEX_DESCRIPTIONS = (
     "codigo disney hogar",
     "codigo netflix hogar",
     "codigo netflix viaje",
-    "codigo viaje y sesion disney",
     "confirma tu nuevo inicio de sesion en crunchyroll",
 )
 

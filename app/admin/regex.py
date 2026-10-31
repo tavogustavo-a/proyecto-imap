@@ -86,6 +86,10 @@ def netflix_link_action_label(regex_row):
     )
     if 'iniciar sesion vix' in description_plain:
         return 'Iniciar sesion vix'
+    if 'confirma tu nuevo inicio de sesion en crunchyroll' in description_plain:
+        return 'Confirmar la sesion crunchyroll'
+    if 'ingresar con link ha spotify' in description_plain:
+        return 'Ingresa la sesion spotify'
     sender = str(getattr(regex_row, 'sender', '') or '').lower()
     pattern = str(getattr(regex_row, 'pattern', '') or '')
     if 'info@account.netflix.com' not in sender:

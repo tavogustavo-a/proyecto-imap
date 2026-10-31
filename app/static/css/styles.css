@@ -4427,6 +4427,11 @@ body #popupFilter.popup-base.popup-small {
   color: #fff !important;
 }
 
+.service-link-popup-list-item.is-locked,
+.service-link-popup-list-item.is-locked:hover {
+  cursor: default;
+}
+
 .service-link-popup-list-empty {
   text-align: center;
   color: #666;
