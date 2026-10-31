@@ -111,14 +111,14 @@ def parse_raw_email(raw_bytes):
                 try:
                     raw_payload = part.get_payload(decode=True) or b""
                     decoded_str = safe_decode(raw_payload)
-                    cte = (part.get("Content-Transfer-Encoding") or "").lower()
-                    if "quoted-printable" in cte or "=3d" in decoded_str.lower():
+                    # get_payload(decode=True) ya aplicó quoted-printable.
+                    # Volver a decodificar rompe los '=' del enlace (=8d pasa a un carácter).
+                    if "=3d" in decoded_str.lower():
                         try:
                             decoded_str = quopri.decodestring(
                                 decoded_str.encode("utf-8", errors="replace")
                             ).decode("utf-8", errors="replace")
-                        except:
-                            # Si falla quopri, mantener el string original
+                        except Exception:
                             pass
                     text_part += decoded_str
                 except Exception:
@@ -138,14 +138,12 @@ def parse_raw_email(raw_bytes):
             try:
                 raw_payload = msg.get_payload(decode=True) or b""
                 decoded_str = safe_decode(raw_payload)
-                cte = (msg.get("Content-Transfer-Encoding") or "").lower()
-                if "quoted-printable" in cte or "=3d" in decoded_str.lower():
+                if "=3d" in decoded_str.lower():
                     try:
                         decoded_str = quopri.decodestring(
                             decoded_str.encode("utf-8", errors="replace")
                         ).decode("utf-8", errors="replace")
-                    except:
-                        # Si falla quopri, mantener el string original
+                    except Exception:
                         pass
                 text_part = decoded_str.strip()
             except Exception:
