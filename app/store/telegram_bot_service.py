@@ -1604,6 +1604,35 @@ def _html_text(value: str) -> str:
     )
 
 
+def _guest_paragraph_plain() -> str:
+    """Párrafo 1 de no registrados, solo si está prendido. Telegram no pinta ese HTML."""
+    try:
+        from bs4 import BeautifulSoup
+        from app.admin.site_settings import get_site_setting
+    except Exception:
+        return ''
+    mode = (get_site_setting('search_message_mode', 'off') or 'off').strip().lower()
+    if mode != 'guests':
+        return ''
+    html = get_site_setting('search_message', '') or ''
+    if not str(html).strip():
+        return ''
+    soup = BeautifulSoup(str(html), 'html.parser')
+    for tag in soup.find_all(['script', 'style']):
+        tag.decompose()
+    for br in soup.find_all('br'):
+        br.replace_with('\n')
+    for tag in soup.find_all(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'li', 'tr']):
+        tag.append('\n')
+    text = soup.get_text('', strip=False)
+    lines = []
+    for line in text.splitlines():
+        clean = re.sub(r'[ \t]+', ' ', line).strip()
+        if clean:
+            lines.append(clean)
+    return '\n'.join(lines)[:1800]
+
+
 def _centered_menu_html(include_ad: bool, chat_id=None, code_services: list | None = None) -> str:
     del code_services
     chunks: list[str] = []
@@ -1615,9 +1644,15 @@ def _centered_menu_html(include_ad: bool, chat_id=None, code_services: list | No
             chunks.extend(_rich_button_rows(batch))
             batch.clear()
 
-    for item in _visible_menu_entries(include_ad, _enabled_user_for_chat(chat_id)):
+    user = _enabled_user_for_chat(chat_id)
+    for item in _visible_menu_entries(include_ad, user):
         data = item['key']
         name = item['label'][:64]
+        if user is None and data == 'guest':
+            flush()
+            paragraph = _guest_paragraph_plain()
+            if paragraph:
+                chunks.append(_rich_center_html(_html_text(paragraph).replace('\n', '<br>')))
         if data.startswith('svc:') and not codes_title_added:
             flush()
             chunks.append(_rich_title(_CODES_SECTION_TITLE))
@@ -3481,8 +3516,7 @@ def _lookup_guest_mail(email: str):
 
 
 def _begin_guest_search(token: str, chat_id) -> None:
-    _send_guest_page(token, chat_id)
-    sent = _send_text(token, chat_id, 'Consultar correo', reply_markup={
+    sent = _send_text(token, chat_id, 'Escribe el correo.', reply_markup={
         'force_reply': True,
         'input_field_placeholder': _CODE_FIELD,
         'selective': True,
