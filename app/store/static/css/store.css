@@ -24633,6 +24633,7 @@ body.shared-mode .connection-logs-btn {
   min-width: 0;
   margin: 0;
   box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.22) !important;
 }
 
 #drive-edit-form > .mb-1 > .form-text {

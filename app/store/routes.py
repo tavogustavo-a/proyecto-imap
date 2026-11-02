@@ -15523,6 +15523,11 @@ def _drive_telegram_config_from_request(data) -> tuple[str | None, str | None, s
         if topic_err:
             return None, None, topic_err
         topic_id = normalized_topic or None
+    if group_raw:
+        from app.store.telegram_bot_service import verify_telegram_group_and_topic
+        exists_err = verify_telegram_group_and_topic(group_raw, topic_id)
+        if exists_err:
+            return None, None, exists_err
     return group_raw or None, topic_id, None
 
 

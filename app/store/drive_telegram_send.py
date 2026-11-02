@@ -116,6 +116,12 @@ def _targets(transfer, probe_telegram_chat, validate_chat_id, telegram_digest_re
     if not probe.get('connected'):
         problems.append(_problem('', 'grupo', probe.get('message') or 'El bot no puede escribir en el grupo.'))
         return targets, problems
+    if topic_id:
+        from app.store.telegram_bot_service import verify_telegram_group_and_topic
+        topic_err = verify_telegram_group_and_topic(chat_id, topic_id)
+        if topic_err:
+            problems.append(_problem('', 'tema', topic_err))
+            return targets, problems
     label = 'tema' if topic_id else 'grupo'
     targets.append({
         'chat_id': chat_id,

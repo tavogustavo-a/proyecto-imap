@@ -947,12 +947,20 @@ def humanize_telegram_chat_error(description: str | None) -> str:
         return 'Telegram no reconoce el token del bot.'
     if 'blocked by the user' in low:
         return 'La persona bloqueó el bot.'
-    if 'user is deactivated' in low or 'deactivated' in low:
+    if 'user is deactivated' in low:
         return 'La cuenta de Telegram está desactivada.'
+    if 'deactivated' in low or 'upgraded to a supergroup' in low:
+        return 'Ese grupo ya no existe o fue convertido.'
     if 'initiate conversation' in low:
         return 'La persona no autorizó el bot. Tiene que abrirlo y pulsar Iniciar.'
-    if 'chat not found' in low or 'peer_id_invalid' in low:
-        return 'Ese ID no existe o la persona no ha abierto el bot.'
+    if 'chat not found' in low or 'peer_id_invalid' in low or 'kicked' in low or 'not a member' in low:
+        return 'Ese grupo no existe o el bot no está dentro.'
+    if 'message thread not found' in low or 'thread not found' in low:
+        return 'Ese tema no existe en el grupo.'
+    if 'not a forum' in low:
+        return 'Ese grupo no tiene temas. El número del tema no aplica.'
+    if 'not enough rights' in low or 'have no rights' in low or 'need administrator' in low:
+        return 'El bot no puede escribir en el grupo o en el tema.'
     if 'chat_id' in low:
         return 'El ID no es válido.'
     return 'Telegram rechazó el ID.'
@@ -1001,6 +1009,42 @@ def probe_telegram_chat(chat_id_raw: str | None) -> dict:
     if result.get('ok'):
         return {'connected': True, 'message': 'Hay conexión. El bot reconoce este ID.'}
     return {'connected': False, 'message': humanize_telegram_chat_error(result.get('description'))}
+
+
+def verify_telegram_group_and_topic(group_raw: str | None, topic_raw: str | None) -> str | None:
+    """None si el grupo (y el tema, si viene) existen y el bot puede escribir. Si no, el motivo."""
+    group_id = (group_raw or '').strip()
+    topic_id = (topic_raw or '').strip()
+    if not group_id and not topic_id:
+        return None
+    if topic_id and not group_id:
+        return 'Para un tema de foro hace falta también el ID del grupo (-100…).'
+    chat_id, err = validate_chat_id(group_id)
+    if err:
+        return 'El grupo de Telegram debe ser un ID numérico, por ejemplo -1001234567890.'
+    if topic_id:
+        topic_id, topic_err = validate_topic_id(topic_id)
+        if topic_err:
+            return topic_err
+    token = _saved_bot_token()
+    if not token:
+        return 'El bot no está conectado. Guardá el nombre y el token en Datos BotFather para comprobar el grupo.'
+    chat = _telegram_call(token, 'getChat', {'chat_id': chat_id})
+    if not chat.get('ok'):
+        return humanize_telegram_chat_error(chat.get('description'))
+    info = chat.get('result') if isinstance(chat.get('result'), dict) else {}
+    if not topic_id:
+        return None
+    if not info.get('is_forum'):
+        return 'Ese grupo no tiene temas. El número del tema no aplica.'
+    probe = _telegram_call(token, 'sendChatAction', {
+        'chat_id': chat_id,
+        'message_thread_id': int(topic_id),
+        'action': 'typing',
+    })
+    if probe.get('ok'):
+        return None
+    return humanize_telegram_chat_error(probe.get('description'))
 
 
 def send_telegram_test(chat_id_raw: str | None) -> dict:
@@ -1396,7 +1440,19 @@ def update_menu_button(key: str, enabled=None, label=None) -> list:
 
 
 def _visible_menu_entries(include_ad: bool, user=None) -> list:
-    """Botones encendidos. Publicidad solo si el chat tiene acceso; el sub-usuario ve solo lo permitido."""
+    """Botones encendidos. Sin usuario ligado: solo el ID y Consultar correo."""
+    if user is None:
+        visible = []
+        for item in menu_button_catalog():
+            if item['key'] == 'id' and item['enabled']:
+                visible.append(item)
+        visible.append({
+            'key': 'guest',
+            'label': 'Consultar correo',
+            'default_label': 'Consultar correo',
+            'enabled': True,
+        })
+        return visible
     visible = []
     for item in menu_button_catalog():
         if not item['enabled']:
@@ -3360,8 +3416,117 @@ def _send_code_items(token: str, chat_id, items: list) -> None:
         _send_text(token, chat_id, text, markup)
 
 
+def _public_page_preview() -> dict:
+    """Texto e imágenes de la página pública (párrafo de la segunda página o el de la portada)."""
+    from bs4 import BeautifulSoup
+
+    from app.models.imap2 import IMAPServer2
+
+    chosen = None
+    html = ''
+    try:
+        rows = IMAPServer2.query.order_by(IMAPServer2.id.asc()).all()
+    except Exception:
+        rows = []
+    for row in rows:
+        if (getattr(row, 'custom_domain', None) or '').strip() and (row.paragraph or '').strip():
+            chosen = row
+            break
+    if chosen is None:
+        for row in rows:
+            if (row.paragraph or '').strip():
+                chosen = row
+                break
+    if chosen is not None:
+        html = (chosen.paragraph or '').strip()
+    if not html:
+        try:
+            from app.admin.site_settings import get_site_setting
+            html = get_site_setting('search_message', '') or ''
+        except Exception:
+            html = ''
+    soup = BeautifulSoup(html or '', 'html.parser')
+    for tag in soup.find_all(['script', 'style']):
+        tag.decompose()
+    text = soup.get_text('\n', strip=True)
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+    return {
+        'text': text[:3500],
+        'imap2_id': int(chosen.id) if chosen is not None and chosen.id else None,
+    }
+
+
+def _send_guest_page(token: str, chat_id) -> None:
+    page = _public_page_preview()
+    if page['text']:
+        _send_text(token, chat_id, page['text'])
+
+
+def _lookup_guest_mail(email: str):
+    from app.services.search_service import search_and_apply_filters, search_imap2_server_dynamic
+
+    page = _public_page_preview()
+    imap2_id = page.get('imap2_id')
+    if imap2_id:
+        mail = search_imap2_server_dynamic(email, imap2_id, user=None)
+        if mail:
+            return _items_from_mail(mail)
+    for service in _code_services_for_menu():
+        mail = search_and_apply_filters(
+            email, service['id'], user=None, public_access=True,
+        )
+        if mail:
+            return _items_from_mail(mail)
+    return []
+
+
+def _begin_guest_search(token: str, chat_id) -> None:
+    _send_guest_page(token, chat_id)
+    sent = _send_text(token, chat_id, 'Consultar correo', reply_markup={
+        'force_reply': True,
+        'input_field_placeholder': _CODE_FIELD,
+        'selective': True,
+    })
+    if not sent.get('ok'):
+        sent = _send_text(token, chat_id, 'Escribe el correo.', reply_markup={'force_reply': True})
+    if not sent.get('ok'):
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
+    result = sent.get('result') if isinstance(sent.get('result'), dict) else {}
+    prompt_id = result.get('message_id')
+    with _pending_code_lock:
+        previous = _pending_code_search.get(str(chat_id))
+        _pending_code_search[str(chat_id)] = {
+            'service_id': 0,
+            'guest': True,
+            'prompt_id': prompt_id,
+        }
+    if isinstance(previous, dict) and previous.get('prompt_id') and previous.get('prompt_id') != prompt_id:
+        _telegram_call(token, 'deleteMessage', {
+            'chat_id': chat_id,
+            'message_id': previous['prompt_id'],
+        })
+
+
 def _run_code_search(token: str, chat_id, service_id: int, email: str, prompt_id=None) -> None:
     """Busca códigos con el correo guardado o recién escrito."""
+    if int(service_id or 0) == 0:
+        if prompt_id:
+            _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': prompt_id})
+        _delete_previous_menus(token, chat_id)
+        try:
+            items = _lookup_guest_mail(email)
+        except Exception:
+            db.session.rollback()
+            logger.exception('telegram guest search')
+            items = []
+        if items:
+            _send_code_items(token, chat_id, items)
+        else:
+            _send_centered_notice(token, chat_id, 'No se encontraron resultados.')
+            return
+        _send_with_menu(token, chat_id, 'Elige una opción:')
+        return
     user = _enabled_user_for_chat(chat_id)
     service = _code_service_by_id(int(service_id))
     if user is None or service is None:
@@ -3489,7 +3654,7 @@ def _handle_menu_callback(token: str, callback: dict) -> None:
 
 
 def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
-    known = ('start', 'id', 'prices', 'codes', 'pantallas', 'pagos', 'trabajo', 'ad')
+    known = ('start', 'id', 'prices', 'codes', 'pantallas', 'pagos', 'trabajo', 'ad', 'guest')
     raw = str(text or '')
     action = text if text in known or raw.startswith('svc:') or raw.startswith('html:') else _menu_action(text)
     if not action:
@@ -3504,6 +3669,17 @@ def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
         return 'sent'
     if not _menu_key_enabled(action):
         return 'skip'
+    if action == 'guest':
+        try:
+            _begin_guest_search(token, chat_id)
+        except Exception:
+            logger.exception('telegram guest search')
+            _telegram_call(
+                token,
+                'sendMessage',
+                {'chat_id': chat_id, 'text': 'No se pudo completar esa opción. Intentalo de nuevo.'},
+            )
+        return 'sent'
     if str(action).startswith('svc:'):
         try:
             _begin_code_service_search(token, chat_id, int(str(action).split(':', 1)[1]))
