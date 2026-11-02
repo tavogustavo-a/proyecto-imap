@@ -3398,7 +3398,7 @@ def _lookup_code(user, service: dict, email: str):
     return '', items
 
 
-def _items_rich_html(items: list) -> str:
+def _items_rich_html(items: list, *, copy_long_links: bool = True) -> str:
     """Códigos, fecha y 2FA centrados. El secreto no sale en el mensaje."""
     import pyotp
 
@@ -3416,9 +3416,9 @@ def _items_rich_html(items: list) -> str:
         link = item.get('link') or ''
         is_link = bool(link)
         if is_link:
-            block = ''
+            block = f'<p>{_html_text(link)}</p>'
             buttons = f'<tg-button type="url" url="{_html_text(link)}">Abrir enlace</tg-button>'
-            if len(link) <= 256:
+            if copy_long_links or len(link) <= 256:
                 buttons += f'<tg-button type="copy_text" text="{_html_text(link)}">Copiar</tg-button>'
             block += f'<tg-button-row align="center">{buttons}</tg-button-row>'
         else:
@@ -3469,12 +3469,20 @@ def _start_twofa_ticker(token: str, chat_id, message_id, items: list) -> None:
 
 
 def _send_code_items(token: str, chat_id, items: list) -> None:
-    """Resultados de códigos: valor, Copiar y fecha centrados."""
+    """Resultados de códigos: valor, Copiar y fecha centrados. Los enlaces se ven completos."""
     html = _items_rich_html(items)
     sent = _telegram_call(token, 'sendRichMessage', {
         'chat_id': chat_id,
         'rich_message': {'html': html, 'skip_entity_detection': True},
+        'link_preview_options': {'is_disabled': True},
     })
+    if not sent.get('ok'):
+        html = _items_rich_html(items, copy_long_links=False)
+        sent = _telegram_call(token, 'sendRichMessage', {
+            'chat_id': chat_id,
+            'rich_message': {'html': html, 'skip_entity_detection': True},
+            'link_preview_options': {'is_disabled': True},
+        })
     if sent.get('ok'):
         result = sent.get('result') if isinstance(sent.get('result'), dict) else {}
         _start_twofa_ticker(token, chat_id, result.get('message_id'), items)
@@ -3482,23 +3490,17 @@ def _send_code_items(token: str, chat_id, items: list) -> None:
     for item in items:
         code = item['code']
         link = item.get('link') or ''
-        text = ''
+        text = link or code
         if item.get('date'):
-            text = f"Fecha: {item['date']}"
-        if not link:
-            text = code + (f"\n{text}" if text else '')
-        elif len(link) > 256:
-            text = link + (f"\n{text}" if text else '')
-        markup = None
+            text += f"\nFecha: {item['date']}"
         row = []
         if link and len(link) <= 2000:
             row.append({'text': 'Abrir enlace', 'url': link})
         copy_value = link or code
         if len(copy_value) <= 256:
             row.append({'text': 'Copiar', 'copy_text': {'text': copy_value}})
-        if row:
-            markup = {'inline_keyboard': [row]}
-        _send_text(token, chat_id, text or 'Enlace', markup)
+        markup = {'inline_keyboard': [row]} if row else None
+        _send_text(token, chat_id, text, markup)
 
 
 def _public_page_preview() -> dict:
