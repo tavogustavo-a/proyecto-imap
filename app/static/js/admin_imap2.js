@@ -94,8 +94,12 @@ document.addEventListener("DOMContentLoaded", function() {
         routeSpan.className = "imap-admin-row__route";
         const routeEm = document.createElement("em");
         routeEm.textContent = "ruta:";
+        const routeLink = document.createElement("a");
+        routeLink.className = "imap-admin-row__route-link";
+        routeLink.href = s.route_path;
+        routeLink.textContent = s.route_path;
         routeSpan.appendChild(routeEm);
-        routeSpan.appendChild(document.createTextNode(s.route_path));
+        routeSpan.appendChild(routeLink);
         meta.appendChild(routeSpan);
       }
       if (s.custom_domain) {
@@ -151,8 +155,8 @@ document.addEventListener("DOMContentLoaded", function() {
       actionsDiv.appendChild(toggleBtn);
 
       // Botón Editar
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
+      const editBtn = document.createElement("a");
+      editBtn.href = `/admin/edit_imap2/${s.id}`;
       editBtn.className = "btn-orange ml-03 edit-imap2-btn row-icon-btn";
       editBtn.setAttribute("data-url", `/admin/edit_imap2/${s.id}`);
       editBtn.title = "Editar";

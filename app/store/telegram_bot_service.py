@@ -41,6 +41,8 @@ _code_email_lock = threading.Lock()
 _last_menu_message = {}
 _menu_message_ids = {}
 _menu_message_lock = threading.Lock()
+_last_start_command = {}
+_last_start_lock = threading.Lock()
 _twofa_watch = {}
 _twofa_watch_lock = threading.Lock()
 
@@ -1642,6 +1644,18 @@ def _send_start_menu(token: str, chat_id) -> None:
     _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
+def _keep_only_latest_start(token: str, chat_id, message_id) -> None:
+    """Si /start se envía otra vez, borra el anterior y deja solo el último."""
+    if not message_id:
+        return
+    key = str(chat_id)
+    with _last_start_lock:
+        previous = _last_start_command.get(key)
+        _last_start_command[key] = message_id
+    if previous and previous != message_id:
+        _telegram_call(token, 'deleteMessage', {'chat_id': chat_id, 'message_id': previous})
+
+
 def _send_centered_notice(token: str, chat_id, text: str, *, error: bool | None = None) -> None:
     """Aviso corto centrado, igual que el título del menú."""
     notice = (text or '').strip() or 'Sin datos.'
@@ -1654,6 +1668,7 @@ def _send_centered_notice(token: str, chat_id, text: str, *, error: bool | None 
     if not sent.get('ok'):
         prefix = '⛔ ' if is_error else ''
         _send_text(token, chat_id, prefix + notice)
+    _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
 def _send_long_text(token: str, chat_id, text: str) -> None:
@@ -3368,7 +3383,6 @@ def _run_code_search(token: str, chat_id, service_id: int, email: str, prompt_id
         _send_with_menu(token, chat_id, 'Elige una opción:')
         return
     _send_centered_notice(token, chat_id, message or 'No se encontraron resultados.')
-    _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
 def _begin_code_service_search(token: str, chat_id, service_id: int) -> None:
@@ -3515,7 +3529,7 @@ def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
                 {'chat_id': chat_id, 'text': 'No se pudo completar esa opción. Intentalo de nuevo.'},
             )
         return 'sent'
-    if _button_sent_recently(chat_id, action):
+    if action != 'start' and _button_sent_recently(chat_id, action):
         return 'repeat'
     try:
         if action == 'start':
@@ -3608,6 +3622,8 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
             continue
         if _menu_action(text):
             _drop_pending_code_prompt(token, chat_id)
+            if _menu_action(text) == 'start':
+                _keep_only_latest_start(token, chat_id, msg.get('message_id'))
             _dispatch_private_menu(token, chat_id, text)
             continue
         pending_text = text.strip()

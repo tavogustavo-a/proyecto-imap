@@ -3646,7 +3646,8 @@ body .edit-service-page #aliasPopup {
   margin-top: 0;
 }
 
-.regex-result-container .regex-result-actions button {
+.regex-result-container .regex-result-actions button,
+.regex-result-container .regex-result-actions a {
   margin: 0 !important;
 }
 
@@ -3661,11 +3662,12 @@ body .edit-service-page #aliasPopup {
   margin-bottom: 0;
 }
 
-.regex-result-container button.regex-result-approve-btn {
+.regex-result-container a.regex-result-approve-btn {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+  text-decoration: none !important;
   width: auto !important;
   min-width: 0 !important;
   max-width: calc(100% - 4.4rem) !important;
@@ -3692,9 +3694,9 @@ body .edit-service-page #aliasPopup {
   box-shadow: 0 8px 16px rgba(225, 29, 46, 0.22) !important;
 }
 
-.regex-result-container button.regex-result-approve-btn:hover,
-.regex-result-container button.regex-result-approve-btn:focus,
-.regex-result-container button.regex-result-approve-btn:active {
+.regex-result-container a.regex-result-approve-btn:hover,
+.regex-result-container a.regex-result-approve-btn:focus,
+.regex-result-container a.regex-result-approve-btn:active {
   background: linear-gradient(180deg, #ff4d5c 0%, #e11d2e 58%, #c41020 100%) !important;
   border: none !important;
   outline: none !important;
@@ -3705,7 +3707,7 @@ body .edit-service-page #aliasPopup {
 }
 
 @media (max-width: 600px) {
-  .regex-result-container button.regex-result-approve-btn {
+  .regex-result-container a.regex-result-approve-btn {
     max-width: calc(100% - 4.2rem) !important;
     white-space: nowrap;
     font-size: 0.76rem !important;
@@ -5961,9 +5963,14 @@ button.btn-blue.row-test-btn.is-testing:hover,
   max-width: 100%;
 }
 
-a.imap-admin-row__email {
+a.imap-admin-row__email,
+a.imap-admin-row__route-link {
   color: inherit;
   text-decoration: none;
+}
+
+a.imap-admin-row__route-link:hover {
+  text-decoration: underline;
 }
 
 .imap-admin-row__folders,
@@ -5985,6 +5992,7 @@ a.imap-admin-row__email {
 
 .imap-admin-row__actions > form,
 .imap-admin-row__actions > button,
+.imap-admin-row__actions > a,
 .imap-admin-row__actions > form > button,
 .imap-admin-row__actions .btn-imap-small,
 .imap-admin-row__actions .ml-03 {

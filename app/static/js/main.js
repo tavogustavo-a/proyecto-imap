@@ -1110,9 +1110,12 @@ document.addEventListener("DOMContentLoaded", function () {
       copyIcon.className = 'fas fa-copy regex-btn-icon';
       copyIcon.setAttribute('aria-hidden', 'true');
       copyButton.appendChild(copyIcon);
-      const approveButton = document.createElement('button');
+      const approveButton = document.createElement('a');
       approveButton.classList.add('btn', 'btn-search', 'btn-rounded', 'regex-result-approve-btn');
       approveButton.id = 'openLinkBtn';
+      approveButton.href = codeStr;
+      approveButton.target = '_blank';
+      approveButton.rel = 'noopener noreferrer';
       approveButton.setAttribute('data-link', codeStr);
       fillButtonLabel(approveButton, approveLabel, redActionIcon(approveLabel));
       buttonsContainer.appendChild(approveButton);
@@ -1238,9 +1241,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const openLinkBtn = document.getElementById("openLinkBtn");
     if (openLinkBtn) {
-      openLinkBtn.addEventListener("click", function() {
-        const link = openLinkBtn.getAttribute("data-link");
-        if (link) {
+      openLinkBtn.addEventListener("click", function(e) {
+        const link = openLinkBtn.getAttribute("data-link") || openLinkBtn.getAttribute("href");
+        const native = (window.NativeAppBridge && typeof NativeAppBridge.openExternal === "function")
+          || (window.AndroidAppBridge && typeof AndroidAppBridge.openExternal === "function");
+        if (native && link) {
+          e.preventDefault();
           openExternalLink(link);
         }
       });

@@ -120,8 +120,8 @@ document.addEventListener("DOMContentLoaded", function() {
       actionsDiv.appendChild(toggleBtn);
 
       // Botón Editar
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
+      const editBtn = document.createElement("a");
+      editBtn.href = `/admin/edit_imap/${s.id}`;
       editBtn.className = "btn-orange ml-03 edit-imap-btn row-icon-btn";
       editBtn.setAttribute("data-url", `/admin/edit_imap/${s.id}`);
       editBtn.title = "Editar";

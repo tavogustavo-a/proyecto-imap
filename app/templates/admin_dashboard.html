@@ -224,16 +224,16 @@
               </button>
             </form>
             {% call state_switch(s.enabled, 'toggle-imap-btn ml-03') %}data-id="{{ s.id }}" data-enabled="{{ 'true' if s.enabled else 'false' }}"{% endcall %}
-            <button
+            <a
               id="btnEditImap-{{ s.id }}"
-              type="button"
+              href="{{ url_for('admin_bp.edit_imap', server_id=s.id) }}"
               class="btn-orange ml-03 edit-imap-btn row-icon-btn"
               data-url="{{ url_for('admin_bp.edit_imap', server_id=s.id) }}"
               title="Editar"
               aria-label="Editar"
             >
               <i class="fas fa-pen" aria-hidden="true"></i>
-            </button>
+            </a>
             <button
               class="btn-red delete-imap-btn ml-03 btn-imap-action btn-imap-small"
               data-id="{{ s.id }}"
@@ -350,7 +350,7 @@
           {% endif %}
           {% if s.route_path %}
             <span class="imap-admin-row__sep" aria-hidden="true">-</span>
-            <span class="imap-admin-row__route"><em>ruta:</em>{{ s.route_path }}</span>
+            <span class="imap-admin-row__route"><em>ruta:</em><a class="imap-admin-row__route-link" href="{{ s.route_path }}">{{ s.route_path }}</a></span>
           {% endif %}
           {% if s.custom_domain %}
             <span class="imap-admin-row__sep" aria-hidden="true">-</span>
@@ -367,16 +367,16 @@
             </button>
           </form>
           {% call state_switch(s.enabled, 'toggle-imap2-btn ml-03') %}data-id="{{ s.id }}" data-enabled="{{ 'true' if s.enabled else 'false' }}"{% endcall %}
-          <button
+          <a
             id="btnEditImap2-{{ s.id }}"
-            type="button"
+            href="{{ url_for('admin_bp.edit_imap2', server_id=s.id) }}"
             class="btn-orange ml-03 edit-imap2-btn row-icon-btn"
             data-url="{{ url_for('admin_bp.edit_imap2', server_id=s.id) }}"
             title="Editar"
             aria-label="Editar"
           >
             <i class="fas fa-pen" aria-hidden="true"></i>
-          </button>
+          </a>
           <button
             type="button"
             class="btn-blue ml-03 url-imap2-btn row-test-btn"
@@ -582,8 +582,8 @@
 
 </div> {# Fin contenedor principal .container #}
 
-<script src="{{ url_for('static', filename='js/admin_imap.js') }}?v=20261029-buzon-first" defer></script>
-<script src="{{ url_for('static', filename='js/admin_imap2.js') }}?v=20261020-imap-row-line" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap.js') }}?v=20261101-imap-link" defer></script>
+<script src="{{ url_for('static', filename='js/admin_imap2.js') }}?v=20261101-imap-link" defer></script>
 <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>

@@ -165,10 +165,10 @@ html body .mobile-menu-store .codigos-sidebar-codigos-row .mobile-menu-btn {
   margin-bottom: 0 !important;
 }
 
-html body .regex-result-container button.regex-result-approve-btn,
-html body .regex-result-container button.regex-result-approve-btn:hover,
-html body .regex-result-container button.regex-result-approve-btn:focus,
-html body .regex-result-container button.regex-result-approve-btn:active {
+html body .regex-result-container a.regex-result-approve-btn,
+html body .regex-result-container a.regex-result-approve-btn:hover,
+html body .regex-result-container a.regex-result-approve-btn:focus,
+html body .regex-result-container a.regex-result-approve-btn:active {
   background: linear-gradient(180deg, #ff4d5c 0%, #e11d2e 58%, #c41020 100%) !important;
   border: none !important;
   outline: none !important;

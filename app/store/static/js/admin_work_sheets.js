@@ -7075,35 +7075,8 @@ const closeModalHojasCreadas = document.getElementById('closeModalHojasCreadas')
 const btnCancelarPlantillaRapida = document.getElementById('btnCancelarPlantillaRapida');
 const btnCrearPlantillaRapida = document.getElementById('btnCrearPlantillaRapida');
 const tituloPlantillaRapidaInput = document.getElementById('tituloPlantillaRapidaInput');
-const comboPlantillaRapida = document.getElementById('comboPlantillaRapida');
-    // Funcionalidad del menú móvil
-    var menuBtn = document.getElementById('menu1ToggleBtn');
-    var mobileMenu = document.getElementById('mobileMenu');
-    var menuOverlay = document.getElementById('menuOverlay');
-
-    if(menuBtn && mobileMenu) {
-        menuBtn.addEventListener('click', function() {
-            mobileMenu.classList.toggle('hidden');
-            if(menuOverlay) menuOverlay.classList.toggle('active');
-        });
-    }
-
-    if(menuOverlay && mobileMenu) {
-        menuOverlay.addEventListener('click', function() {
-            mobileMenu.classList.add('hidden');
-            menuOverlay.classList.remove('active');
-        });
-    }
-
-    // Cerrar al hacer clic fuera
-    document.addEventListener('mousedown', function(e) {
-        if (mobileMenu && !mobileMenu.classList.contains('hidden')) {
-            if (!mobileMenu.contains(e.target) && e.target !== menuBtn) {
-                mobileMenu.classList.add('hidden');
-                if(menuOverlay) menuOverlay.classList.remove('active');
-            }
-        }
-    });
+    const comboPlantillaRapida = document.getElementById('comboPlantillaRapida');
+    // El menú de la lista de hojas lo abre menu_tienda.js (menu1ToggleBtn).
 
     // Funcionalidad del modal de plantillas (solo si los elementos existen)
     
