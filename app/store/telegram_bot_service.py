@@ -3413,15 +3413,21 @@ def _items_rich_html(items: list) -> str:
             remaining = 30 - (now % 30)
             date = f'2FA · {remaining} s'
         shown = code if len(code) <= 50 else code[:47] + '...'
-        block = _rich_title(shown)
-        buttons = ''
-        if len(code) <= 256:
-            buttons += f'<tg-button type="copy_text" text="{_html_text(code)}">Copiar</tg-button>'
         link = item.get('link') or ''
-        if link and len(link) <= 2000:
-            buttons += f'<tg-button type="url" url="{_html_text(link)}">Abrir Enlace</tg-button>'
-        if buttons:
+        is_link = bool(link)
+        if is_link:
+            block = ''
+            buttons = f'<tg-button type="url" url="{_html_text(link)}">Abrir enlace</tg-button>'
+            if len(link) <= 256:
+                buttons += f'<tg-button type="copy_text" text="{_html_text(link)}">Copiar</tg-button>'
             block += f'<tg-button-row align="center">{buttons}</tg-button-row>'
+        else:
+            block = _rich_title(shown)
+            buttons = ''
+            if len(code) <= 256:
+                buttons += f'<tg-button type="copy_text" text="{_html_text(code)}">Copiar</tg-button>'
+            if buttons:
+                block += f'<tg-button-row align="center">{buttons}</tg-button-row>'
         if date:
             block += _rich_center_html(_html_text(date))
         blocks.append(block)
@@ -3475,19 +3481,24 @@ def _send_code_items(token: str, chat_id, items: list) -> None:
         return
     for item in items:
         code = item['code']
-        text = code
+        link = item.get('link') or ''
+        text = ''
         if item.get('date'):
-            text += f"\nFecha: {item['date']}"
+            text = f"Fecha: {item['date']}"
+        if not link:
+            text = code + (f"\n{text}" if text else '')
+        elif len(link) > 256:
+            text = link + (f"\n{text}" if text else '')
         markup = None
         row = []
-        if len(code) <= 256:
-            row.append({'text': 'Copiar', 'copy_text': {'text': code}})
-        link = item.get('link') or ''
         if link and len(link) <= 2000:
-            row.append({'text': 'Abrir Enlace', 'url': link})
+            row.append({'text': 'Abrir enlace', 'url': link})
+        copy_value = link or code
+        if len(copy_value) <= 256:
+            row.append({'text': 'Copiar', 'copy_text': {'text': copy_value}})
         if row:
             markup = {'inline_keyboard': [row]}
-        _send_text(token, chat_id, text, markup)
+        _send_text(token, chat_id, text or 'Enlace', markup)
 
 
 def _public_page_preview() -> dict:
