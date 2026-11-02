@@ -1622,8 +1622,10 @@ def _markup_without_style(markup: dict) -> dict:
     return {'inline_keyboard': rows}
 
 
-def _send_text(token: str, chat_id, text: str, reply_markup: dict | None = None) -> dict:
+def _send_text(token: str, chat_id, text: str, reply_markup: dict | None = None, disable_preview: bool = False) -> dict:
     payload = {'chat_id': chat_id, 'text': text}
+    if disable_preview:
+        payload['link_preview_options'] = {'is_disabled': True}
     if reply_markup:
         payload['reply_markup'] = reply_markup
     sent = _telegram_call(token, 'sendMessage', payload)
@@ -3398,7 +3400,7 @@ def _lookup_code(user, service: dict, email: str):
     return '', items
 
 
-def _items_rich_html(items: list, *, copy_long_links: bool = True) -> str:
+def _items_rich_html(items: list) -> str:
     """Códigos, fecha y 2FA centrados. El secreto no sale en el mensaje."""
     import pyotp
 
@@ -3416,11 +3418,8 @@ def _items_rich_html(items: list, *, copy_long_links: bool = True) -> str:
         link = item.get('link') or ''
         is_link = bool(link)
         if is_link:
-            block = f'<p>{_html_text(link)}</p>'
-            buttons = f'<tg-button type="url" url="{_html_text(link)}">Abrir enlace</tg-button>'
-            if copy_long_links or len(link) <= 256:
-                buttons += f'<tg-button type="copy_text" text="{_html_text(link)}">Copiar</tg-button>'
-            block += f'<tg-button-row align="center">{buttons}</tg-button-row>'
+            safe = _html_text(link)
+            block = f'<p><a href="{safe}">{safe}</a></p>'
         else:
             block = _rich_title(shown)
             buttons = ''
@@ -3469,38 +3468,36 @@ def _start_twofa_ticker(token: str, chat_id, message_id, items: list) -> None:
 
 
 def _send_code_items(token: str, chat_id, items: list) -> None:
-    """Resultados de códigos: valor, Copiar y fecha centrados. Los enlaces se ven completos."""
-    html = _items_rich_html(items)
+    """Códigos con Copiar. Un enlace sale como URL, sin botones, y la fecha debajo."""
+    link_items = [item for item in items if item.get('link')]
+    code_items = [item for item in items if not item.get('link')]
+    for item in link_items:
+        text = item['link']
+        if item.get('date'):
+            text += f"\n{item['date']}"
+        _send_text(token, chat_id, text, disable_preview=True)
+    if not code_items:
+        return
+    html = _items_rich_html(code_items)
     sent = _telegram_call(token, 'sendRichMessage', {
         'chat_id': chat_id,
         'rich_message': {'html': html, 'skip_entity_detection': True},
-        'link_preview_options': {'is_disabled': True},
     })
-    if not sent.get('ok'):
-        html = _items_rich_html(items, copy_long_links=False)
-        sent = _telegram_call(token, 'sendRichMessage', {
-            'chat_id': chat_id,
-            'rich_message': {'html': html, 'skip_entity_detection': True},
-            'link_preview_options': {'is_disabled': True},
-        })
     if sent.get('ok'):
         result = sent.get('result') if isinstance(sent.get('result'), dict) else {}
-        _start_twofa_ticker(token, chat_id, result.get('message_id'), items)
+        _start_twofa_ticker(token, chat_id, result.get('message_id'), code_items)
         return
-    for item in items:
+    for item in code_items:
         code = item['code']
-        link = item.get('link') or ''
-        text = link or code
+        text = code
         if item.get('date'):
-            text += f"\nFecha: {item['date']}"
-        row = []
-        if link and len(link) <= 2000:
-            row.append({'text': 'Abrir enlace', 'url': link})
-        copy_value = link or code
-        if len(copy_value) <= 256:
-            row.append({'text': 'Copiar', 'copy_text': {'text': copy_value}})
-        markup = {'inline_keyboard': [row]} if row else None
-        _send_text(token, chat_id, text, markup)
+            text += f"\n{item['date']}"
+        markup = None
+        if len(code) <= 256:
+            markup = {'inline_keyboard': [[{'text': 'Copiar', 'copy_text': {'text': code}}]]}
+        sent_item = _send_text(token, chat_id, text, markup)
+        if not sent_item.get('ok') and markup:
+            _send_text(token, chat_id, text)
 
 
 def _public_page_preview() -> dict:
@@ -3921,6 +3918,6 @@ def poll_telegram_updates() -> bool:
     if not _updates_lock.acquire(timeout=1):
         return True
     try:
-        return _consume_bot_updates(2, 8)
+        return _consume_bot_updates(25, 35)
     finally:
         _updates_lock.release()

@@ -15,16 +15,15 @@ _loop_lock = threading.Lock()
 
 def _poll_loop(app):
     while True:
-        wait = 2
+        wait = 0.4
         try:
             with app.app_context():
                 from app.store.telegram_bot_service import poll_telegram_updates
 
-                idle = poll_telegram_updates()
-            wait = 8 if idle else 1
+                poll_telegram_updates()
         except Exception:
             logger.exception('telegram start poll')
-            wait = 8
+            wait = 2
         time.sleep(wait)
 
 
