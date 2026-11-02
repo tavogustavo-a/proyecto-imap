@@ -1439,19 +1439,58 @@ def update_menu_button(key: str, enabled=None, label=None) -> list:
     return menu_button_catalog()
 
 
+def _guest_consult_services() -> list:
+    """Servicios de la página pública: botón visible y botón no visible, si están activos."""
+    try:
+        from app.models.service import ServiceModel
+
+        rows = (
+            ServiceModel.query.filter(
+                ServiceModel.enabled.is_(True),
+                ServiceModel.visibility_mode.in_(('on-no-usuarios', 'on-no-usuarios-no-visible')),
+            )
+            .order_by(ServiceModel.position.asc(), ServiceModel.id.asc())
+            .all()
+        )
+    except Exception:
+        logger.exception('telegram guest services')
+        return []
+    visible = []
+    hidden = []
+    for row in rows:
+        name = (row.name or '').strip()
+        if not name or not row.id:
+            continue
+        item = {'id': int(row.id), 'name': name}
+        if row.visibility_mode == 'on-no-usuarios':
+            visible.append(item)
+        else:
+            hidden.append(item)
+    return visible + hidden
+
+
+def _guest_consult_active() -> bool:
+    return bool(_guest_consult_services())
+
+
+def _guest_menu_button() -> dict:
+    return {
+        'key': 'guest',
+        'label': 'Consultar correo',
+        'default_label': 'Consultar correo',
+        'enabled': True,
+    }
+
+
 def _visible_menu_entries(include_ad: bool, user=None) -> list:
-    """Botones encendidos. Sin usuario ligado: solo el ID y Consultar correo."""
+    """Botones encendidos. Sin usuario ligado: ID y, si hay servicio público, Consultar correo."""
     if user is None:
         visible = []
         for item in menu_button_catalog():
             if item['key'] == 'id' and item['enabled']:
                 visible.append(item)
-        visible.append({
-            'key': 'guest',
-            'label': 'Consultar correo',
-            'default_label': 'Consultar correo',
-            'enabled': True,
-        })
+        if _guest_consult_active():
+            visible.append(_guest_menu_button())
         return visible
     visible = []
     for item in menu_button_catalog():
@@ -1648,7 +1687,7 @@ def _centered_menu_html(include_ad: bool, chat_id=None, code_services: list | No
     for item in _visible_menu_entries(include_ad, user):
         data = item['key']
         name = item['label'][:64]
-        if user is None and data == 'guest':
+        if user is None and data == 'guest' and _guest_consult_active():
             flush()
             paragraph = _guest_paragraph_plain()
             if paragraph:
@@ -3498,20 +3537,18 @@ def _send_guest_page(token: str, chat_id) -> None:
 
 
 def _lookup_guest_mail(email: str):
-    from app.services.search_service import search_and_apply_filters, search_imap2_server_dynamic
+    """Misma consulta pública: servicios de no logueados, visibles o no."""
+    from app.services.search_service import search_and_apply_filters
 
-    page = _public_page_preview()
-    imap2_id = page.get('imap2_id')
-    if imap2_id:
-        mail = search_imap2_server_dynamic(email, imap2_id, user=None)
-        if mail:
-            return _items_from_mail(mail)
-    for service in _code_services_for_menu():
+    for service in _guest_consult_services():
         mail = search_and_apply_filters(
             email, service['id'], user=None, public_access=True,
         )
-        if mail:
-            return _items_from_mail(mail)
+        if not mail:
+            continue
+        found = _items_from_mail(mail)
+        if found:
+            return found
     return []
 
 
@@ -3842,6 +3879,9 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
                 waiting = str(chat_id) in _pending_code_search
             if waiting:
                 _finish_code_search(token, chat_id, pending_text)
+                continue
+            if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is None and _guest_consult_active():
+                _run_code_search(token, chat_id, 0, pending_text)
                 continue
             if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is not None:
                 _save_code_email(chat_id, pending_text)
