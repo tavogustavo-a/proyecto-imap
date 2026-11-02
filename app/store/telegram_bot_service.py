@@ -1772,7 +1772,16 @@ def _replace_previous_menu(token: str, chat_id, sent: dict) -> None:
     _delete_previous_menus(token, chat_id, keep=new_id)
 
 
+def _menu_already_on_screen(chat_id) -> bool:
+    key = str(chat_id)
+    with _menu_message_lock:
+        return bool(_last_menu_message.get(key) or _menu_message_ids.get(key))
+
+
 def _send_start_menu(token: str, chat_id) -> None:
+    """Si la tabla ya está en el chat, /start no la vuelve a enviar ni a borrar."""
+    if _menu_already_on_screen(chat_id):
+        return
     _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
