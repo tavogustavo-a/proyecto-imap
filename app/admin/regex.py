@@ -35,10 +35,15 @@ def unwrap_admin_redirect_url(value):
 
 def _normalize_regex_match(match):
     if isinstance(match, tuple):
-        return tuple(
-            unwrap_admin_redirect_url(part) if isinstance(part, str) else part
-            for part in match
-        )
+        parts = []
+        for part in match:
+            if isinstance(part, str):
+                cleaned = unwrap_admin_redirect_url(part)
+                if cleaned:
+                    parts.append(cleaned)
+            elif part:
+                parts.append(str(part))
+        return ''.join(parts)
     if isinstance(match, str):
         return unwrap_admin_redirect_url(match)
     return match

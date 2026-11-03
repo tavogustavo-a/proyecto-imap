@@ -744,7 +744,10 @@ def _buzon_emails_as_mail_dicts(to_address, limit_days=2, max_rows=None, explici
             for email in rows:
                 mailbox = (email.to_email or "").strip().lower()
                 folder_keys = folder_by_mailbox.get(mailbox)
-                if _received_email_in_folders(email, folder_keys, spam_tag_id):
+                # Recibidos (sin etiquetas y fuera de papelera) siempre entra:
+                # ahí llega el código más nuevo aunque la dirección tenga otras carpetas.
+                in_inbox = (not email.deleted) and not {tag.id for tag in (email.tags or [])}
+                if in_inbox or _received_email_in_folders(email, folder_keys, spam_tag_id):
                     filtered.append(email)
         rows = filtered
     except Exception:
