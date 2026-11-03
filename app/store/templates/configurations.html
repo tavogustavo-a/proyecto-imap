@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261101-drive-border">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261102-test-ad">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 {% block content %}
@@ -553,6 +553,10 @@
         <button type="button" id="close-drive-edit-modal" class="btn-panel btn-red">Cancelar</button>
             <button type="submit" class="btn-panel btn-green">Guardar cambios</button>
           </div>
+      <div class="mb-1 drive-edit-test-ad">
+        <button type="button" id="test-drive-ad-link" class="btn-panel btn-blue">Probar link de publicidad</button>
+        <p id="test-drive-ad-link-status" class="form-text" role="status"></p>
+      </div>
         </form>
       </div>
     </div>
@@ -632,6 +636,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261028-drive-media-src" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261102-ad-hide" defer></script>
   <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261029-botfather-clear" defer></script>
 {% endblock %}

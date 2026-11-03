@@ -15667,6 +15667,8 @@ def update_drive_transfer(transfer_id):
                 return jsonify({'success': False, 'error': tg_err}), 400
             transfer.telegram_group_id = group_id
             transfer.telegram_topic_id = topic_id if group_id else None
+            if not group_id:
+                transfer.telegram_send_problems = None
         if 'drive_processing_time' in data:
             from app.store.drive_manager import parse_interval
             processing_time_str = data['drive_processing_time']
@@ -15689,6 +15691,30 @@ def update_drive_transfer(transfer_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error al actualizar: {str(e)}'}), 500
+
+@store_bp.route('/admin/drive_transfers/<int:transfer_id>/test_ad_link', methods=['POST'])
+@admin_required
+def test_drive_ad_link(transfer_id):
+    """Prueba el destino guardado: el grupo, o el tema si también está guardado."""
+    from app.store.drive_manager import ensure_drive_telegram_columns
+    from app.store.telegram_bot_service import send_saved_ad_destination_probe
+
+    ensure_drive_telegram_columns()
+    transfer = DriveTransfer.query.get_or_404(transfer_id)
+    data = request.form if request.form else (request.json or {})
+    form_group = (data.get('drive_telegram_group') or '').strip()
+    form_topic = (data.get('drive_telegram_topic') or '').strip()
+    saved_group = (getattr(transfer, 'telegram_group_id', None) or '').strip()
+    saved_topic = (getattr(transfer, 'telegram_topic_id', None) or '').strip()
+    if form_group != saved_group or form_topic != saved_topic:
+        return jsonify({
+            'success': False,
+            'error': 'Guardá los cambios antes de probar. La prueba usa el grupo y el tema que ya están guardados.',
+        }), 400
+    result = send_saved_ad_destination_probe(saved_group, saved_topic)
+    if not result.get('ok'):
+        return jsonify({'success': False, 'error': result.get('message') or 'No se pudo enviar la prueba.'}), 400
+    return jsonify({'success': True, 'message': result.get('message')})
 
 @store_bp.route('/admin/drive_transfers/<int:transfer_id>/execute_now', methods=['POST'])
 @admin_required

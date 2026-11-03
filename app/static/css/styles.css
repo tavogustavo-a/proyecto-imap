@@ -7479,25 +7479,6 @@ button.btn-blue.row-test-btn.buzon-observer-btn {
   flex-wrap: wrap;
 }
 
-/* Teclado móvil: padding solo con clase activa (campo sacar correos) */
-.usuarios-bulk-emails-section {
-  padding-bottom: 0;
-}
-
-html.usuarios-delete-keyboard-active .usuarios-bulk-emails-section {
-  padding-bottom: var(--usuarios-keyboard-pad, 0px);
-}
-
-.usuarios-bulk-delete-field {
-  scroll-margin: 28vh 0 36vh 0;
-}
-
-@media (max-width: 768px) {
-  .usuarios-bulk-delete-field {
-    scroll-margin: 22vh 0 48vh 0;
-  }
-}
-
 /* Añadir masivamente correos a sub-usuarios: campos cuadrados y mismo ancho (como editar sub-usuario) */
 #subuser-management-container .bulk-add-subusers-emails-card .bulk-add-subusers-field-block,
 #subuser-management-container .bulk-add-subusers-emails-card .bulk-add-subusers-search-wrap {

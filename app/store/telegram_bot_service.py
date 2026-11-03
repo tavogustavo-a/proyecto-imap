@@ -1047,6 +1047,32 @@ def verify_telegram_group_and_topic(group_raw: str | None, topic_raw: str | None
     return humanize_telegram_chat_error(probe.get('description'))
 
 
+def send_saved_ad_destination_probe(group_raw: str | None, topic_raw: str | None) -> dict:
+    """Mensaje de prueba al grupo guardado, o al tema si también está guardado."""
+    group_id = (group_raw or '').strip()
+    topic_id = (topic_raw or '').strip()
+    if not group_id:
+        return {'ok': False, 'message': 'No hay un grupo de Telegram guardado.'}
+    err = verify_telegram_group_and_topic(group_id, topic_id or None)
+    if err:
+        return {'ok': False, 'message': err}
+    chat_id, _chat_err = validate_chat_id(group_id)
+    token = _saved_bot_token()
+    payload = {
+        'chat_id': chat_id,
+        'text': 'Prueba de link de publicidad',
+    }
+    where = 'el grupo'
+    if topic_id:
+        topic_id, _topic_err = validate_topic_id(topic_id)
+        payload['message_thread_id'] = int(topic_id)
+        where = 'el tema del foro'
+    result = _telegram_call(token, 'sendMessage', payload)
+    if not result.get('ok'):
+        return {'ok': False, 'message': humanize_telegram_chat_error(result.get('description'))}
+    return {'ok': True, 'message': f'Prueba enviada a {where}.'}
+
+
 def send_telegram_test(chat_id_raw: str | None) -> dict:
     """Envía un mensaje corto de prueba a ese ID."""
     chat_id, err = validate_chat_id(chat_id_raw)
@@ -3154,6 +3180,7 @@ def _send_ad_invite(token: str, chat_id) -> None:
         return
     group_id = _working_ad_group_id()
     if not group_id:
+        _send_with_menu(token, chat_id, 'Elige una opción:')
         return
     _telegram_call(token, 'unbanChatMember', {
         'chat_id': group_id,

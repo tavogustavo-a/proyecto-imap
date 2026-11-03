@@ -1199,24 +1199,6 @@ document.addEventListener("DOMContentLoaded", function() {
   }
   // ======= FIN AÑADIR CORREOS MASIVAMENTE A USUARIOS =======
 
-  // Solo el campo "Saca correos...": subir vista en móvil. El de "Añade..." NO debe bajar la página.
-  function updateUsuariosKeyboardPad() {
-    document.documentElement.classList.add("usuarios-delete-keyboard-active");
-    const vv = window.visualViewport;
-    if (!vv) {
-      document.documentElement.style.setProperty("--usuarios-keyboard-pad", "42vh");
-      return;
-    }
-    const covered = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
-    const pad = Math.max(covered + 140, window.innerWidth <= 768 ? window.innerHeight * 0.42 : 120);
-    document.documentElement.style.setProperty("--usuarios-keyboard-pad", `${Math.round(pad)}px`);
-  }
-
-  function clearUsuariosKeyboardPad() {
-    document.documentElement.classList.remove("usuarios-delete-keyboard-active");
-    document.documentElement.style.removeProperty("--usuarios-keyboard-pad");
-  }
-
   function freezeWindowScrollBriefly() {
     const y = window.scrollY || document.documentElement.scrollTop || 0;
     const x = window.scrollX || document.documentElement.scrollLeft || 0;
@@ -1227,54 +1209,9 @@ document.addEventListener("DOMContentLoaded", function() {
     setTimeout(restore, 50);
   }
 
-  function keepUsuariosBulkDeleteFieldVisible(field) {
-    if (!field || field !== bulkDeleteEmailsInput) return;
-    updateUsuariosKeyboardPad();
-    const scrollNow = () => {
-      try {
-        field.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-      } catch (e) {
-        field.scrollIntoView(true);
-      }
-    };
-    scrollNow();
-    setTimeout(() => {
-      updateUsuariosKeyboardPad();
-      scrollNow();
-    }, 180);
-    setTimeout(() => {
-      updateUsuariosKeyboardPad();
-      scrollNow();
-    }, 420);
-  }
-
-  // Campo AÑADIR: no forzar scroll ni padding de teclado
-  if (bulkAddEmailsInput) {
-    bulkAddEmailsInput.addEventListener("mousedown", function() {
-      clearUsuariosKeyboardPad();
-      freezeWindowScrollBriefly();
-    });
-    bulkAddEmailsInput.addEventListener("focus", function() {
-      clearUsuariosKeyboardPad();
-      freezeWindowScrollBriefly();
-    });
-  }
-
-  if (bulkDeleteEmailsInput) {
-    bulkDeleteEmailsInput.addEventListener("focus", function() {
-      keepUsuariosBulkDeleteFieldVisible(bulkDeleteEmailsInput);
-    });
-    bulkDeleteEmailsInput.addEventListener("blur", function() {
-      setTimeout(clearUsuariosKeyboardPad, 200);
-    });
-  }
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", function() {
-      if (document.activeElement === bulkDeleteEmailsInput) {
-        updateUsuariosKeyboardPad();
-        keepUsuariosBulkDeleteFieldVisible(bulkDeleteEmailsInput);
-      }
-    });
-  }
+  [bulkAddEmailsInput, bulkDeleteEmailsInput].forEach(function(field) {
+    if (!field) return;
+    field.addEventListener("mousedown", freezeWindowScrollBriefly);
+    field.addEventListener("focus", freezeWindowScrollBriefly);
+  });
 });

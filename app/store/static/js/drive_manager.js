@@ -613,6 +613,14 @@ window.editDriveTransfer = async function(transferId) {
         
         // Mostrar modal
         document.getElementById('drive-edit-modal').classList.remove('d-none');
+        const testStatus = document.getElementById('test-drive-ad-link-status');
+        if (testStatus) {
+            testStatus.textContent = '';
+            testStatus.classList.remove('is-ok', 'is-bad');
+        }
+        if (typeof window.syncDriveAdTestButton === 'function') {
+            window.syncDriveAdTestButton();
+        }
         
     } catch (error) {
         showDriveStatus('Error al cargar configuración', false);
@@ -745,6 +753,61 @@ function setupDriveEditModal() {
             modal.classList.add('d-none');
         }
     });
+
+    const testAdBtn = document.getElementById('test-drive-ad-link');
+    const testAdStatus = document.getElementById('test-drive-ad-link-status');
+    const editGroupInput = document.getElementById('edit-drive-telegram-group');
+
+    function syncDriveAdTestButton() {
+        if (!testAdBtn) return;
+        const hasGroup = !!(editGroupInput && editGroupInput.value.trim());
+        testAdBtn.hidden = !hasGroup;
+        if (!hasGroup && testAdStatus) {
+            testAdStatus.textContent = '';
+            testAdStatus.classList.remove('is-ok', 'is-bad');
+        }
+    }
+    window.syncDriveAdTestButton = syncDriveAdTestButton;
+    if (editGroupInput) {
+        editGroupInput.addEventListener('input', syncDriveAdTestButton);
+    }
+    syncDriveAdTestButton();
+
+    if (testAdBtn) {
+        testAdBtn.addEventListener('click', async () => {
+            const transferId = document.getElementById('edit-drive-id')?.value;
+            if (!transferId) return;
+            const setStatus = (text, ok) => {
+                if (!testAdStatus) return;
+                testAdStatus.textContent = text;
+                testAdStatus.classList.toggle('is-ok', ok === true);
+                testAdStatus.classList.toggle('is-bad', ok === false);
+            };
+            testAdBtn.disabled = true;
+            setStatus('Enviando prueba...', true);
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
+                const body = new FormData();
+                body.append('drive_telegram_group', document.getElementById('edit-drive-telegram-group')?.value || '');
+                body.append('drive_telegram_topic', document.getElementById('edit-drive-telegram-topic')?.value || '');
+                const response = await fetch(`/tienda/admin/drive_transfers/${transferId}/test_ad_link`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body
+                });
+                const result = await response.json().catch(() => ({}));
+                if (response.ok && result.success) {
+                    setStatus(result.message || 'Prueba enviada.', true);
+                } else {
+                    setStatus(result.error || 'No se pudo enviar la prueba.', false);
+                }
+            } catch (error) {
+                setStatus('No se pudo conectar para enviar la prueba.', false);
+            } finally {
+                testAdBtn.disabled = false;
+            }
+        });
+    }
     
     // Manejar envío del formulario de edición
     editForm.addEventListener('submit', async (e) => {

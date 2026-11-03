@@ -24650,6 +24650,25 @@ body.shared-mode .connection-logs-btn {
   margin-top: 0.4rem !important;
 }
 
+#drive-edit-form > .drive-edit-test-ad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+#drive-edit-form > .drive-edit-test-ad .form-text:empty {
+  display: none;
+}
+
+#test-drive-ad-link-status.is-ok {
+  color: #15803d;
+}
+
+#test-drive-ad-link-status.is-bad {
+  color: #b91c1c;
+}
+
 #drive-transfer-form > #drive-status:empty {
   display: none;
 }
