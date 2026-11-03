@@ -76,9 +76,44 @@ function wrapEmailHtmlForIframe(html) {
   );
 }
 
+function visibleBuzonEmailIds() {
+  return Array.from(document.querySelectorAll('.email-list .email-item[data-email-id]')).filter(function (item) {
+    return window.getComputedStyle(item).display !== 'none';
+  }).map(function (item) {
+    return String(item.getAttribute('data-email-id'));
+  });
+}
+
+function syncBuzonEmailNav() {
+  const newerBtn = document.getElementById('buzonEmailNewerBtn');
+  const olderBtn = document.getElementById('buzonEmailOlderBtn');
+  document.querySelectorAll('.email-list .email-item.email-item--reading').forEach(function (item) {
+    item.classList.remove('email-item--reading');
+  });
+  if (!newerBtn || !olderBtn) return;
+  const ids = visibleBuzonEmailIds();
+  const index = ids.indexOf(String(currentEmailId));
+  newerBtn.disabled = index <= 0;
+  olderBtn.disabled = index < 0 || index >= ids.length - 1;
+  if (index >= 0) {
+    const current = document.querySelector('.email-list .email-item[data-email-id="' + ids[index] + '"]');
+    if (current) current.classList.add('email-item--reading');
+  }
+}
+
+function stepBuzonEmail(direction) {
+  const ids = visibleBuzonEmailIds();
+  const index = ids.indexOf(String(currentEmailId));
+  if (index < 0) return;
+  const nextId = ids[index + direction];
+  if (!nextId) return;
+  viewEmail(nextId);
+}
+
 // Funciones para el buzón de mensajes
 function viewEmail(emailId) {
   currentEmailId = emailId;
+  syncBuzonEmailNav();
   
   fetch(`/admin/email-buzon/view/${emailId}`, {
     method: 'GET',
@@ -685,6 +720,7 @@ function closeViewEmailModal() {
   }
   hideElement('viewEmailModal');
   currentEmailId = null;
+  syncBuzonEmailNav();
 }
 
 function showEmailTab(tabType, clickedButton) {
@@ -2962,6 +2998,30 @@ document.addEventListener('DOMContentLoaded', function() {
     button.addEventListener('click', function() {
       closeViewEmailModal();
     });
+  });
+
+  const newerMailBtn = document.getElementById('buzonEmailNewerBtn');
+  const olderMailBtn = document.getElementById('buzonEmailOlderBtn');
+  if (newerMailBtn) {
+    newerMailBtn.addEventListener('click', function () {
+      stepBuzonEmail(-1);
+    });
+  }
+  if (olderMailBtn) {
+    olderMailBtn.addEventListener('click', function () {
+      stepBuzonEmail(1);
+    });
+  }
+  document.addEventListener('keydown', function (event) {
+    const modal = document.getElementById('viewEmailModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      stepBuzonEmail(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      stepBuzonEmail(1);
+    }
   });
 
   // Botones de tabs de email

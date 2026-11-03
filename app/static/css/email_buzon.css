@@ -2933,6 +2933,26 @@ form {
   gap: 8px;
 }
 
+#viewEmailModal .buzon-email-nav {
+  width: 2.35rem;
+  min-width: 2.35rem;
+  padding: 8px 0;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  background: #fff;
+  color: #111;
+  border-radius: 6px;
+}
+
+#viewEmailModal .buzon-email-nav:hover:not(:disabled),
+#viewEmailModal .buzon-email-nav:focus-visible:not(:disabled) {
+  background: #f3f4f6;
+}
+
+#viewEmailModal .buzon-email-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 #viewEmailModal .email-details {
   width: 100%;
   max-width: 100%;
@@ -3314,7 +3334,10 @@ form {
   font-weight: bold;
 }
 
-/* Hover effect para emails clickeables */
+.email-item.email-item--reading {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
 .email-item:hover {
   background-color: #f8f9fa !important;
 }

@@ -1524,6 +1524,8 @@ def _visible_menu_entries(include_ad: bool, user=None) -> list:
             continue
         if item['key'] == 'ad' and not include_ad:
             continue
+        if item['key'] == 'id':
+            continue
         if not _menu_allowed_for_user(user, item['key']):
             continue
         visible.append(item)
