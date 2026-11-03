@@ -31,7 +31,7 @@ class RegexModel(db.Model):
     __tablename__ = "regexes"
     id = db.Column(db.Integer, primary_key=True)
     sender = db.Column(db.String(500), nullable=True)
-    pattern = db.Column(db.String(200), nullable=False)
+    pattern = db.Column(db.String(4000), nullable=False)
     enabled = db.Column(db.Boolean, default=True)
     description = db.Column(db.String(255), nullable=True)
     is_default = db.Column(db.Boolean, nullable=False, server_default='0')

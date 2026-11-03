@@ -335,6 +335,18 @@ def create_app(config_class_passed=None):
                         )
                         db.session.commit()
                         app.logger.info("Esquema: papelera ya puede guardarse en email_filters")
+            if insp.has_table("regexes"):
+                pattern_col = next(
+                    (col for col in insp.get_columns("regexes") if col["name"] == "pattern"),
+                    None,
+                )
+                pattern_len = getattr(pattern_col["type"], "length", None) if pattern_col else None
+                if db.engine.dialect.name == "postgresql" and pattern_len and pattern_len < 4000:
+                    db.session.execute(
+                        text("ALTER TABLE regexes ALTER COLUMN pattern TYPE VARCHAR(4000)")
+                    )
+                    db.session.commit()
+                    app.logger.info("Esquema: regexes.pattern ampliado a 4000")
         except Exception as schema_err:
             db.session.rollback()
             app.logger.warning(
