@@ -71,8 +71,8 @@ class EmailFilter(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)  # Nombre descriptivo del filtro
-    tag_id = db.Column(db.Integer, db.ForeignKey('email_tags_table.id', ondelete='SET NULL'), nullable=True)  # Nullable para papelera
-    
+    tag_id = db.Column(db.Integer, nullable=True)  # -1 = papelera; no es una etiqueta real
+
     # Condiciones del filtro
     filter_from_email = db.Column(db.Text)  # Filtro por remitente (contiene)
     filter_to_email = db.Column(db.Text)    # Filtro por destinatario (contiene)
@@ -88,7 +88,12 @@ class EmailFilter(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relación con la etiqueta
-    tag = db.relationship('EmailTag', backref='filters')
+    tag = db.relationship(
+        'EmailTag',
+        primaryjoin='EmailFilter.tag_id==EmailTag.id',
+        foreign_keys='EmailFilter.tag_id',
+        backref='filters',
+    )
     
     def __repr__(self):
         return f"<EmailFilter {self.name} -> {self.tag.name if self.tag else 'No Tag'}>"

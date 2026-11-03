@@ -274,16 +274,15 @@ function showNotification(message, type) {
 
 // Validación del formulario de crear filtro
 function validateCreateFilterForm() {
-  const fromEmail = document.getElementById('createFilterFromEmail').value.trim();
-  const toEmail = document.getElementById('createFilterToEmail').value.trim();
-  const subject = document.getElementById('createFilterSubject').value.trim();
-  const content = document.getElementById('createFilterContent').value.trim();
-  
-  if (!fromEmail && !toEmail && !subject && !content) {
-    alert('Debes especificar al menos una condición para el filtro.');
+  const name = document.getElementById('createFilterName');
+  const tag = document.getElementById('createFilterTag');
+  const type = document.getElementById('createFilterType');
+  const value = document.getElementById('createFilterValue');
+  if (!name || !tag || !type || !value) return true;
+  if (!name.value.trim() || !tag.value || !type.value || !value.value.trim()) {
+    alert('Completa el nombre, el destino, el tipo y el valor del filtro.');
     return false;
   }
-  
   return true;
 }
 

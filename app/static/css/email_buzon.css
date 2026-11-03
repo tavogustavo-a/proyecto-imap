@@ -1009,6 +1009,72 @@ form {
   margin-left: 10px;
 }
 
+#createFilterModal .edit-modal-header,
+#editFilterModal .edit-modal-header,
+#createBlockedSenderModal .edit-modal-header,
+#editBlockedSenderModal .edit-modal-header {
+  position: relative;
+  justify-content: center;
+}
+
+#createFilterModal .edit-modal-header h3,
+#editFilterModal .edit-modal-header h3,
+#createBlockedSenderModal .edit-modal-header h3,
+#editBlockedSenderModal .edit-modal-header h3 {
+  flex: 1;
+  text-align: center;
+  padding: 0 5.5rem;
+}
+
+#createFilterModal .edit-modal-header > button,
+#editFilterModal .edit-modal-header > button,
+#createBlockedSenderModal .edit-modal-header > button,
+#editBlockedSenderModal .edit-modal-header > button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+#createFilterModal h4,
+#editFilterModal h4,
+#createFilterModal .edit-form-group label,
+#editFilterModal .edit-form-group label,
+#createBlockedSenderModal .edit-form-group label,
+#editBlockedSenderModal .edit-form-group label,
+#createFilterModal .edit-form-group small,
+#editFilterModal .edit-form-group small,
+#createBlockedSenderModal .edit-form-group small,
+#editBlockedSenderModal .edit-form-group small,
+#createBlockedSenderModal .info-box,
+#editBlockedSenderModal .info-box {
+  text-align: center;
+}
+
+#createFilterModal .edit-modal-actions,
+#editFilterModal .edit-modal-actions,
+#createBlockedSenderModal .edit-modal-actions,
+#editBlockedSenderModal .edit-modal-actions {
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+#createFilterModal .edit-modal-actions .btn,
+#editFilterModal .edit-modal-actions .btn,
+#createBlockedSenderModal .edit-modal-actions .btn,
+#editBlockedSenderModal .edit-modal-actions .btn,
+#createFilterModal .edit-modal-actions .btn:first-child,
+#editFilterModal .edit-modal-actions .btn:first-child,
+#createBlockedSenderModal .edit-modal-actions .btn:first-child,
+#editBlockedSenderModal .edit-modal-actions .btn:first-child,
+#createFilterModal .edit-modal-actions .btn:not(:first-child),
+#editFilterModal .edit-modal-actions .btn:not(:first-child),
+#createBlockedSenderModal .edit-modal-actions .btn:not(:first-child),
+#editBlockedSenderModal .edit-modal-actions .btn:not(:first-child) {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 /* Estilos para filtros */
 .filter-tag-trash {
   background-color: #e74c3c;

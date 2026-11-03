@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import queue
 import re
 import threading
 import time
@@ -18,6 +20,11 @@ from app.extensions import db
 from app.store.models import TelegramBotConfig
 
 logger = logging.getLogger(__name__)
+
+_reply_queue: queue.Queue = queue.Queue()
+_reply_running = 0
+_reply_state = threading.Condition()
+_reply_dispatch_started = False
 
 _BTN_ID = 'Saber tu ID de tu usuario'
 _BTN_ID_PREVIOUS = 'Saber el ID de tu cuenta'
@@ -3009,7 +3016,7 @@ def render_pantallas_png(data: dict) -> bytes:
     line_gap = 4
     icon_w = 200
     rest = inner - icon_w
-    col_w = [icon_w, int(rest * 0.28), int(rest * 0.16), int(rest * 0.28)]
+    col_w = [icon_w, int(rest * 0.22), int(rest * 0.14), int(rest * 0.22)]
     col_w.append(inner - sum(col_w))
     headers = ('PLATAFORMA', 'PANTALLAS', 'PERFILES', 'PAGINA OFICIAL', 'ACTIVACION TELEVISOR')
     keys = ('pantallas', 'perfiles', 'pagina', 'activacion')
@@ -3032,6 +3039,17 @@ def render_pantallas_png(data: dict) -> bytes:
     def wrap(text: str, font, max_width: int) -> list[str]:
         return _wrap_words(measure, text, font, max_width) or ['----------']
 
+    def fit_link(text: str, max_width: int):
+        """Un enlace largo se queda en una línea, bajando la letra si hace falta."""
+        clean = ' '.join(str(text or '').split()) or '----------'
+        size = 24
+        while size >= 15:
+            font = _load_font(size, True)
+            if measure.textlength(clean, font=font) <= max_width:
+                return [clean], font
+            size -= 1
+        return [clean], _load_font(15, True)
+
     def block_h(lines: list[str], font) -> int:
         line_h = _font_line_h(font)
         return len(lines) * (line_h + line_gap) - line_gap
@@ -3047,15 +3065,22 @@ def render_pantallas_png(data: dict) -> bytes:
     for row in data.get('rows') or []:
         cells = []
         heights = []
+        fonts = []
         for index, key in enumerate(keys):
-            lines = wrap(cell_text(row, key), cell_font, col_w[index + 1] - 24)
+            max_width = col_w[index + 1] - 24
+            if key in ('pagina', 'activacion') and (row.get(key) or '').strip():
+                lines, font = fit_link(cell_text(row, key), max_width)
+            else:
+                font = cell_font
+                lines = wrap(cell_text(row, key), font, max_width)
             cells.append(lines)
-            heights.append(block_h(lines, cell_font))
+            fonts.append(font)
+            heights.append(block_h(lines, font))
         icons = resolve_row_screen_icons(row)[:2]
         fav_page = '' if icons else favicon_source_page(row)
         stack_h = (fav_size if fav_page else 0) + (logo_size if icons else 0) + (gap if fav_page and icons else 0)
         row_h = max(heights + [stack_h, 72]) + 28
-        prepared.append((row, cells, row_h, fav_page, icons, stack_h))
+        prepared.append((row, cells, fonts, row_h, fav_page, icons, stack_h))
         table_h += row_h
     total = pad * 2 + table_h
 
@@ -3075,7 +3100,7 @@ def render_pantallas_png(data: dict) -> bytes:
             draw.text((cursor_x + (col_w[index] - label_w) / 2, y + 22), label, font=head_font, fill=(255, 255, 255))
         cursor_x += col_w[index]
     y += header_h
-    for number, (row, cells, row_h, fav_page, icons, stack_h) in enumerate(prepared):
+    for number, (row, cells, fonts, row_h, fav_page, icons, stack_h) in enumerate(prepared):
         draw.rectangle((pad, y, pad + inner, y + row_h), fill=row_a if number % 2 == 0 else row_b)
         stack_y = y + (row_h - stack_h) // 2
         if fav_page:
@@ -3094,21 +3119,22 @@ def render_pantallas_png(data: dict) -> bytes:
             draw.text((pad + (col_w[0] - dash_w) / 2, y + (row_h - _font_line_h(cell_font)) / 2), '----------', font=cell_font, fill=(91, 107, 134))
         cursor_x = pad + col_w[0]
         for index, lines in enumerate(cells):
-            block = block_h(lines, cell_font)
+            font = fonts[index]
+            block = block_h(lines, font)
             line_y = y + max(12, (row_h - block) // 2)
             is_link = keys[index] in ('pagina', 'activacion') and (row.get(keys[index]) or '').strip()
             for line in lines:
-                line_w = draw.textlength(line, font=cell_font)
+                line_w = draw.textlength(line, font=font)
                 line_x = cursor_x + (col_w[index + 1] - line_w) / 2
-                draw.text((line_x, line_y), line, font=cell_font, fill=link_color if is_link else text_color)
+                draw.text((line_x, line_y), line, font=font, fill=link_color if is_link else text_color)
                 if is_link:
-                    under_y = line_y + _font_line_h(cell_font) - 2
+                    under_y = line_y + _font_line_h(font) - 2
                     draw.line((line_x, under_y, line_x + line_w, under_y), fill=link_color, width=2)
-                line_y += _font_line_h(cell_font) + line_gap
+                line_y += _font_line_h(font) + line_gap
             cursor_x += col_w[index + 1]
         y += row_h
     cursor_y = table_top + header_h
-    for _row, _cells, row_h, _fav, _icons, _stack in prepared:
+    for _row, _cells, _fonts, row_h, _fav, _icons, _stack in prepared:
         cursor_y += row_h
         if cursor_y < table_top + table_h:
             draw.line((pad, cursor_y, pad + inner, cursor_y), fill=grid, width=1)
@@ -3187,6 +3213,54 @@ def _send_codigos_image(token: str, chat_id) -> None:
     _send_with_menu(token, chat_id, 'Elige una opción:')
 
 
+def _noted_telegram_user(user_id: str) -> bool:
+    """True si ese ID está guardado en un usuario encendido."""
+    from app.models.user import User
+
+    wanted = str(user_id or '').strip()
+    if not wanted:
+        return False
+    rows = User.query.filter(
+        User.enabled.is_(True),
+        User.telegram_chat_id.isnot(None),
+        User.telegram_chat_id != '',
+    ).all()
+    for user in rows:
+        if wanted in user_chat_ids(user):
+            return True
+    return False
+
+
+def _guard_ad_group_join(token: str, update: dict) -> None:
+    """Saca del grupo de publicidad a quien entra sin estar anotado. Un admin se queda."""
+    change = update.get('chat_member')
+    if not isinstance(change, dict):
+        return
+    chat = change.get('chat') if isinstance(change.get('chat'), dict) else {}
+    new = change.get('new_chat_member') if isinstance(change.get('new_chat_member'), dict) else {}
+    old = change.get('old_chat_member') if isinstance(change.get('old_chat_member'), dict) else {}
+    person = new.get('user') if isinstance(new.get('user'), dict) else {}
+    if person.get('is_bot'):
+        return
+    new_status = str(new.get('status') or '')
+    old_status = str(old.get('status') or '')
+    if new_status in ('creator', 'administrator'):
+        return
+    if new_status not in ('member', 'restricted'):
+        return
+    if old_status in ('member', 'restricted', 'administrator', 'creator'):
+        return
+    from app.store.drive_telegram_send import _ban_from_group, configured_telegram_group_ids
+
+    group_id = str(chat.get('id') or '')
+    if group_id not in set(configured_telegram_group_ids()):
+        return
+    user_id = str(person.get('id') or '')
+    if not user_id or _noted_telegram_user(user_id):
+        return
+    _ban_from_group(token, group_id, user_id)
+
+
 def _send_ad_invite(token: str, chat_id) -> None:
     if not _chat_belongs_to_store_user(chat_id):
         return
@@ -3202,19 +3276,17 @@ def _send_ad_invite(token: str, chat_id) -> None:
     created = _telegram_call(token, 'createChatInviteLink', {
         'chat_id': group_id,
         'member_limit': 1,
+        'name': f'p{int(time.time())}'[-32:],
     })
     invite = ''
     if created.get('ok') and isinstance(created.get('result'), dict):
         invite = str(created['result'].get('invite_link') or '')
     if not invite:
-        exported = _telegram_call(token, 'exportChatInviteLink', {'chat_id': group_id})
-        if exported.get('ok') and exported.get('result'):
-            invite = str(exported.get('result'))
-    if not invite:
+        reason = humanize_telegram_chat_error(created.get('description'))
         _send_text(
             token,
             chat_id,
-            'El grupo está configurado, pero no se pudo crear el enlace para volver a entrar.',
+            'El grupo está configurado, pero no se pudo crear un enlace nuevo. ' + reason,
         )
         _send_with_menu(token, chat_id, 'Elige una opción:')
         return
@@ -3364,14 +3436,12 @@ def _json_from_response(resp) -> dict:
 
 def _lookup_code(user, service: dict, email: str):
     """Misma búsqueda que la página de códigos para ese usuario y servicio."""
-    from flask import session
-
     from app.api import (
         _email_reserved_for_other_user,
         _is_support_user,
         _user_has_allowed_email,
-        get_2fa_code_for_email,
         search_sms_messages,
+        _user_can_use_email_2fa,
     )
     from app.services.search_service import search_and_apply_filters, search_linked_projects_only
 
@@ -3384,48 +3454,56 @@ def _lookup_code(user, service: dict, email: str):
         if not service.get('sms'):
             return []
         try:
-            with current_app.test_request_context():
-                session['user_id'] = user.id
-                session['logged_in'] = True
-                resp = get_2fa_code_for_email(email_normalized)
-            data = _json_from_response(resp)
-            code = str(data.get('code') or '').strip()
-            if not code:
+            from app.store.models import TwoFAConfig
+            import pyotp
+
+            admin_username = current_app.config.get('ADMIN_USER', 'admin')
+            is_admin = user.username == admin_username and user.parent_id is None
+            if not is_admin:
+                if not user.enabled or not _user_can_use_email_2fa(user):
+                    return []
+                if not _is_support_user(user) and _email_reserved_for_other_user(user, email_normalized):
+                    return []
+                if not user.can_search_any and not _user_has_allowed_email(user, email_normalized):
+                    return []
+            secret = ''
+            configs = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
+            for cfg in configs:
+                emails_list = [str(e or '').strip().lower() for e in (cfg.get_emails_list() or [])]
+                if email_normalized in emails_list:
+                    secret = str(cfg.secret_key or '').strip().upper().replace(' ', '').replace('-', '')
+                    break
+            if not secret:
                 return []
-            item = _code_item(code, '2FA')
+            item = _code_item(pyotp.TOTP(secret).now(), '')
             if not item:
                 return []
-            secret = ''
-            try:
-                from app.store.models import TwoFAConfig
-
-                configs = TwoFAConfig.query.filter(TwoFAConfig.is_enabled == True).all()
-                for cfg in configs:
-                    emails_list = [str(e or '').strip().lower() for e in (cfg.get_emails_list() or [])]
-                    if email_normalized in emails_list:
-                        secret = str(cfg.secret_key or '').strip().upper().replace(' ', '').replace('-', '')
-                        break
-            except Exception:
-                logger.exception('telegram 2fa secret')
-            if secret:
-                item['totp_secret'] = secret
+            item['totp_secret'] = secret
             return [item]
         except Exception:
             logger.exception('telegram 2fa')
             return []
 
     if service.get('sms'):
-        with current_app.test_request_context():
+        sms_error = ''
+        items = []
+        try:
             resp = search_sms_messages(email_raw, user)
-        payload = _json_from_response(resp)
-        if payload.get('error'):
-            return str(payload['error']), []
-        results = payload.get('results') or []
-        items = _items_from_mail(results[0]) if results else []
-        items.extend(twofa_items())
-        if not items:
-            return 'No se encontraron mensajes.', []
-        return '', items
+            payload = _json_from_response(resp)
+            if payload.get('error'):
+                sms_error = str(payload['error'])
+            else:
+                results = payload.get('results') or []
+                items = _items_from_mail(results[0]) if results else []
+        except Exception:
+            logger.exception('telegram sms')
+            sms_error = 'No se pudo consultar los mensajes.'
+        items.extend(twofa_items() if not items else [])
+        if items:
+            return '', items
+        if sms_error and 'permiso' in sms_error.lower():
+            return sms_error, []
+        return 'No se encontraron mensajes.', []
 
     admin_username = current_app.config.get('ADMIN_USER', 'admin')
     is_admin = user.username == admin_username and user.parent_id is None
@@ -3461,7 +3539,7 @@ def _items_rich_html(items: list) -> str:
         if secret:
             code = pyotp.TOTP(secret).at(now)
             remaining = 30 - (now % 30)
-            date = f'2FA · {remaining} s'
+            date = f'{remaining} s'
         shown = code if len(code) <= 50 else code[:47] + '...'
         link = item.get('link') or ''
         is_link = bool(link)
@@ -3482,24 +3560,30 @@ def _items_rich_html(items: list) -> str:
 
 
 def _start_twofa_ticker(token: str, chat_id, message_id, items: list) -> None:
-    """Actualiza el código 2FA y los segundos que faltan. Se detiene al cabo de un minuto y medio."""
+    """Cambia el código 2FA cuando cumplen los 30 segundos. Se apaga a los 2 minutos."""
     if not message_id or not any(item.get('totp_secret') for item in items):
         return
     stamp = time.time()
     with _twofa_watch_lock:
         _twofa_watch[str(chat_id)] = stamp
 
+    def still_ours() -> bool:
+        with _twofa_watch_lock:
+            return _twofa_watch.get(str(chat_id)) == stamp
+
     def run() -> None:
-        last = ''
-        for _ in range(90):
-            time.sleep(1)
-            with _twofa_watch_lock:
-                if _twofa_watch.get(str(chat_id)) != stamp:
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            remaining = 30 - (int(time.time()) % 30)
+            if remaining <= 0:
+                remaining = 30
+            for _ in range(remaining):
+                if time.time() >= deadline or not still_ours():
                     return
+                time.sleep(1)
+            if time.time() >= deadline or not still_ours():
+                return
             html = _items_rich_html(items)
-            if html == last:
-                continue
-            last = html
             result = _telegram_call(token, 'editMessageText', {
                 'chat_id': chat_id,
                 'message_id': message_id,
@@ -3882,6 +3966,121 @@ def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
     return 'sent'
 
 
+def _server_use() -> tuple[float, float]:
+    """Porcentaje de procesador y de memoria en uso. 0 si no se puede medir."""
+    cpu = 0.0
+    mem = 0.0
+    cores = max(os.cpu_count() or 1, 1)
+    try:
+        cpu = min(100.0, (os.getloadavg()[0] / cores) * 100.0)
+    except (AttributeError, OSError):
+        cpu = 0.0
+    try:
+        info = {}
+        with open('/proc/meminfo', encoding='utf-8') as handle:
+            for line in handle:
+                key, raw = line.split(':', 1)
+                info[key] = int(raw.split()[0])
+        total = info.get('MemTotal') or 1
+        free = info.get('MemAvailable') or total
+        mem = max(0.0, min(100.0, (1 - (free / total)) * 100.0))
+    except (OSError, ValueError, IndexError):
+        mem = 0.0
+    return cpu, mem
+
+
+def _reply_slots() -> int:
+    """Cuántas respuestas caben ahora. Libre: más. Cargado: solo dos."""
+    cores = max(os.cpu_count() or 1, 1)
+    ceiling = min(max(cores * 2, 2), 8)
+    cpu, mem = _server_use()
+    if cpu >= 80 or mem >= 88:
+        return 2
+    if cpu >= 55 or mem >= 75:
+        return max(2, ceiling // 2)
+    return ceiling
+
+
+def _ensure_reply_dispatch(app) -> None:
+    global _reply_dispatch_started
+    with _reply_state:
+        if _reply_dispatch_started:
+            return
+        _reply_dispatch_started = True
+
+    def loop() -> None:
+        global _reply_running
+        while True:
+            fn = _reply_queue.get()
+            with _reply_state:
+                while _reply_running >= _reply_slots():
+                    _reply_state.wait(timeout=0.5)
+                _reply_running += 1
+
+            def run(job=fn) -> None:
+                global _reply_running
+                try:
+                    with app.app_context():
+                        try:
+                            job()
+                        except Exception:
+                            logger.exception('telegram respuesta')
+                        finally:
+                            db.session.remove()
+                finally:
+                    with _reply_state:
+                        _reply_running -= 1
+                        _reply_state.notify_all()
+
+            threading.Thread(target=run, daemon=True, name='tg-reply').start()
+
+    threading.Thread(target=loop, daemon=True, name='tg-reply-dispatch').start()
+
+
+def _run_in_reply_pool(fn) -> None:
+    """Responde en segundo plano. La cantidad depende de lo que el servidor esté usando."""
+    app = current_app._get_current_object()
+    _ensure_reply_dispatch(app)
+    _reply_queue.put(fn)
+
+
+def _dispatch_update(token: str, upd: dict) -> None:
+    if isinstance(upd.get('chat_member'), dict):
+        _guard_ad_group_join(token, upd)
+        return
+    callback = upd.get('callback_query') if isinstance(upd.get('callback_query'), dict) else None
+    if callback:
+        _handle_menu_callback(token, callback)
+        return
+    msg = upd.get('message') if isinstance(upd.get('message'), dict) else {}
+    sender = msg.get('from') if isinstance(msg.get('from'), dict) else {}
+    chat = msg.get('chat') if isinstance(msg.get('chat'), dict) else {}
+    if sender.get('is_bot') or chat.get('type') != 'private':
+        return
+    text = str(msg.get('text') or '')
+    chat_id = chat.get('id')
+    if chat_id is None:
+        return
+    if _menu_action(text):
+        _drop_pending_code_prompt(token, chat_id)
+        if _menu_action(text) == 'start':
+            _keep_only_latest_start(token, chat_id, msg.get('message_id'))
+        _dispatch_private_menu(token, chat_id, text)
+        return
+    pending_text = text.strip()
+    if pending_text and not pending_text.startswith('/'):
+        with _pending_code_lock:
+            waiting = str(chat_id) in _pending_code_search
+        if waiting:
+            _finish_code_search(token, chat_id, pending_text)
+            return
+        if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is None and _guest_consult_active():
+            _run_code_search(token, chat_id, 0, pending_text)
+            return
+        if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is not None:
+            _save_code_email(chat_id, pending_text)
+
+
 def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
     """Lee avisos del bot. True si no había nada nuevo. Quien llama ya tiene el candado."""
     ensure_telegram_bot_schema()
@@ -3898,7 +4097,7 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
         _poll_state['webhook_cleared'] = True
     payload = {
         'timeout': timeout_seconds,
-        'allowed_updates': ['message', 'edited_message', 'callback_query', 'channel_post', 'edited_channel_post', 'my_chat_member'],
+        'allowed_updates': ['message', 'edited_message', 'callback_query', 'channel_post', 'edited_channel_post', 'my_chat_member', 'chat_member'],
     }
     stored_offset = int(row.update_offset or 0) if row and row.update_offset else 0
     if stored_offset:
@@ -3912,6 +4111,7 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
         return True
     updates = result.get('result') if isinstance(result.get('result'), list) else []
     saved_through = None
+    queued = []
     for upd in updates:
         if not isinstance(upd, dict):
             continue
@@ -3921,42 +4121,14 @@ def _consume_bot_updates(timeout_seconds: int, request_timeout: int) -> bool:
         if not capture_telegram_update_chat(upd):
             break
         saved_through = uid
-        callback = upd.get('callback_query') if isinstance(upd.get('callback_query'), dict) else None
-        if callback:
-            _handle_menu_callback(token, callback)
-            continue
-        msg = upd.get('message') if isinstance(upd.get('message'), dict) else {}
-        sender = msg.get('from') if isinstance(msg.get('from'), dict) else {}
-        chat = msg.get('chat') if isinstance(msg.get('chat'), dict) else {}
-        if sender.get('is_bot') or chat.get('type') != 'private':
-            continue
-        text = str(msg.get('text') or '')
-        chat_id = chat.get('id')
-        if chat_id is None:
-            continue
-        if _menu_action(text):
-            _drop_pending_code_prompt(token, chat_id)
-            if _menu_action(text) == 'start':
-                _keep_only_latest_start(token, chat_id, msg.get('message_id'))
-            _dispatch_private_menu(token, chat_id, text)
-            continue
-        pending_text = text.strip()
-        if pending_text and not pending_text.startswith('/'):
-            with _pending_code_lock:
-                waiting = str(chat_id) in _pending_code_search
-            if waiting:
-                _finish_code_search(token, chat_id, pending_text)
-                continue
-            if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is None and _guest_consult_active():
-                _run_code_search(token, chat_id, 0, pending_text)
-                continue
-            if _looks_like_email(pending_text) and _enabled_user_for_chat(chat_id) is not None:
-                _save_code_email(chat_id, pending_text)
+        queued.append(upd)
     if saved_through is not None:
         fresh = get_telegram_bot_config()
         if fresh is not None:
             fresh.update_offset = saved_through + 1
             db.session.commit()
+    for upd in queued:
+        _run_in_reply_pool(lambda upd=upd: _dispatch_update(token, upd))
     return not updates
 
 

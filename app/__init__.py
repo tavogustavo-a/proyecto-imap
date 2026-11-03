@@ -265,6 +265,76 @@ def create_app(config_class_passed=None):
                     )
                     db.session.commit()
                     app.logger.info("Esquema: columna buzon_folders_json añadida a observer_imap_servers")
+            if insp.has_table("email_filters"):
+                dialect = db.engine.dialect.name
+                if dialect == "postgresql":
+                    cons = db.session.execute(
+                        text(
+                            """
+                            SELECT c.conname
+                            FROM pg_constraint c
+                            JOIN pg_class t ON c.conrelid = t.oid
+                            JOIN pg_attribute a ON a.attrelid = t.oid
+                              AND a.attnum = ANY (c.conkey)
+                            WHERE t.relname = 'email_filters'
+                              AND c.contype = 'f'
+                              AND a.attname = 'tag_id'
+                            """
+                        )
+                    ).fetchall()
+                    for (name,) in cons:
+                        db.session.execute(
+                            text(f'ALTER TABLE email_filters DROP CONSTRAINT "{name}"')
+                        )
+                    if cons:
+                        db.session.commit()
+                        app.logger.info("Esquema: papelera ya puede guardarse en email_filters")
+                elif dialect == "sqlite":
+                    fks = db.session.execute(
+                        text("PRAGMA foreign_key_list(email_filters)")
+                    ).fetchall()
+                    if any(str(row[3]) == "tag_id" for row in fks):
+                        db.session.execute(text("PRAGMA foreign_keys=OFF"))
+                        db.session.execute(
+                            text(
+                                """
+                                CREATE TABLE email_filters__new (
+                                    id INTEGER NOT NULL PRIMARY KEY,
+                                    name VARCHAR(200) NOT NULL,
+                                    tag_id INTEGER,
+                                    filter_from_email TEXT,
+                                    filter_to_email TEXT,
+                                    filter_subject_contains TEXT,
+                                    filter_content_contains TEXT,
+                                    enabled BOOLEAN,
+                                    priority INTEGER,
+                                    created_at DATETIME,
+                                    updated_at DATETIME
+                                )
+                                """
+                            )
+                        )
+                        db.session.execute(
+                            text(
+                                """
+                                INSERT INTO email_filters__new (
+                                    id, name, tag_id, filter_from_email, filter_to_email,
+                                    filter_subject_contains, filter_content_contains,
+                                    enabled, priority, created_at, updated_at
+                                )
+                                SELECT id, name, tag_id, filter_from_email, filter_to_email,
+                                       filter_subject_contains, filter_content_contains,
+                                       enabled, priority, created_at, updated_at
+                                FROM email_filters
+                                """
+                            )
+                        )
+                        db.session.execute(text("DROP TABLE email_filters"))
+                        db.session.execute(
+                            text("ALTER TABLE email_filters__new RENAME TO email_filters")
+                        )
+                        db.session.commit()
+                        app.logger.info("Esquema: papelera ya puede guardarse en email_filters")
         except Exception as schema_err:
             db.session.rollback()
             app.logger.warning(

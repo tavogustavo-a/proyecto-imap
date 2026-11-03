@@ -3,7 +3,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261029-filters-actions-compact">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/email_buzon.css') }}?v=20261103-modals-center">
   {# store.css ya en admin_dashboard; email_buzon.css aporta estilos compartidos con el buzón #}
 {% endblock %}
 
@@ -415,7 +415,7 @@ i{% endblock %}
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/email_filters.js') }}?v=20261029-pagination" defer></script>
+  <script src="{{ url_for('static', filename='js/email_filters.js') }}?v=20261103-filter-save" defer></script>
   <script src="{{ url_for('static', filename='js/menu_busqueda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
 {% endblock %}
