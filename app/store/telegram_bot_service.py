@@ -1070,7 +1070,17 @@ def send_saved_ad_destination_probe(group_raw: str | None, topic_raw: str | None
     result = _telegram_call(token, 'sendMessage', payload)
     if not result.get('ok'):
         return {'ok': False, 'message': humanize_telegram_chat_error(result.get('description'))}
-    return {'ok': True, 'message': f'Prueba enviada a {where}.'}
+    sent = result.get('result') if isinstance(result.get('result'), dict) else {}
+    message_id = sent.get('message_id')
+    if not message_id:
+        return {'ok': True, 'message': f'La prueba llegó a {where}, pero no se pudo borrar.'}
+    deleted = _telegram_call(token, 'deleteMessage', {
+        'chat_id': chat_id,
+        'message_id': message_id,
+    })
+    if deleted.get('ok'):
+        return {'ok': True, 'message': f'Prueba enviada a {where} y eliminada.'}
+    return {'ok': True, 'message': f'La prueba llegó a {where}, pero no se pudo borrar.'}
 
 
 def send_telegram_test(chat_id_raw: str | None) -> dict:
@@ -3510,10 +3520,19 @@ def _send_code_items(token: str, chat_id, items: list) -> None:
     link_items = [item for item in items if item.get('link')]
     code_items = [item for item in items if not item.get('link')]
     for item in link_items:
-        text = item['link']
+        html = f'<p>{_html_text(item["link"])}</p>'
         if item.get('date'):
-            text += f"\n{item['date']}"
-        _send_text(token, chat_id, text, disable_preview=True)
+            html += _rich_center_html(_html_text(item['date']))
+        sent = _telegram_call(token, 'sendRichMessage', {
+            'chat_id': chat_id,
+            'rich_message': {'html': html},
+            'link_preview_options': {'is_disabled': True},
+        })
+        if not sent.get('ok'):
+            text = item['link']
+            if item.get('date'):
+                text += f"\n{item['date']}"
+            _send_text(token, chat_id, text, disable_preview=True)
     if not code_items:
         return
     html = _items_rich_html(code_items)
