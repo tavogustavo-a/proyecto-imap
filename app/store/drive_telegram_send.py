@@ -25,13 +25,12 @@ def send_moved_files_to_telegram(drive_service, transfer, moved_files: list) -> 
     from app.store.telegram_bot_service import (
         _saved_bot_token,
         probe_telegram_chat,
-        telegram_digest_ready,
         validate_chat_id,
     )
 
     problems: list[dict] = []
     sent = 0
-    targets, setup_problems = _targets(transfer, probe_telegram_chat, validate_chat_id, telegram_digest_ready)
+    targets, setup_problems = _targets(transfer, probe_telegram_chat, validate_chat_id)
     problems.extend(setup_problems)
     if not targets or not moved_files:
         _store_problems(transfer, problems)
@@ -83,7 +82,7 @@ def send_moved_files_to_telegram(drive_service, transfer, moved_files: list) -> 
     return {'sent': sent, 'problems': problems[:MAX_PROBLEMS]}
 
 
-def _targets(transfer, probe_telegram_chat, validate_chat_id, telegram_digest_ready):
+def _targets(transfer, probe_telegram_chat, validate_chat_id):
     """La publicidad solo sale al grupo o canal. Los ID de la tabla no reciben el archivo."""
     problems = []
     targets = []
@@ -96,9 +95,9 @@ def _targets(transfer, probe_telegram_chat, validate_chat_id, telegram_digest_re
         return targets, problems
     if not group_raw:
         return targets, problems
-    # Sin bot, token o interruptor no hay a quién mandar el archivo. Se ignora
-    # el envío y no se anota como fallo: Drive ya movió los archivos.
-    if not telegram_digest_ready():
+    from app.store.telegram_bot_service import _saved_bot_token
+    if not _saved_bot_token():
+        problems.append(_problem('', '', 'El bot no está conectado. Guardá el token en Datos BotFather.'))
         return targets, problems
     chat_id, err = validate_chat_id(group_raw)
     if err:
