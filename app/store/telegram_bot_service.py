@@ -3560,7 +3560,7 @@ def _items_rich_html(items: list) -> str:
 
 
 def _start_twofa_ticker(token: str, chat_id, message_id, items: list) -> None:
-    """Cambia el código 2FA cuando cumplen los 30 segundos. Se apaga a los 2 minutos."""
+    """Baja los segundos 30, 29, 28… y cambia el código al llegar a 0. Se apaga a los 2 minutos."""
     if not message_id or not any(item.get('totp_secret') for item in items):
         return
     stamp = time.time()
@@ -3572,18 +3572,16 @@ def _start_twofa_ticker(token: str, chat_id, message_id, items: list) -> None:
             return _twofa_watch.get(str(chat_id)) == stamp
 
     def run() -> None:
+        last = ''
         deadline = time.time() + 120
         while time.time() < deadline:
-            remaining = 30 - (int(time.time()) % 30)
-            if remaining <= 0:
-                remaining = 30
-            for _ in range(remaining):
-                if time.time() >= deadline or not still_ours():
-                    return
-                time.sleep(1)
-            if time.time() >= deadline or not still_ours():
+            time.sleep(1)
+            if not still_ours():
                 return
             html = _items_rich_html(items)
+            if html == last:
+                continue
+            last = html
             result = _telegram_call(token, 'editMessageText', {
                 'chat_id': chat_id,
                 'message_id': message_id,
