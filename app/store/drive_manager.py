@@ -20,7 +20,24 @@ from app.store.models import DriveTransfer
 
 logger = logging.getLogger(__name__)
 _DRIVE_ID = re.compile(r'^[A-Za-z0-9_-]{8,200}$')
-_TRANSFER_BUDGET_SEC = 180
+
+
+class DriveFolderMissing(Exception):
+    """La carpeta de Drive ya no existe. No es un fallo de un archivo."""
+
+
+def _drive_folder_missing(exc: Exception) -> bool:
+    status = getattr(getattr(exc, 'resp', None), 'status', None)
+    if status == 404:
+        return True
+    text = str(exc).lower()
+    content = getattr(exc, 'content', None)
+    if content:
+        try:
+            text += ' ' + content.decode('utf-8', errors='replace').lower()
+        except Exception:
+            pass
+    return 'not found' in text or 'filenotfound' in text
 
 
 def _valid_drive_id(value: str) -> bool:
@@ -231,17 +248,11 @@ class DriveTransferService:
             raise Exception('ID de carpeta de Drive no válido')
         
         try:
-            # Tipos de archivos por defecto (fotos y videos)
-            if not file_types:
-                file_types = [
-                    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
-                    'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv',
-                    'video/webm', 'video/mkv', 'video/3gp'
-                ]
-            
-            # Construir query para buscar archivos en la carpeta
-            mime_types_query = " or ".join([f"mimeType='{mime}'" for mime in file_types])
-            query = f"'{folder_id}' in parents and ({mime_types_query}) and trashed=false"
+            # Cualquier foto o video. El envío los convierte a un formato que Telegram acepte.
+            query = (
+                f"'{folder_id}' in parents and trashed=false and "
+                "(mimeType contains 'image/' or mimeType contains 'video/')"
+            )
             
             files = []
             page_token = None
@@ -263,7 +274,9 @@ class DriveTransferService:
             return files
             
         except HttpError as e:
-            logger.error(f"Error de Google Drive API: {str(e)}")
+            if _drive_folder_missing(e):
+                raise DriveFolderMissing()
+            logger.error('Error de Google Drive API: %s', type(e).__name__)
             raise
         except Exception as e:
             logger.error(f"Error obteniendo archivos: {str(e)}")
@@ -306,11 +319,31 @@ class DriveTransferService:
             return True
             
         except HttpError as e:
+            if _drive_folder_missing(e):
+                return False
             logger.error('Error moviendo archivo %s: %s', file_id, type(e).__name__)
             return False
         except Exception as e:
             logger.error(f"Error moviendo archivo {file_id}: {str(e)}")
             return False
+
+    def _drop_drive_connections(self) -> None:
+        """Suelta la conexión de Drive. Después de bajar un archivo a veces queda inutilizable."""
+        http = getattr(self.service, '_http', None)
+        if http is None:
+            return
+        connections = getattr(http, 'connections', None)
+        if isinstance(connections, dict):
+            for conn in list(connections.values()):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            connections.clear()
+        try:
+            http.timeout = 120
+        except Exception:
+            pass
 
     def download_file(self, file_id: str, dest_path: str) -> None:
         """Descarga un archivo de Drive a una ruta local."""
@@ -323,19 +356,37 @@ class DriveTransferService:
         from app.store.telegram_bot_service import host_room
 
         chunk = 1024 * 1024 if host_room() == 'cargado' else 4 * 1024 * 1024
-        request = self.service.files().get_media(fileId=file_id)
-        try:
-            with open(dest_path, 'wb') as handle:
-                downloader = MediaIoBaseDownload(handle, request, chunksize=chunk)
-                done = False
-                while not done:
-                    _, done = downloader.next_chunk()
-        except Exception:
+        last_error = None
+        for attempt in range(3):
+            self._drop_drive_connections()
+            request = self.service.files().get_media(fileId=file_id)
             try:
-                os.remove(dest_path)
-            except OSError:
-                pass
-            raise
+                with open(dest_path, 'wb') as handle:
+                    downloader = MediaIoBaseDownload(handle, request, chunksize=chunk)
+                    done = False
+                    while not done:
+                        _, done = downloader.next_chunk()
+                return
+            except DriveFolderMissing:
+                try:
+                    os.remove(dest_path)
+                except OSError:
+                    pass
+                raise
+            except Exception as exc:
+                if _drive_folder_missing(exc):
+                    try:
+                        os.remove(dest_path)
+                    except OSError:
+                        pass
+                    raise DriveFolderMissing()
+                last_error = exc
+                try:
+                    os.remove(dest_path)
+                except OSError:
+                    pass
+                time.sleep(0.4 * (attempt + 1))
+        raise last_error
     
     def transfer_files(self, source_folder_id: str, destination_folder_id: str, max_files_per_batch: Optional[int] = None, on_moved=None) -> Dict[str, Any]:
         """Mueve fotos y videos. Si el servidor está libre, avanza más; si está cargado, espera."""
@@ -355,6 +406,9 @@ class DriveTransferService:
                     'remaining_files': 0
                 }
         
+        files_moved = 0
+        files_failed = 0
+        moved_files = []
         try:
             # Obtener archivos de la carpeta origen
             files = self.get_files_in_folder(source_folder_id)
@@ -383,11 +437,7 @@ class DriveTransferService:
             files_to_process = files[:max_files_per_batch]
             remaining_files = len(files) - len(files_to_process)
             
-            files_moved = 0
-            files_failed = 0
             failed_files = []
-            moved_files = []
-            started = time.monotonic()
             
             # Procesar archivos de forma gradual con pausas inteligentes y manejo robusto de errores
             consecutive_errors = 0
@@ -395,10 +445,6 @@ class DriveTransferService:
             stopped_early = False
             
             for i, file in enumerate(files_to_process, 1):
-                if time.monotonic() - started >= _TRANSFER_BUDGET_SEC:
-                    remaining_files += len(files_to_process) - (i - 1)
-                    stopped_early = True
-                    break
                 file_id = file['id']
                 file_name = file['name']
                 file_size = file.get('size', 'N/A')
@@ -455,6 +501,8 @@ class DriveTransferService:
                             consecutive_errors += 1
                             break
                             
+                    except DriveFolderMissing:
+                        raise
                     except Exception as e:
                         consecutive_errors += 1
                         
@@ -505,15 +553,30 @@ class DriveTransferService:
             }
             
             return result
+
+        except DriveFolderMissing:
+            return {
+                'success': True,
+                'drive_missing': True,
+                'message': '',
+                'files_processed': files_moved + files_failed,
+                'files_moved': files_moved,
+                'files_failed': 0,
+                'failed_files': [],
+                'moved_files': moved_files,
+                'transfer_completed': False,
+                'remaining_files': 0,
+            }
             
         except Exception as exc:
             logger.error('Error en transferencia: %s', type(exc).__name__)
             return {
                 'success': False,
                 'message': 'Error en transferencia',
-                'files_processed': 0,
-                'files_moved': 0,
-                'files_failed': 0,
+                'files_processed': files_moved + files_failed,
+                'files_moved': files_moved,
+                'files_failed': files_failed,
+                'moved_files': moved_files,
                 'transfer_completed': False,
                 'remaining_files': 0
             }
@@ -553,25 +616,17 @@ class DriveTransferService:
             # Guardar ID de carpeta de eliminados
             self.deleted_folder_id = deleted_folder_id
             
-            # Tipos de archivos a eliminar (fotos y videos)
-            file_types = [
-                'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
-                'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv',
-                'video/webm', 'video/mkv', 'video/3gp'
-            ]
-            
-            # Construir query para buscar archivos
-            mime_types_query = " or ".join([f"mimeType='{mime}'" for mime in file_types])
+            mime_clause = "(mimeType contains 'image/' or mimeType contains 'video/')"
             
             if days_old == 0:
                 # Si days_old es 0, eliminar TODOS los archivos sin filtro de fecha
-                query = f"'{folder_id}' in parents and ({mime_types_query}) and trashed=false"
+                query = f"'{folder_id}' in parents and {mime_clause} and trashed=false"
             else:
                 # Calcular fecha límite para archivos antiguos
                 from datetime import datetime, timedelta
                 cutoff_date = datetime.utcnow() - timedelta(days=days_old)
                 cutoff_date_str = cutoff_date.isoformat() + 'Z'
-                query = f"'{folder_id}' in parents and ({mime_types_query}) and trashed=false and modifiedTime < '{cutoff_date_str}'"
+                query = f"'{folder_id}' in parents and {mime_clause} and trashed=false and modifiedTime < '{cutoff_date_str}'"
             
             files_to_delete = []
             page_token = None
@@ -998,10 +1053,18 @@ def execute_transfer_simple(transfer, app):
             sender = None
         
         # Ejecutar transferencia. Cada archivo movido se envía enseguida si hay grupo.
+        def _send_moved(item, sender=sender):
+            if sender is None or not sender.active or sender.skipped:
+                return
+            try:
+                sender.send_one(item)
+            except Exception:
+                logger.warning('No se pudo enviar a Telegram el archivo movido')
+
         result = service.transfer_files(
             drive_original_id,
             drive_processed_id,
-            on_moved=sender.send_one if sender is not None and sender.active else None,
+            on_moved=_send_moved if sender is not None and sender.active else None,
         )
         
         # Verificar si la transferencia fue exitosa (completa o parcial)
@@ -1022,7 +1085,9 @@ def execute_transfer_simple(transfer, app):
                             transfer_obj.activated_at = datetime.utcnow()
                         
                         # Si se movieron archivos o se completó, actualizar last_processed
-                        if files_moved > 0 or transfer_completed:
+                        if result.get('drive_missing'):
+                            transfer_obj.last_error = None
+                        elif files_moved > 0 or transfer_completed:
                             transfer_obj.last_processed = datetime.utcnow()
 
                         if sender is not None:
@@ -1036,7 +1101,9 @@ def execute_transfer_simple(transfer, app):
                                     sender.tmp = ''
                         
                         # Si la transferencia está completa, resetear errores
-                        if transfer_completed:
+                        if result.get('drive_missing'):
+                            pass
+                        elif transfer_completed:
                             transfer_obj.consecutive_errors = 0
                             transfer_obj.last_error = None
                         elif files_moved > 0:
