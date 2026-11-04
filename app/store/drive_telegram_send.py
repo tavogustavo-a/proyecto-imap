@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 
 import requests
 
@@ -20,51 +21,68 @@ MEDIA_LIMIT = VIDEO_LIMIT
 MAX_PROBLEMS = 40
 
 
-def send_moved_files_to_telegram(drive_service, transfer, moved_files: list) -> dict:
-    """Manda cada archivo movido solo al grupo o canal configurado."""
-    from app.store.telegram_bot_service import (
-        _saved_bot_token,
-        probe_telegram_chat,
-        validate_chat_id,
-    )
+class DriveTelegramSender:
+    """Prepara el grupo una vez y manda de a un archivo, borrando el temporal al terminar cada uno."""
 
-    problems: list[dict] = []
-    sent = 0
-    targets, setup_problems = _targets(transfer, probe_telegram_chat, validate_chat_id)
-    problems.extend(setup_problems)
-    if not targets or not moved_files:
-        _store_problems(transfer, problems)
-        return {'sent': 0, 'problems': problems}
+    def __init__(self, drive_service):
+        self.drive_service = drive_service
+        self.prepared = False
+        self.active = False
+        self.finished = False
+        self.problems: list[dict] = []
+        self.sent = 0
+        self.targets: list[dict] = []
+        self.token = ''
+        self.tmp = ''
+        self._seq = 0
 
-    token = _saved_bot_token()
-    if not token:
-        problems.append(_problem('', '', 'El bot no está conectado.'))
-        _store_problems(transfer, problems)
-        return {'sent': 0, 'problems': problems}
+    def prepare(self, transfer) -> None:
+        from app.store.telegram_bot_service import (
+            _saved_bot_token,
+            probe_telegram_chat,
+            validate_chat_id,
+        )
 
-    tmp = tempfile.mkdtemp(prefix='drive-tg-')
-    try:
-        for item in moved_files:
-            name = str(item.get('name') or 'archivo')
-            mime = str(item.get('mimeType') or '')
-            file_id = item.get('id')
-            if not file_id:
-                continue
-            local = os.path.join(tmp, _safe_name(name))
+        self.prepared = True
+        targets, setup_problems = _targets(transfer, probe_telegram_chat, validate_chat_id)
+        self.problems.extend(setup_problems)
+        self.targets = targets
+        self.token = _saved_bot_token() or ''
+        self.active = bool(self.targets and self.token)
+        if self.targets and not self.token:
+            self.problems.append(_problem('', '', 'El bot no está conectado.'))
+        if self.active:
+            self.tmp = tempfile.mkdtemp(prefix='drive-tg-')
+
+    def send_one(self, item: dict) -> None:
+        if not self.active or not item:
+            return
+        from app.store.telegram_bot_service import wait_for_host_room
+
+        room = wait_for_host_room()
+        name = str(item.get('name') or 'archivo')
+        mime = str(item.get('mimeType') or '')
+        file_id = str(item.get('id') or '')
+        if not file_id:
+            return
+        self._seq += 1
+        local = os.path.join(self.tmp, f'{self._seq}_{_safe_name(name)}')
+        prepared = ''
+        try:
             try:
-                drive_service.download_file(file_id, local)
+                self.drive_service.download_file(file_id, local)
             except Exception:
-                problems.append(_problem(name, '', 'No se pudo bajar el archivo desde Drive.'))
-                continue
-            prepared, note = _fit_telegram_limit(local, mime, tmp)
+                self.problems.append(_problem(name, '', 'No se pudo bajar el archivo desde Drive.'))
+                return
+            prepared, note = _fit_telegram_limit(local, mime, self.tmp)
             if note:
-                problems.append(_problem(name, '', note))
+                self.problems.append(_problem(name, '', note))
             if not prepared:
-                continue
+                return
             kind = _send_kind(mime)
-            for target in targets:
+            for target in self.targets:
                 ok, err = _upload(
-                    token,
+                    self.token,
                     target['chat_id'],
                     prepared,
                     kind,
@@ -72,14 +90,39 @@ def send_moved_files_to_telegram(drive_service, transfer, moved_files: list) -> 
                     target.get('message_thread_id'),
                 )
                 if ok:
-                    sent += 1
+                    self.sent += 1
                 else:
-                    problems.append(_problem(name, target['label'], err))
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+                    self.problems.append(_problem(name, target['label'], err))
+        finally:
+            for path in (local, prepared):
+                if path and path != self.tmp and os.path.isfile(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+        if room == 'cargado':
+            time.sleep(0.45)
+        elif room == 'medio':
+            time.sleep(0.15)
 
-    _store_problems(transfer, problems)
-    return {'sent': sent, 'problems': problems[:MAX_PROBLEMS]}
+    def finish(self, transfer) -> dict:
+        self.finished = True
+        if self.tmp:
+            shutil.rmtree(self.tmp, ignore_errors=True)
+            self.tmp = ''
+        if self.prepared:
+            _store_problems(transfer, self.problems)
+        return {'sent': self.sent, 'problems': self.problems[:MAX_PROBLEMS]}
+
+
+def send_moved_files_to_telegram(drive_service, transfer, moved_files: list) -> dict:
+    """Manda cada archivo movido solo al grupo o canal configurado."""
+    sender = DriveTelegramSender(drive_service)
+    sender.prepare(transfer)
+    if sender.active:
+        for item in moved_files:
+            sender.send_one(item)
+    return sender.finish(transfer)
 
 
 def _targets(transfer, probe_telegram_chat, validate_chat_id):
@@ -273,13 +316,21 @@ def _compress_image(path: str, tmp: str):
         from PIL import Image
     except Exception:
         return None
-    dest = os.path.join(tmp, 'fit.jpg')
+    dest = os.path.join(tmp, f'fit-{os.getpid()}.jpg')
+    previous_limit = getattr(Image, 'MAX_IMAGE_PIXELS', None)
+    img = None
     try:
+        Image.MAX_IMAGE_PIXELS = 25_000_000
         img = Image.open(path)
+        img.load()
         if img.mode not in ('RGB', 'L'):
-            img = img.convert('RGB')
-        else:
-            img = img.convert('RGB')
+            converted = img.convert('RGB')
+            img.close()
+            img = converted
+        elif img.mode != 'RGB':
+            converted = img.convert('RGB')
+            img.close()
+            img = converted
         width, height = img.size
         quality = 80
         while True:
@@ -297,7 +348,27 @@ def _compress_image(path: str, tmp: str):
             return dest
     except Exception:
         logger.warning('No se pudo comprimir la imagen de Drive')
+    finally:
+        if img is not None:
+            try:
+                img.close()
+            except Exception:
+                pass
+        Image.MAX_IMAGE_PIXELS = previous_limit
     return None
+
+
+def _ffmpeg_threads() -> str:
+    """Usa casi todos los núcleos si el servidor está libre, y uno solo si está cargado."""
+    from app.store.telegram_bot_service import host_room
+
+    cores = max(os.cpu_count() or 2, 1)
+    room = host_room()
+    if room == 'cargado':
+        return '1'
+    if room == 'medio':
+        return str(max(1, cores // 2))
+    return str(max(1, cores - 1))
 
 
 def _compress_video(path: str, tmp: str):
@@ -311,7 +382,7 @@ def _compress_video(path: str, tmp: str):
                 [
                     ffmpeg, '-y', '-i', path,
                     '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-                    '-c:v', 'libx264', '-b:v', bitrate,
+                    '-c:v', 'libx264', '-threads', _ffmpeg_threads(), '-b:v', bitrate,
                     '-c:a', 'aac', '-b:a', '64k',
                     '-movflags', '+faststart',
                     dest,
@@ -335,6 +406,21 @@ def _send_kind(mime: str) -> str:
     return 'document'
 
 
+def _post_file(token: str, method: str, payload: dict, field: str, path: str) -> dict | None:
+    try:
+        with open(path, 'rb') as handle:
+            response = requests.post(
+                f'https://api.telegram.org/bot{token}/{method}',
+                data=payload,
+                files={field: handle},
+                timeout=180,
+            )
+        data = response.json()
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _upload(
     token: str,
     chat_id: str,
@@ -351,19 +437,23 @@ def _upload(
             payload['message_thread_id'] = int(message_thread_id)
         except (TypeError, ValueError):
             return False, 'El ID del tema no es válido.'
-    try:
-        with open(path, 'rb') as handle:
-            response = requests.post(
-                f'https://api.telegram.org/bot{token}/{method}',
-                data=payload,
-                files={field: handle},
-                timeout=180,
-            )
-        data = response.json()
-    except Exception:
+    data = _post_file(token, method, payload, field, path)
+    if data is None:
         return False, 'No se pudo conectar con Telegram para enviar el archivo.'
-    if isinstance(data, dict) and data.get('ok'):
+    if data.get('ok'):
         return True, ''
+    if data.get('error_code') == 429:
+        parameters = data.get('parameters') if isinstance(data.get('parameters'), dict) else {}
+        try:
+            retry_after = min(int(parameters.get('retry_after') or 3), 20)
+        except (TypeError, ValueError):
+            retry_after = 3
+        time.sleep(retry_after)
+        data = _post_file(token, method, payload, field, path)
+        if data is None:
+            return False, 'No se pudo conectar con Telegram para enviar el archivo.'
+        if data.get('ok'):
+            return True, ''
     description = ''
     if isinstance(data, dict):
         description = str(data.get('description') or '')
@@ -383,4 +473,7 @@ def _store_problems(transfer, problems: list) -> None:
 
 def _safe_name(name: str) -> str:
     cleaned = ''.join(ch if ch.isalnum() or ch in '._-' else '_' for ch in name)[:80]
-    return cleaned or 'archivo'
+    cleaned = cleaned.lstrip('.')
+    if not cleaned or cleaned in ('.', '..'):
+        return 'archivo'
+    return cleaned

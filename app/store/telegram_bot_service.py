@@ -3964,14 +3964,32 @@ def _dispatch_private_menu(token: str, chat_id, text: str) -> str:
     return 'sent'
 
 
-def _server_use() -> tuple[float, float]:
-    """Porcentaje de procesador y de memoria en uso. 0 si no se puede medir."""
+_server_use_cache = {'at': 0.0, 'cpu': 0.0, 'mem': 0.0}
+_server_use_lock = threading.Lock()
+_cpu_sample = {'idle': None, 'total': None}
+
+
+def _cpu_percent(idle_now: int, total_now: int) -> float:
+    idle_prev = _cpu_sample['idle']
+    total_prev = _cpu_sample['total']
+    _cpu_sample['idle'] = idle_now
+    _cpu_sample['total'] = total_now
+    if idle_prev is None or total_now <= total_prev:
+        return 0.0
+    cpu = (1 - ((idle_now - idle_prev) / (total_now - total_prev))) * 100.0
+    return max(0.0, min(100.0, cpu))
+
+
+def _linux_server_use() -> tuple[float, float]:
     cpu = 0.0
     mem = 0.0
-    cores = max(os.cpu_count() or 1, 1)
     try:
-        cpu = min(100.0, (os.getloadavg()[0] / cores) * 100.0)
-    except (AttributeError, OSError):
+        with open('/proc/stat', encoding='utf-8') as handle:
+            parts = handle.readline().split()
+        nums = [int(part) for part in parts[1:]]
+        idle_now = nums[3] + (nums[4] if len(nums) > 4 else 0)
+        cpu = _cpu_percent(idle_now, sum(nums))
+    except (OSError, ValueError, IndexError):
         cpu = 0.0
     try:
         info = {}
@@ -3985,6 +4003,84 @@ def _server_use() -> tuple[float, float]:
     except (OSError, ValueError, IndexError):
         mem = 0.0
     return cpu, mem
+
+
+def _windows_server_use() -> tuple[float, float]:
+    cpu = 0.0
+    mem = 0.0
+    try:
+        import ctypes
+
+        class _MemoryStatus(ctypes.Structure):
+            _fields_ = [
+                ('dwLength', ctypes.c_ulong),
+                ('dwMemoryLoad', ctypes.c_ulong),
+                ('ullTotalPhys', ctypes.c_ulonglong),
+                ('ullAvailPhys', ctypes.c_ulonglong),
+                ('ullTotalPageFile', ctypes.c_ulonglong),
+                ('ullAvailPageFile', ctypes.c_ulonglong),
+                ('ullTotalVirtual', ctypes.c_ulonglong),
+                ('ullAvailVirtual', ctypes.c_ulonglong),
+                ('ullAvailExtendedVirtual', ctypes.c_ulonglong),
+            ]
+
+        status = _MemoryStatus()
+        status.dwLength = ctypes.sizeof(_MemoryStatus)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            mem = float(status.dwMemoryLoad)
+
+        class _FileTime(ctypes.Structure):
+            _fields_ = [('dwLowDateTime', ctypes.c_ulong), ('dwHighDateTime', ctypes.c_ulong)]
+
+        idle_ft, kernel_ft, user_ft = _FileTime(), _FileTime(), _FileTime()
+        if ctypes.windll.kernel32.GetSystemTimes(
+            ctypes.byref(idle_ft), ctypes.byref(kernel_ft), ctypes.byref(user_ft)
+        ):
+            def _ticks(value: _FileTime) -> int:
+                return (int(value.dwHighDateTime) << 32) | int(value.dwLowDateTime)
+
+            idle_now = _ticks(idle_ft)
+            total_now = _ticks(kernel_ft) + _ticks(user_ft)
+            cpu = _cpu_percent(idle_now, total_now)
+    except (AttributeError, OSError, ValueError):
+        return 0.0, 0.0
+    return cpu, mem
+
+
+def _server_use() -> tuple[float, float]:
+    """Porcentaje de procesador y de memoria en uso. Se reutiliza un segundo."""
+    now = time.monotonic()
+    with _server_use_lock:
+        if now - _server_use_cache['at'] < 1.0:
+            return _server_use_cache['cpu'], _server_use_cache['mem']
+        if os.name == 'nt':
+            cpu, mem = _windows_server_use()
+        else:
+            cpu, mem = _linux_server_use()
+        _server_use_cache['at'] = time.monotonic()
+        _server_use_cache['cpu'] = cpu
+        _server_use_cache['mem'] = mem
+        return cpu, mem
+
+
+def host_room() -> str:
+    """libre, medio o cargado, según procesador y memoria."""
+    cpu, mem = _server_use()
+    if cpu >= 80 or mem >= 88:
+        return 'cargado'
+    if cpu >= 55 or mem >= 75:
+        return 'medio'
+    return 'libre'
+
+
+def wait_for_host_room(max_wait: float = 12.0) -> str:
+    """Si el servidor está cargado, espera. Nunca más de max_wait segundos."""
+    deadline = time.monotonic() + max(0.0, max_wait)
+    room = host_room()
+    while room == 'cargado' and time.monotonic() < deadline:
+        time.sleep(0.4)
+        room = host_room()
+    return room
 
 
 def _reply_slots() -> int:

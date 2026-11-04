@@ -630,7 +630,7 @@ window.editDriveTransfer = async function(transferId) {
 // Función para eliminar configuración
 // Función global para ejecutar transferencia manualmente
 window.executeDriveTransferNow = async function(transferId) {
-    if (!confirm('¿Ejecutar la transferencia de Drive ahora? Esto moverá los archivos del Drive original al Drive procesado.')) {
+    if (!confirm('¿Ejecutar la transferencia de Drive ahora? Esto moverá los archivos del Drive original al Drive procesado. Si hay Telegram configurado, también se envían.')) {
         return;
     }
     

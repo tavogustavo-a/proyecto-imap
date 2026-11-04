@@ -4,6 +4,8 @@ Incluye: servicio de transferencia, scheduler y auto-scheduler
 """
 import json
 import logging
+import os
+import re
 import threading
 import time
 from datetime import datetime, time as dt_time, timedelta
@@ -17,6 +19,12 @@ from app import db
 from app.store.models import DriveTransfer
 
 logger = logging.getLogger(__name__)
+_DRIVE_ID = re.compile(r'^[A-Za-z0-9_-]{8,200}$')
+_TRANSFER_BUDGET_SEC = 180
+
+
+def _valid_drive_id(value: str) -> bool:
+    return bool(_DRIVE_ID.fullmatch(value or ''))
 
 
 def ensure_drive_telegram_columns() -> None:
@@ -103,6 +111,21 @@ def parse_interval(interval_str: str) -> Optional[timedelta]:
     except (ValueError, AttributeError):
         return None
 
+def _pending_retry_seconds() -> int:
+    """Cuánto esperar para seguir con lo que quedó. Libre: poco. Cargado: un poco más."""
+    try:
+        from app.store.telegram_bot_service import host_room
+
+        room = host_room()
+    except Exception:
+        room = 'medio'
+    if room == 'cargado':
+        return 90
+    if room == 'medio':
+        return 30
+    return 12
+
+
 def should_execute_by_interval(transfer: DriveTransfer) -> bool:
     """
     Verifica si debe ejecutar basándose en el intervalo configurado.
@@ -129,11 +152,9 @@ def should_execute_by_interval(transfer: DriveTransfer) -> bool:
             except (ValueError, IndexError):
                 pass
         
-        # Si hay archivos pendientes, ejecutar si pasaron al menos 5 minutos desde la última ejecución
         if has_pending_files and transfer.last_processed:
             time_since_last = now_utc - transfer.last_processed
-            # Ejecutar cada 5 minutos cuando hay archivos pendientes
-            if time_since_last >= timedelta(minutes=5):
+            if time_since_last >= timedelta(seconds=_pending_retry_seconds()):
                 return True
         
         # PRIORIDAD 2: Verificar intervalo normal
@@ -189,17 +210,25 @@ class DriveTransferService:
                 scopes=['https://www.googleapis.com/auth/drive']
             )
             self.service = build('drive', 'v3', credentials=credentials)
-        except json.JSONDecodeError as e:
-            logger.error(f"Error en formato JSON de credenciales: {str(e)}")
-            raise Exception("Credenciales JSON inválidas")
-        except Exception as e:
-            logger.error(f"Error en autenticación: {str(e)}")
-            raise Exception(f"Error de autenticación: {str(e)}")
+        except json.JSONDecodeError:
+            logger.error('Credenciales de Drive con JSON inválido')
+            raise Exception('Credenciales JSON inválidas')
+        except Exception as exc:
+            logger.error('Error de autenticación con Drive: %s', type(exc).__name__)
+            raise Exception('Error de autenticación con Google Drive')
+        http = getattr(self.service, '_http', None)
+        if http is not None:
+            try:
+                http.timeout = 120
+            except Exception:
+                pass
     
     def get_files_in_folder(self, folder_id: str, file_types: List[str] = None) -> List[Dict[str, Any]]:
         """Obtiene todos los archivos de una carpeta específica"""
         if not self.service:
             raise Exception("Servicio no autenticado")
+        if not _valid_drive_id(folder_id):
+            raise Exception('ID de carpeta de Drive no válido')
         
         try:
             # Tipos de archivos por defecto (fotos y videos)
@@ -244,6 +273,8 @@ class DriveTransferService:
         """Mueve un archivo de una carpeta a otra"""
         if not self.service:
             raise Exception("Servicio no autenticado")
+        if not all(_valid_drive_id(value) for value in (file_id, source_folder_id, destination_folder_id)):
+            return False
         
         try:
             # Obtener el archivo actual
@@ -252,6 +283,12 @@ class DriveTransferService:
             
             # Verificar si ya está en la carpeta destino
             if destination_folder_id in current_parents:
+                if source_folder_id in current_parents and source_folder_id != destination_folder_id:
+                    self.service.files().update(
+                        fileId=file_id,
+                        removeParents=source_folder_id,
+                        fields='id, parents',
+                    ).execute()
                 return True
             
             # Verificar si está en la carpeta origen
@@ -269,9 +306,7 @@ class DriveTransferService:
             return True
             
         except HttpError as e:
-            if "cannotAddParent" in str(e):
-                return True
-            logger.error(f"Error moviendo archivo {file_id}: {str(e)}")
+            logger.error('Error moviendo archivo %s: %s', file_id, type(e).__name__)
             return False
         except Exception as e:
             logger.error(f"Error moviendo archivo {file_id}: {str(e)}")
@@ -283,21 +318,27 @@ class DriveTransferService:
 
         if not self.service:
             raise Exception('Servicio no autenticado')
+        if not _valid_drive_id(file_id):
+            raise Exception('ID de archivo de Drive no válido')
+        from app.store.telegram_bot_service import host_room
+
+        chunk = 1024 * 1024 if host_room() == 'cargado' else 4 * 1024 * 1024
         request = self.service.files().get_media(fileId=file_id)
-        with open(dest_path, 'wb') as handle:
-            downloader = MediaIoBaseDownload(handle, request, chunksize=1024 * 1024)
-            done = False
-            while not done:
-                _, done = downloader.next_chunk()
+        try:
+            with open(dest_path, 'wb') as handle:
+                downloader = MediaIoBaseDownload(handle, request, chunksize=chunk)
+                done = False
+                while not done:
+                    _, done = downloader.next_chunk()
+        except Exception:
+            try:
+                os.remove(dest_path)
+            except OSError:
+                pass
+            raise
     
-    def transfer_files(self, source_folder_id: str, destination_folder_id: str, max_files_per_batch: int = 20) -> Dict[str, Any]:
-        """Transfiere archivos de fotos y videos de forma gradual en lotes pequeños
-        
-        Args:
-            source_folder_id: ID de la carpeta origen
-            destination_folder_id: ID de la carpeta destino
-            max_files_per_batch: Máximo de archivos a procesar por ejecución (default: 20)
-        """
+    def transfer_files(self, source_folder_id: str, destination_folder_id: str, max_files_per_batch: Optional[int] = None, on_moved=None) -> Dict[str, Any]:
+        """Mueve fotos y videos. Si el servidor está libre, avanza más; si está cargado, espera."""
         if not self.service:
             # Intentar autenticar si no está autenticado
             try:
@@ -329,7 +370,16 @@ class DriveTransferService:
                     'remaining_files': 0
                 }
             
-            # Limitar cantidad de archivos a procesar en esta ejecución
+            from app.store.telegram_bot_service import host_room, wait_for_host_room
+
+            room = host_room()
+            if max_files_per_batch is None:
+                if room == 'cargado':
+                    max_files_per_batch = 12
+                elif room == 'medio':
+                    max_files_per_batch = 40
+                else:
+                    max_files_per_batch = 200
             files_to_process = files[:max_files_per_batch]
             remaining_files = len(files) - len(files_to_process)
             
@@ -337,20 +387,24 @@ class DriveTransferService:
             files_failed = 0
             failed_files = []
             moved_files = []
+            started = time.monotonic()
             
             # Procesar archivos de forma gradual con pausas inteligentes y manejo robusto de errores
             consecutive_errors = 0
             max_consecutive_errors = 5  # Máximo de errores consecutivos antes de pausar más tiempo
+            stopped_early = False
             
             for i, file in enumerate(files_to_process, 1):
+                if time.monotonic() - started >= _TRANSFER_BUDGET_SEC:
+                    remaining_files += len(files_to_process) - (i - 1)
+                    stopped_early = True
+                    break
                 file_id = file['id']
                 file_name = file['name']
                 file_size = file.get('size', 'N/A')
                 file_mime = file.get('mimeType', 'unknown')
                 
-                # Detectar si es video o imagen
                 is_video = file_mime.startswith('video/')
-                is_image = file_mime.startswith('image/')
                 
                 # Convertir tamaño a bytes si es posible
                 file_size_bytes = 0
@@ -360,24 +414,13 @@ class DriveTransferService:
                 except (ValueError, TypeError):
                     file_size_bytes = 0
                 
-                # Determinar pausa según tipo y tamaño de archivo
-                if is_video:
-                    # Videos: pausa más larga, especialmente si son grandes
-                    if file_size_bytes > 50 * 1024 * 1024:  # > 50MB
-                        pause_time = 3.0  # 3 segundos para videos grandes
-                    elif file_size_bytes > 10 * 1024 * 1024:  # > 10MB
-                        pause_time = 2.0  # 2 segundos para videos medianos
-                    else:
-                        pause_time = 1.5  # 1.5 segundos para videos pequeños
-                elif is_image:
-                    # Imágenes: pausa más corta
-                    if file_size_bytes > 10 * 1024 * 1024:  # > 10MB
-                        pause_time = 1.0  # 1 segundo para imágenes grandes
-                    else:
-                        pause_time = 0.5  # 0.5 segundos para imágenes normales
+                room = wait_for_host_room()
+                if room == 'cargado':
+                    pause_time = 0.8 if is_video else 0.35
+                elif room == 'medio':
+                    pause_time = 0.25 if is_video else 0.1
                 else:
-                    # Otros tipos: pausa estándar
-                    pause_time = 1.0
+                    pause_time = 0.02
                 
                 # Intentar mover archivo con reintentos
                 max_retries = 3
@@ -390,12 +433,18 @@ class DriveTransferService:
                         if self.move_file(file_id, source_folder_id, destination_folder_id):
                             files_moved += 1
                             file_moved_successfully = True
-                            moved_files.append({
+                            moved_info = {
                                 'id': file_id,
                                 'name': file_name,
                                 'mimeType': file_mime,
                                 'size': file_size_bytes,
-                            })
+                            }
+                            moved_files.append(moved_info)
+                            if on_moved is not None:
+                                try:
+                                    on_moved(moved_info)
+                                except Exception:
+                                    logger.warning('No se pudo enviar a Telegram el archivo movido')
                             consecutive_errors = 0  # Resetear contador de errores consecutivos
                             break  # Salir del loop de reintentos
                         else:
@@ -417,29 +466,24 @@ class DriveTransferService:
                             # Esperar antes de reintentar (pausa progresiva)
                             time.sleep(retry_delay * (attempt + 1))
                 
-                # Si hubo errores consecutivos, pausar más tiempo antes de continuar
                 if consecutive_errors > 0:
+                    wait_for_host_room(max_wait=8)
                     if consecutive_errors >= max_consecutive_errors:
-                        # Si hay muchos errores consecutivos, pausar más tiempo (5-10 segundos)
-                        pause_after_error = min(5.0 + (consecutive_errors - max_consecutive_errors) * 1.0, 10.0)
+                        pause_after_error = min(2.0 + (consecutive_errors - max_consecutive_errors) * 0.5, 6.0)
                         time.sleep(pause_after_error)
                     else:
-                        # Pausa moderada si hay pocos errores consecutivos
-                        time.sleep(2.0)
+                        time.sleep(0.6)
                 else:
-                    # Pausa normal después de cada archivo para dar tiempo al procesamiento
                     time.sleep(pause_time)
-                
-                # Pausa adicional cada 5 archivos para evitar saturación
-                if i % 5 == 0:
-                    time.sleep(1.0)  # Pausa adicional de 1 segundo cada 5 archivos
                 
                 # Si hay demasiados errores consecutivos, detener el batch para evitar saturación
                 if consecutive_errors >= 10:
+                    remaining_files += len(files_to_process) - i
+                    stopped_early = True
                     break
             
             # Determinar si la transferencia está completa (no quedan archivos pendientes)
-            transfer_completed = remaining_files == 0 and files_failed == 0
+            transfer_completed = remaining_files == 0 and files_failed == 0 and not stopped_early
             
             # Mensaje informativo
             if remaining_files > 0:
@@ -462,11 +506,11 @@ class DriveTransferService:
             
             return result
             
-        except Exception as e:
-            logger.error(f"Error en transferencia: {str(e)}")
+        except Exception as exc:
+            logger.error('Error en transferencia: %s', type(exc).__name__)
             return {
                 'success': False,
-                'message': f'Error en transferencia: {str(e)}',
+                'message': 'Error en transferencia',
                 'files_processed': 0,
                 'files_moved': 0,
                 'files_failed': 0,
@@ -930,15 +974,34 @@ def execute_transfer_simple(transfer, app):
     credentials_json = transfer.credentials_json
     drive_original_id = transfer.drive_original_id
     drive_processed_id = transfer.drive_processed_id
+    sender = None
     
     try:
         # Crear servicio (fuera del contexto de app para evitar problemas)
         service = DriveTransferService(credentials_json)
+        try:
+            with app.app_context():
+                ensure_drive_telegram_columns()
+                transfer_obj = DriveTransfer.query.get(transfer_id)
+                if transfer_obj is not None:
+                    from app.store.drive_telegram_send import DriveTelegramSender
+
+                    sender = DriveTelegramSender(service)
+                    sender.prepare(transfer_obj)
+                    db.session.commit()
+        except Exception:
+            logger.warning('No se pudo preparar el envío de Drive a Telegram')
+            if sender is not None and sender.tmp:
+                import shutil
+                shutil.rmtree(sender.tmp, ignore_errors=True)
+                sender.tmp = ''
+            sender = None
         
-        # Ejecutar transferencia
+        # Ejecutar transferencia. Cada archivo movido se envía enseguida si hay grupo.
         result = service.transfer_files(
             drive_original_id,
-            drive_processed_id
+            drive_processed_id,
+            on_moved=sender.send_one if sender is not None and sender.active else None,
         )
         
         # Verificar si la transferencia fue exitosa (completa o parcial)
@@ -962,25 +1025,15 @@ def execute_transfer_simple(transfer, app):
                         if files_moved > 0 or transfer_completed:
                             transfer_obj.last_processed = datetime.utcnow()
 
-                        moved_files = result.get('moved_files') or []
-                        if moved_files:
+                        if sender is not None:
                             try:
-                                from app.store.drive_telegram_send import send_moved_files_to_telegram
-
-                                tg_report = send_moved_files_to_telegram(
-                                    service, transfer_obj, moved_files
-                                )
-                                result['telegram'] = tg_report
-                            except Exception as tg_exc:
-                                logger.warning('Envío Telegram de Drive: %s', tg_exc)
-                                result['telegram'] = {
-                                    'sent': 0,
-                                    'problems': [{
-                                        'file': '',
-                                        'destino': '',
-                                        'problema': 'No se pudo preparar el envío a Telegram.',
-                                    }],
-                                }
+                                result['telegram'] = sender.finish(transfer_obj)
+                            except Exception:
+                                logger.warning('No se pudo guardar el resultado del envío a Telegram')
+                                if sender.tmp:
+                                    import shutil
+                                    shutil.rmtree(sender.tmp, ignore_errors=True)
+                                    sender.tmp = ''
                         
                         # Si la transferencia está completa, resetear errores
                         if transfer_completed:
@@ -1005,8 +1058,13 @@ def execute_transfer_simple(transfer, app):
         return result
         
     except Exception as e:
-        error_msg = str(e)
+        if sender is not None and not sender.finished and sender.tmp:
+            import shutil
+            shutil.rmtree(sender.tmp, ignore_errors=True)
+            sender.tmp = ''
+        error_msg = 'La transferencia no se pudo completar'
         error_type = type(e).__name__
+        logger.error('Error en transferencia de Drive: %s', error_type)
         
         # Actualizar contador de errores en base de datos
         try:
@@ -1064,12 +1122,11 @@ def calculate_smart_wait_time(transfers):
                         # Si hay archivos pendientes, calcular tiempo desde última ejecución
                         if transfer.last_processed:
                             time_since_last = now_utc - transfer.last_processed
-                            # Si pasaron menos de 5 minutos, calcular cuánto falta
-                            if time_since_last < timedelta(minutes=5):
-                                time_until = timedelta(minutes=5) - time_since_last
+                            gap = timedelta(seconds=_pending_retry_seconds())
+                            if time_since_last < gap:
+                                time_until = gap - time_since_last
                                 next_execution_times.append(time_until.total_seconds())
                             else:
-                                # Ya pasaron 5 minutos, ejecutar inmediatamente
                                 next_execution_times.append(0)
                         else:
                             # No se ha ejecutado, puede ejecutarse inmediatamente
@@ -1120,10 +1177,7 @@ def calculate_smart_wait_time(transfers):
         # Si hay archivos pendientes, revisar más frecuentemente (máximo 5 minutos)
         if has_pending_files:
             min_time = min(next_execution_times)
-            # Esperar hasta 1 minuto antes (mínimo 30 segundos) cuando hay archivos pendientes
-            wait_time = max(min_time - 60, 30)  # 1 minuto antes, mínimo 30 segundos
-            # Limitar a máximo 5 minutos cuando hay archivos pendientes
-            return min(int(wait_time), 300)
+            return min(max(int(min_time), 5), 90)
         
         # Tomar el tiempo más corto y esperar hasta 5 minutos antes (mínimo 30 segundos)
         min_time = min(next_execution_times)

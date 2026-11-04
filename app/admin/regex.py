@@ -1,4 +1,5 @@
 # app/admin/regex.py
+import html
 import re
 import urllib.parse
 
@@ -43,9 +44,9 @@ def _normalize_regex_match(match):
                     parts.append(cleaned)
             elif part:
                 parts.append(str(part))
-        return ''.join(parts)
+        return html.unescape(''.join(parts))
     if isinstance(match, str):
-        return unwrap_admin_redirect_url(match)
+        return html.unescape(unwrap_admin_redirect_url(match))
     return match
 
 
@@ -167,7 +168,13 @@ def extract_regex(mail_dict, regexes):
         try:
             found = re.findall(r.pattern, body_raw, FLAGS)
             if found:
-                results[r.id] = [_normalize_regex_match(m) for m in found]
+                values = []
+                for item in found:
+                    value = _normalize_regex_match(item)
+                    if value and value not in values:
+                        values.append(value)
+                if values:
+                    results[r.id] = values
         except re.error:
             pass
 
