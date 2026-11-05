@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
             drive_deleted: deletedId,
             drive_telegram_group: telegramGroup,
             drive_telegram_topic: telegramTopic,
+            drive_source_telegram: document.getElementById('drive-source-telegram')?.value || '',
             drive_processing_time: processingTime
         };
         
@@ -82,6 +83,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('drive_deleted', data.drive_deleted);
             formData.append('drive_telegram_group', data.drive_telegram_group || '');
             formData.append('drive_telegram_topic', data.drive_telegram_topic || '');
+            formData.append('drive_source_telegram', data.drive_source_telegram || '');
             formData.append('drive_processing_time', data.drive_processing_time);
             
             
@@ -378,25 +380,33 @@ async function loadDriveTransfersTable() {
                 containerDiv.appendChild(table);
                 result.transfers.forEach(function (item) {
                     const problems = item.telegram_send_problems || [];
-                    if (!problems.length) {
+                    const groups = window.parseDriveSources ? window.parseDriveSources(item.source_telegram_chats) : [];
+                    if (!item.telegram_send_at && !groups.length) {
                         return;
                     }
                     const box = document.createElement('div');
                     box.className = 'drive-telegram-problems';
-                    const title = document.createElement('strong');
-                    title.textContent = item.telegram_send_at
-                        ? 'Última pasada: ' + item.telegram_send_at
-                        : 'Última pasada';
-                    box.appendChild(title);
-                    const list = document.createElement('ul');
-                    problems.slice(0, 20).forEach(function (problem) {
-                        const li = document.createElement('li');
-                        const file = problem.file ? problem.file + ' — ' : '';
-                        const dest = problem.destino ? problem.destino + ': ' : '';
-                        li.textContent = file + dest + (problem.problema || '');
-                        list.appendChild(li);
-                    });
-                    box.appendChild(list);
+                    if (item.telegram_send_at) {
+                        const title = document.createElement('strong');
+                        title.textContent = 'Última actualización: ' + item.telegram_send_at;
+                        box.appendChild(title);
+                    }
+                    if (groups.length) {
+                        const reads = document.createElement('p');
+                        reads.textContent = 'Lee: ' + groups.join(', ');
+                        box.appendChild(reads);
+                    }
+                    if (problems.length) {
+                        const list = document.createElement('ul');
+                        problems.slice(0, 20).forEach(function (problem) {
+                            const li = document.createElement('li');
+                            const file = problem.file ? problem.file + ' — ' : '';
+                            const dest = problem.destino ? problem.destino + ': ' : '';
+                            li.textContent = file + dest + (problem.problema || '');
+                            list.appendChild(li);
+                        });
+                        box.appendChild(list);
+                    }
                     containerDiv.appendChild(box);
                 });
                 tableContainer.innerHTML = '';
@@ -606,6 +616,9 @@ window.editDriveTransfer = async function(transferId) {
         if (editGroup) editGroup.value = transfer.telegram_group_id || '';
         const editTopic = document.getElementById('edit-drive-telegram-topic');
         if (editTopic) editTopic.value = transfer.telegram_topic_id || '';
+        const editSource = document.getElementById('edit-drive-source-telegram');
+        if (editSource) editSource.value = transfer.source_telegram_chats || '';
+        if (window.paintDriveSourcePreview) window.paintDriveSourcePreview('edit-drive-source-telegram', 'edit-drive-source-telegram-preview');
         
         // Mostrar intervalo tal como está (ej: "5H", "10M")
         document.getElementById('edit-drive-processing-time').value = transfer.processing_time || '';
@@ -837,6 +850,7 @@ function setupDriveEditModal() {
             formData.append('drive_deleted', data.drive_deleted || '');
             formData.append('drive_telegram_group', data.drive_telegram_group || '');
             formData.append('drive_telegram_topic', data.drive_telegram_topic || '');
+            formData.append('drive_source_telegram', data.drive_source_telegram || '');
             formData.append('drive_processing_time', data.drive_processing_time);
             
             
@@ -2032,4 +2046,153 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.querySelector('[id^="loadPhotosBtn-"]') || document.querySelector('[id^="loadVideosBtn-"]')) {
         window.driveGallery = new DriveGallery();
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.parseDriveSources = function (raw) {
+        const seen = [];
+        String(raw || '').split(/[\s,;]+/).forEach(function (part) {
+            let item = part.trim().replace(/^https?:\/\/t\.me\//i, '').replace(/\/+$/, '');
+            if (!item || item.charAt(0) === '+' || seen.indexOf(item) !== -1) return;
+            if (/^-\d+$/.test(item) && item.indexOf('-100') !== 0 && item.length >= 11) {
+                item = '-100' + item.slice(1);
+            }
+            if (seen.indexOf(item) !== -1) return;
+            seen.push(item);
+        });
+        return seen.slice(0, 20);
+    };
+    window.paintDriveSourcePreview = function (inputId, previewId) {
+        const input = document.getElementById(inputId);
+        const preview = document.getElementById(previewId);
+        if (!input || !preview) return;
+        const groups = window.parseDriveSources(input.value);
+        preview.textContent = groups.length ? 'Se leen: ' + groups.join(', ') : '';
+    };
+    [
+        ['tg-personal-sources', 'tg-personal-sources-preview']
+    ].forEach(function (pair) {
+        const input = document.getElementById(pair[0]);
+        if (!input) return;
+        input.addEventListener('input', function () {
+            window.paintDriveSourcePreview(pair[0], pair[1]);
+        });
+        window.paintDriveSourcePreview(pair[0], pair[1]);
+    });
+    const sourcesInput = document.getElementById('tg-personal-sources');
+    if (sourcesInput) {
+        let saveTimer = null;
+        sourcesInput.addEventListener('input', function () {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(async function () {
+                const body = new FormData();
+                body.append('source_chats', sourcesInput.value || '');
+                await fetch('/tienda/admin/telegram_personal/sources', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf() },
+                    body
+                });
+            }, 400);
+        });
+    }
+
+    const sendCodeBtn = document.getElementById('tg-personal-send-code');
+    const confirmBtn = document.getElementById('tg-personal-confirm');
+    const statusEl = document.getElementById('tg-personal-status');
+    if (!sendCodeBtn || !confirmBtn || !statusEl) return;
+    const csrf = () => document.querySelector('meta[name="csrf_token"]')?.content || '';
+    const setStatus = (text, kind) => {
+        statusEl.textContent = text || '';
+        statusEl.classList.remove('is-code', 'is-ok', 'is-bad');
+        if (kind) statusEl.classList.add(kind);
+    };
+    let forgetting = false;
+    const fillSaved = (data) => {
+        forgetting = true;
+        const apiId = document.getElementById('tg-personal-api-id');
+        const apiHash = document.getElementById('tg-personal-api-hash');
+        const phone = document.getElementById('tg-personal-phone');
+        if (apiId) apiId.value = data.api_id || '';
+        if (apiHash) apiHash.value = data.api_hash || '';
+        if (phone) phone.value = data.phone || '';
+        const sources = document.getElementById('tg-personal-sources');
+        if (sources) sources.value = data.source_chats || '';
+        if (window.paintDriveSourcePreview) {
+            window.paintDriveSourcePreview('tg-personal-sources', 'tg-personal-sources-preview');
+        }
+        forgetting = false;
+        if (data.connected) setStatus('Cuenta conectada.', 'is-ok');
+        else if (data.waiting_code) setStatus('Falta el código de Telegram.', 'is-code');
+    };
+    window.reloadTelegramPersonalForm = async () => {
+        try {
+            const data = await fetch('/tienda/admin/telegram_personal/status').then(r => r.json());
+            fillSaved(data || {});
+        } catch (e) { /* si no carga, el formulario queda como está */ }
+    };
+    window.reloadTelegramPersonalForm();
+    const forgetAccount = async () => {
+        if (forgetting) return;
+        forgetting = true;
+        try {
+            const response = await fetch('/tienda/admin/telegram_personal/forget', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf() }
+            });
+            const result = await response.json().catch(() => ({}));
+            ['tg-personal-api-id', 'tg-personal-api-hash', 'tg-personal-phone', 'tg-personal-code', 'tg-personal-password'].forEach((id) => {
+                const field = document.getElementById(id);
+                if (field) field.value = '';
+            });
+            setStatus(result.message || 'Cuenta borrada.', response.ok ? '' : 'is-bad');
+        } finally {
+            forgetting = false;
+        }
+    };
+    ['tg-personal-api-id', 'tg-personal-api-hash', 'tg-personal-phone'].forEach((id) => {
+        const field = document.getElementById(id);
+        if (!field) return;
+        field.addEventListener('input', () => {
+            if (forgetting) return;
+            if (field.value.trim() === '') forgetAccount();
+        });
+    });
+    sendCodeBtn.addEventListener('click', async () => {
+        const body = new FormData();
+        body.append('api_id', document.getElementById('tg-personal-api-id')?.value || '');
+        body.append('api_hash', document.getElementById('tg-personal-api-hash')?.value || '');
+        body.append('phone', document.getElementById('tg-personal-phone')?.value || '');
+        setStatus('Pidiendo código...');
+        const response = await fetch('/tienda/admin/telegram_personal/start', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf() },
+            body
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok && !result.message) {
+            setStatus('El servidor no contestó. Reinícialo y vuelve a pulsar Enviar código.', 'is-bad');
+            return;
+        }
+        setStatus(result.message || 'No se pudo pedir el código.', response.ok ? 'is-code' : 'is-bad');
+    });
+    confirmBtn.addEventListener('click', async () => {
+        const apiId = (document.getElementById('tg-personal-api-id')?.value || '').trim();
+        const apiHash = (document.getElementById('tg-personal-api-hash')?.value || '').trim();
+        const phone = (document.getElementById('tg-personal-phone')?.value || '').trim();
+        if (!apiId || !apiHash || !phone) {
+            await forgetAccount();
+            return;
+        }
+        const body = new FormData();
+        body.append('code', document.getElementById('tg-personal-code')?.value || '');
+        body.append('password', document.getElementById('tg-personal-password')?.value || '');
+        setStatus('Conectando...');
+        const response = await fetch('/tienda/admin/telegram_personal/confirm', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf() },
+            body
+        });
+        const result = await response.json().catch(() => ({}));
+        setStatus(result.message || 'No se pudo conectar.', response.ok ? 'is-ok' : 'is-bad');
+    });
 });

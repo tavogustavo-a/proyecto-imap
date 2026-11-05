@@ -41566,6 +41566,20 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
   margin-left: 0;
 }
 
+.tg-personal-open-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.45rem;
+}
+.tg-personal-open-row #tg-personal-open-btn {
+  width: auto;
+  height: 2.2rem;
+  min-height: 2.2rem;
+  margin: 0;
+  padding: 0 0.85rem;
+  white-space: nowrap;
+}
+
 .telegram-group-extract {
   margin: 0;
   text-align: left;
@@ -41887,6 +41901,105 @@ body:has(.admin-licencias-page.admin-licencias-shell:not(.user-licencias-shell))
 
 .whatsapp-pruebas-modal.modal.d-none {
   display: none !important;
+}
+
+.tg-personal-modal.modal {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  position: fixed;
+  inset: 0;
+  z-index: 10780;
+}
+.tg-personal-modal.modal.d-none {
+  display: none !important;
+}
+.tg-personal-modal .tg-personal-modal-content {
+  position: relative;
+  width: min(92vw, 28rem);
+  max-width: 28rem;
+  padding-top: 1.55rem;
+}
+.tg-personal-modal #tg-personal-box input.form-control {
+  border: 1px solid rgba(0, 0, 0, 0.28) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.tg-personal-modal #tg-personal-box input.form-control:focus,
+.tg-personal-modal #tg-personal-box input.form-control:focus-visible,
+.tg-personal-modal #tg-personal-box input.form-control:active {
+  border: 1px solid rgba(0, 0, 0, 0.28) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.tg-personal-confirm-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.35rem;
+}
+.tg-personal-confirm-row #tg-personal-confirm {
+  width: auto !important;
+  margin: 0 !important;
+  background: var(--ui-static-bg) !important;
+  color: #fff !important;
+  border: 2px solid var(--ui-static-1) !important;
+}
+.tg-personal-confirm-row #tg-personal-confirm:hover,
+.tg-personal-confirm-row #tg-personal-confirm:focus {
+  background: var(--ui-click-bg) !important;
+  border-color: var(--ui-click-dark) !important;
+  color: #fff !important;
+}
+.tg-personal-modal #tg-personal-status.is-code {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+.tg-personal-modal #tg-personal-status.is-ok {
+  color: #15803d;
+  font-weight: 700;
+}
+.tg-personal-modal #tg-personal-status.is-bad {
+  color: #b91c1c;
+  font-weight: 700;
+}
+.tg-personal-modal .tg-personal-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.68rem !important;
+  line-height: 1.25 !important;
+}
+.tg-personal-phone-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+.tg-personal-phone-row .tg-personal-phone,
+.tg-personal-phone-row #tg-personal-send-code {
+  height: 2rem !important;
+  min-height: 2rem !important;
+  width: 9.6rem !important;
+  max-width: 9.6rem !important;
+  flex: 0 0 9.6rem !important;
+  margin: 0 !important;
+  padding: 0 0.55rem !important;
+  box-sizing: border-box !important;
+  font-size: 0.85rem !important;
+  line-height: 2rem !important;
+}
+.tg-personal-phone-row .tg-personal-code {
+  height: 2rem !important;
+  min-height: 2rem !important;
+  width: 4.6rem !important;
+  max-width: 4.6rem !important;
+  flex: 0 0 4.6rem !important;
+  margin: 0 !important;
+  padding: 0 0.35rem !important;
+  box-sizing: border-box !important;
+  font-size: 0.85rem !important;
+  line-height: 2rem !important;
+  text-align: center;
 }
 
 .whatsapp-pruebas-stack {

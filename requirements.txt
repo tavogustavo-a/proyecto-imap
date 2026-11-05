@@ -42,3 +42,4 @@ google-auth>=2.0.0
 eventlet==0.40.3
 # ===== SMS Y MENSAJERÍA =====
 twilio>=9.0.0
+telethon>=1.36.0

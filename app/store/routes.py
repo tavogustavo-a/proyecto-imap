@@ -15549,6 +15549,48 @@ def _drive_destination_error(processed_id, group_id):
     return 'Hace falta el Drive procesado o el grupo de Telegram.'
 
 
+@store_bp.route('/admin/telegram_personal/status', methods=['GET'])
+@admin_required
+def telegram_personal_status():
+    from app.store.telegram_user_ads import account_status
+    return jsonify(account_status())
+
+
+@store_bp.route('/admin/telegram_personal/start', methods=['POST'])
+@admin_required
+def telegram_personal_start():
+    from app.store.telegram_user_ads import start_login
+    data = request.form if request.form else (request.json or {})
+    result = start_login(data.get('api_id'), data.get('api_hash'), data.get('phone'))
+    status = 200 if result.get('ok') else 400
+    return jsonify(result), status
+
+
+@store_bp.route('/admin/telegram_personal/confirm', methods=['POST'])
+@admin_required
+def telegram_personal_confirm():
+    from app.store.telegram_user_ads import confirm_login
+    data = request.form if request.form else (request.json or {})
+    result = confirm_login(data.get('code'), data.get('password'))
+    status = 200 if result.get('ok') else 400
+    return jsonify(result), status
+
+
+@store_bp.route('/admin/telegram_personal/forget', methods=['POST'])
+@admin_required
+def telegram_personal_forget():
+    from app.store.telegram_user_ads import forget_account
+    return jsonify(forget_account())
+
+
+@store_bp.route('/admin/telegram_personal/sources', methods=['POST'])
+@admin_required
+def telegram_personal_sources():
+    from app.store.telegram_user_ads import save_source_chats
+    data = request.form if request.form else (request.json or {})
+    return jsonify(save_source_chats(data.get('source_chats')))
+
+
 @store_bp.route('/admin/drive_transfers', methods=['GET'])
 @admin_required
 def list_drive_transfers():
@@ -15585,6 +15627,7 @@ def list_drive_transfers():
                     'drive_deleted_id': t.drive_deleted_id,  # Campo opcional
                     'telegram_group_id': getattr(t, 'telegram_group_id', None) or '',
                     'telegram_topic_id': getattr(t, 'telegram_topic_id', None) or '',
+                    'source_telegram_chats': getattr(t, 'source_telegram_chats', None) or '',
                     'telegram_send_problems': _drive_tg_problems(getattr(t, 'telegram_send_problems', None))[0],
                     'telegram_send_at': _drive_tg_problems(getattr(t, 'telegram_send_problems', None))[1],
                     'processing_time': t.processing_time if isinstance(t.processing_time, str) else (t.processing_time.strftime('%I:%M %p') if t.processing_time else None),  # Soporta ambos formatos (legacy y nuevo)
@@ -15652,6 +15695,7 @@ def create_drive_transfer():
             drive_deleted_id=drive_deleted_id or None,  # Campo opcional
             telegram_group_id=group_id,
             telegram_topic_id=topic_id,
+            source_telegram_chats=(data.get('drive_source_telegram') or '').strip() or None,
             processing_time=processing_time_str.upper(),  # Guardar como string (ej: "5H", "10M")
             activated_at=datetime.utcnow(),  # Establecer activated_at al crear
             consecutive_errors=0,  # Valor por defecto para el campo NOT NULL
@@ -15709,6 +15753,10 @@ def update_drive_transfer(transfer_id):
             transfer.telegram_topic_id = topic_id if group_id else None
             if not group_id:
                 transfer.telegram_send_problems = None
+        if 'drive_source_telegram' in data:
+            from app.store.drive_manager import ensure_drive_telegram_columns
+            ensure_drive_telegram_columns()
+            transfer.source_telegram_chats = (data.get('drive_source_telegram') or '').strip() or None
         dest_err = _drive_destination_error(
             transfer.drive_processed_id,
             getattr(transfer, 'telegram_group_id', None),

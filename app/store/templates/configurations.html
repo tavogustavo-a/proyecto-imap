@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261102-test-ad">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261105-tg-code-size">
 <meta name="csrf_token" content="{{ csrf_token() }}">
 {% endblock %}
 {% block content %}
@@ -379,6 +379,9 @@
           </div>
         </span>
       </div>
+      <div class="tg-personal-open-row">
+        <button type="button" id="tg-personal-open-btn" class="btn-panel btn-blue">Cuenta que lee grupos</button>
+      </div>
       <div class="telegram-group-extract">
         <div id="telegram-group-extract-table-wrap" class="telegram-group-extract-table-wrap" hidden>
           <table class="telegram-group-extract-table">
@@ -399,6 +402,36 @@
       <p class="telegram-bot-menu-title">Botones del bot</p>
       <div id="telegram-bot-menu-list" class="telegram-bot-menu-list" role="list"></div>
       <p id="telegram-bot-menu-status" class="telegram-botfather-status" role="status"></p>
+    </div>
+  </div>
+</div>
+
+<div id="tg-personal-modal" class="modal d-none tg-personal-modal" tabindex="-1" role="dialog" aria-labelledby="tgPersonalTitle" aria-modal="true" aria-hidden="true" hidden>
+  <div class="modal-content bg-white mx-auto p-20 w-90 maxw-480 br-8 rel tg-personal-modal-content">
+    <button type="button" id="tg-personal-close-x" class="telegram-botfather-close-x" aria-label="Cerrar">&times;</button>
+    <h4 id="tgPersonalTitle" class="whatsapp-user-phone-modal-title">Cuenta que lee grupos</h4>
+    <div id="tg-personal-box">
+      <label class="sr-only" for="tg-personal-api-id">api_id</label>
+      <input type="text" id="tg-personal-api-id" class="form-control mb-05" placeholder="api_id" autocomplete="off" inputmode="numeric">
+      <label class="sr-only" for="tg-personal-api-hash">api_hash</label>
+      <input type="text" id="tg-personal-api-hash" class="form-control mb-05" placeholder="api_hash" autocomplete="off">
+      <div class="tg-personal-phone-row">
+        <label class="sr-only" for="tg-personal-phone">Teléfono</label>
+        <input type="tel" id="tg-personal-phone" class="form-control tg-personal-phone" placeholder="+573001112233" autocomplete="off">
+        <label class="sr-only" for="tg-personal-code">Código de Telegram</label>
+        <input type="text" id="tg-personal-code" class="form-control tg-personal-code" placeholder="Código" autocomplete="off" inputmode="numeric" maxlength="8">
+        <button type="button" id="tg-personal-send-code" class="btn-panel btn-blue">Enviar código</button>
+      </div>
+      <label class="sr-only" for="tg-personal-password">Contraseña de Telegram</label>
+      <input type="password" id="tg-personal-password" class="form-control mb-05" placeholder="Contraseña de Telegram, solo si la pide" autocomplete="off">
+      <div class="tg-personal-confirm-row">
+        <button type="button" id="tg-personal-confirm" class="btn-panel btn-blue">Conectar cuenta</button>
+      </div>
+      <p id="tg-personal-status" class="form-text" role="status"></p>
+      <label class="sr-only" for="tg-personal-sources">Grupos a leer</label>
+      <input type="text" id="tg-personal-sources" class="form-control mb-05" placeholder="@VideosStreaming, -1001234567890" autocomplete="off" spellcheck="false">
+      <p id="tg-personal-sources-preview" class="form-text" role="status"></p>
+      <small class="form-text text-muted tg-personal-hint">Grupos a leer, separados por comas. ID o @nombre. api_id y api_hash salen de my.telegram.org. No uses el bot.</small>
     </div>
   </div>
 </div>
@@ -638,6 +671,6 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261102-ad-hide" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261029-botfather-clear" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/drive_manager.js') }}?v=20261105-channel-id" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/whatsapp_manager.js') }}?v=20261105-tg-show" defer></script>
 {% endblock %}

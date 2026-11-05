@@ -98,7 +98,8 @@ class DriveTelegramSender:
         name = str(item.get('name') or 'archivo')
         mime = str(item.get('mimeType') or '')
         file_id = str(item.get('id') or '')
-        if not file_id:
+        local_src = str(item.get('local_path') or '')
+        if not file_id and not (local_src and os.path.isfile(local_src)):
             return
         self._seq += 1
         local = os.path.join(self.tmp, f'{self._seq}_{_safe_name(name)}')
@@ -107,7 +108,10 @@ class DriveTelegramSender:
         sent_now = False
         try:
             try:
-                self.drive_service.download_file(file_id, local)
+                if local_src and os.path.isfile(local_src):
+                    shutil.copyfile(local_src, local)
+                else:
+                    self.drive_service.download_file(file_id, local)
             except Exception as exc:
                 from app.store.drive_manager import DriveFolderMissing, _drive_folder_missing
                 if isinstance(exc, DriveFolderMissing) or _drive_folder_missing(exc):
@@ -695,11 +699,11 @@ def _problem(file_name: str, destino: str, problema: str) -> dict:
 
 
 def _store_problems(transfer, problems: list) -> None:
-    """Solo queda la última pasada. Si no hay nada, la columna queda vacía."""
-    kept = [item for item in problems[:MAX_PROBLEMS] if isinstance(item, dict)]
-    if not kept:
-        transfer.telegram_send_problems = None
-        return
+    """Guarda solo la última pasada: la hora siempre, los errores solo si los hubo."""
+    kept = [
+        item for item in (problems or [])[:MAX_PROBLEMS]
+        if isinstance(item, dict) and (item.get('problema') or item.get('file'))
+    ]
     from app.utils.timezone import get_colombia_datetime
 
     moment = get_colombia_datetime().strftime('%d/%m/%Y %I:%M %p')

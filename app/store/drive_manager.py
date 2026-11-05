@@ -57,6 +57,8 @@ def ensure_drive_telegram_columns() -> None:
             ('telegram_group_id', 'ALTER TABLE drive_transfers ADD COLUMN telegram_group_id VARCHAR(32)'),
             ('telegram_topic_id', 'ALTER TABLE drive_transfers ADD COLUMN telegram_topic_id VARCHAR(32)'),
             ('telegram_send_problems', 'ALTER TABLE drive_transfers ADD COLUMN telegram_send_problems TEXT'),
+            ('source_telegram_chats', 'ALTER TABLE drive_transfers ADD COLUMN source_telegram_chats TEXT'),
+            ('source_telegram_state', 'ALTER TABLE drive_transfers ADD COLUMN source_telegram_state TEXT'),
         ]
         for name, ddl in additions:
             if name in cols:
@@ -387,6 +389,19 @@ class DriveTransferService:
                     pass
                 time.sleep(0.4 * (attempt + 1))
         raise last_error
+
+    def upload_to_folder(self, folder_id: str, local_path: str, name: str, mime: str) -> str:
+        """Sube un archivo al Drive procesado y devuelve su ID."""
+        from googleapiclient.http import MediaFileUpload
+
+        if not self.service:
+            raise Exception('Servicio no autenticado')
+        if not _valid_drive_id(folder_id):
+            raise Exception('ID de carpeta de Drive no válido')
+        body = {'name': name, 'parents': [folder_id]}
+        media = MediaFileUpload(local_path, mimetype=mime or 'application/octet-stream', resumable=False)
+        created = self.service.files().create(body=body, media_body=media, fields='id').execute()
+        return str(created.get('id') or '')
     
     def publish_original_to_telegram(self, source_folder_id: str, on_file=None) -> Dict[str, Any]:
         """Envía lo que hay en el original sin moverlo. Sirve cuando no hay Drive procesado."""
@@ -1148,6 +1163,23 @@ def execute_transfer_simple(transfer, app):
                         # Establecer activated_at si es la primera vez que se ejecuta
                         if not transfer_obj.activated_at:
                             transfer_obj.activated_at = datetime.utcnow()
+
+                        extra_notes = []
+                        try:
+                            from app.store.telegram_user_ads import import_source_ads
+                            extra_notes = import_source_ads(transfer_obj, service, sender) or []
+                        except Exception:
+                            extra_notes = [{
+                                'file': '',
+                                'destino': '',
+                                'problema': 'No se pudo copiar la publicidad de los grupos de Telegram.',
+                            }]
+                            logger.warning('No se pudo copiar la publicidad de los grupos de Telegram')
+                        if sender is not None:
+                            sender.problems.extend(extra_notes)
+                        else:
+                            from app.store.drive_telegram_send import _store_problems
+                            _store_problems(transfer_obj, extra_notes)
                         
                         # Si se movieron archivos o se completó, actualizar last_processed
                         if result.get('drive_missing'):

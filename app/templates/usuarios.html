@@ -100,6 +100,9 @@
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
+  .usuarios-page.container-max-width-900 > .admin-card + .admin-card {
+    margin-top: 1.35rem !important;
+  }
 </style>
 {% endblock %}
 
@@ -128,7 +131,7 @@
     {% include 'includes/admin_menu_licencias_extra_links.html' %}
   </div>
 
-  <div class="admin-card">
+  <div class="admin-card usuarios-bulk-emails-section">
     <div class="d-flex justify-content-start align-items-center">
       <div class="d-flex gap-05">
         <button id="menuToggleBtn" class="btn-panel btn-blue ml-2 menu-toggle-btn" title="Menú de navegación" aria-label="Abrir menú de navegación">&#9776; Menú</button>
@@ -136,6 +139,60 @@
       </div>
     </div>
 
+    <h4 class="text-center mb-1">Añadir y sacar correos masivamente</h4>
+    <div class="mb-1">
+      <label for="bulkAddEmailsUserSearch" class="sr-only">Buscar usuarios</label>
+      <div class="search-input-wrapper">
+        <input
+          type="search"
+          id="bulkAddEmailsUserSearch"
+          placeholder="Buscar usuario o nombre..."
+          class="d-block w-100 mb-05 search-users-input-flex"
+          autocomplete="off"
+        >
+      </div>
+      <div id="bulkAddEmailsSearchResults" class="mb-05"></div>
+      <div id="bulkAddEmailsSelectedUsers" class="mb-05"></div>
+    </div>
+    <div class="mb-1 usuarios-bulk-emails-block">
+      <label for="bulkAddEmailsInput" class="sr-only">Correos a añadir</label>
+      <textarea
+        id="bulkAddEmailsInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@ejemplo.com, correo2@ejemplo.com..."
+        class="d-block mb-05 w-100"
+        autocomplete="off"
+      ></textarea>
+      <div class="d-flex gap-05 justify-content-center usuarios-bulk-emails-actions">
+        <button type="button" id="bulkAddEmailsBtn" class="btn-green">Añade Masivamente Correos a Usuarios</button>
+      </div>
+      <div id="bulkAddEmailsMessage" class="mt-05 text-center"></div>
+    </div>
+    <form id="bulkDeleteEmailsForm" class="usuarios-bulk-emails-block usuarios-bulk-delete-block">
+      <label for="bulkDeleteEmailsInput" class="sr-only">Correos a eliminar</label>
+      <textarea
+        id="bulkDeleteEmailsInput"
+        rows="4"
+        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@test.com, correo2@test.com..."
+        class="d-block mb-05 w-100 usuarios-bulk-emails-field usuarios-bulk-delete-field"
+        autocomplete="off"
+      ></textarea>
+      <div class="d-flex gap-05 justify-content-center usuarios-bulk-emails-actions">
+        <button
+          type="submit"
+          id="bulkDeleteEmailsBtn"
+          class="btn-red bulk-delete-all-emails-btn"
+          title="Saca Correos Masivamente a Todos los Usuarios"
+          aria-label="Saca Correos Masivamente a Todos los Usuarios"
+        >
+          Saca Correos Masivamente a Todos los Usuarios
+        </button>
+      </div>
+      <div id="bulkDeleteEmailsMessage" class="mt-05 text-center"></div>
+    </form>
+  </div>
+
+  <div class="admin-card mt-2">
     <!-- Búsqueda AJAX de usuarios (solo principales, no sub-usuarios) -->
     <div class="d-flex flex-wrap align-items-center mb-2 gap-1 usuarios-list-toolbar">
       <form id="userSearchForm" class="d-flex gap-05 flex-grow-1">
@@ -271,76 +328,6 @@
 
   </div>
 </div>
-
-<!-- Sección de Gestión Masiva de Correos -->
-<div class="container-max-width-900 usuarios-page mt-2 usuarios-bulk-emails-section">
-  <div class="admin-card">
-    <h4 class="text-center mb-1">Añadir y sacar correos masivamente</h4>
-    <!-- Búsqueda de Usuarios -->
-    <div class="mb-1">
-      <label for="bulkAddEmailsUserSearch" class="sr-only">Buscar usuarios</label>
-      <div class="search-input-wrapper">
-        <input
-          type="search"
-          id="bulkAddEmailsUserSearch"
-          placeholder="Buscar usuario o nombre..."
-          class="d-block w-100 mb-05 search-users-input-flex"
-          autocomplete="off"
-        >
-      </div>
-      
-      <!-- Lista de resultados de búsqueda -->
-      <div id="bulkAddEmailsSearchResults" class="mb-05"></div>
-      
-      <!-- Lista de usuarios seleccionados -->
-      <div id="bulkAddEmailsSelectedUsers" class="mb-05"></div>
-    </div>
-
-    <!-- Campo para añadir correos -->
-    <div class="mb-1 usuarios-bulk-emails-block">
-      <label for="bulkAddEmailsInput" class="sr-only">Correos a añadir</label>
-      <textarea
-        id="bulkAddEmailsInput"
-        rows="4"
-        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@ejemplo.com, correo2@ejemplo.com..."
-        class="d-block mb-05 w-100"
-        autocomplete="off"
-      ></textarea>
-
-      <div class="d-flex gap-05 justify-content-center usuarios-bulk-emails-actions">
-        <button type="button" id="bulkAddEmailsBtn" class="btn-green">Añade Masivamente Correos a Usuarios</button>
-      </div>
-
-      <div id="bulkAddEmailsMessage" class="mt-05 text-center"></div>
-    </div>
-
-    <form id="bulkDeleteEmailsForm" class="usuarios-bulk-emails-block usuarios-bulk-delete-block">
-      <label for="bulkDeleteEmailsInput" class="sr-only">Correos a eliminar</label>
-      <textarea
-        id="bulkDeleteEmailsInput"
-        rows="4"
-        placeholder="Ingresa uno o varios correos (separados por comas, espacios o saltos de línea). Ejemplo: correo1@test.com, correo2@test.com..."
-        class="d-block mb-05 w-100 usuarios-bulk-emails-field usuarios-bulk-delete-field"
-        autocomplete="off"
-      ></textarea>
-
-      <div class="d-flex gap-05 justify-content-center usuarios-bulk-emails-actions">
-        <button
-          type="submit"
-          id="bulkDeleteEmailsBtn"
-          class="btn-red bulk-delete-all-emails-btn"
-          title="Saca Correos Masivamente a Todos los Usuarios"
-          aria-label="Saca Correos Masivamente a Todos los Usuarios"
-        >
-          Saca Correos Masivamente a Todos los Usuarios
-        </button>
-      </div>
-
-      <div id="bulkDeleteEmailsMessage" class="mt-05 text-center"></div>
-    </form>
-  </div>
-</div>
-
 
 <!-- POPUP Editar Usuario -->
 <div

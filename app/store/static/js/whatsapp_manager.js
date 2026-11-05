@@ -2022,10 +2022,36 @@ document.addEventListener('DOMContentLoaded', function () {
         if (infoBox) infoBox.hidden = true;
         if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false');
     }
+    var tgPersonalModal = document.getElementById('tg-personal-modal');
+    var tgPersonalOpen = document.getElementById('tg-personal-open-btn');
+    var tgPersonalClose = document.getElementById('tg-personal-close-x');
+    function closeTgPersonalModal() {
+        if (!tgPersonalModal) return;
+        tgPersonalModal.classList.add('d-none');
+        tgPersonalModal.setAttribute('hidden', '');
+        tgPersonalModal.setAttribute('aria-hidden', 'true');
+    }
+    function openTgPersonalModal() {
+        if (!tgPersonalModal) return;
+        tgPersonalModal.classList.remove('d-none');
+        tgPersonalModal.removeAttribute('hidden');
+        tgPersonalModal.setAttribute('aria-hidden', 'false');
+        if (window.reloadTelegramPersonalForm) window.reloadTelegramPersonalForm();
+        var phone = document.getElementById('tg-personal-phone');
+        if (phone) phone.focus({ preventScroll: true });
+    }
+    if (tgPersonalOpen) tgPersonalOpen.addEventListener('click', openTgPersonalModal);
+    if (tgPersonalClose) tgPersonalClose.addEventListener('click', closeTgPersonalModal);
+    if (tgPersonalModal) {
+        tgPersonalModal.addEventListener('click', function (e) {
+            if (e.target === tgPersonalModal) closeTgPersonalModal();
+        });
+    }
     function closeTelegramBotModal() {
         if (!telegramBotModal) return;
         closeTelegramGroupExtractInfo();
         closeTelegramBotMenuEditModal();
+        closeTgPersonalModal();
         telegramBotModal.classList.add('d-none');
         telegramBotModal.setAttribute('hidden', '');
         telegramBotModal.setAttribute('aria-hidden', 'true');
