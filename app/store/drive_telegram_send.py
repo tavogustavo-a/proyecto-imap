@@ -68,10 +68,26 @@ class DriveTelegramSender:
         return True
 
     def _halt_missing_telegram(self) -> None:
-        """El grupo o el tema ya no existe. Se deja de enviar y no se anota como problema."""
+        """El grupo o el tema ya no existe. Se deja de enviar y queda una sola nota."""
         self.active = False
         self.skipped = True
         self.problems.clear()
+        self.problems.append(_problem(
+            '',
+            '',
+            'El grupo o el tema de Telegram ya no existe. No se siguió enviando.',
+        ))
+
+    def write_notes(self, transfer) -> None:
+        """Guarda lo que ya se sabe, sin borrar los archivos temporales."""
+        notes = list(self.problems)
+        if self.skipped and not notes:
+            notes.append(_problem(
+                '',
+                '',
+                'El grupo o el tema de Telegram ya no existe. No se siguió enviando.',
+            ))
+        _store_problems(transfer, notes)
 
     def send_one(self, item: dict) -> None:
         if not self.active or self.skipped or not item:
@@ -188,8 +204,8 @@ class DriveTelegramSender:
             shutil.rmtree(self.tmp, ignore_errors=True)
             self.tmp = ''
         if self.prepared:
-            _store_problems(transfer, [] if self.skipped else self.problems)
-        return {'sent': self.sent, 'problems': [] if self.skipped else self.problems[:MAX_PROBLEMS]}
+            self.write_notes(transfer)
+        return {'sent': self.sent, 'problems': self.problems[:MAX_PROBLEMS]}
 
 
 def send_moved_files_to_telegram(drive_service, transfer, moved_files: list) -> dict:
@@ -638,8 +654,29 @@ def _upload_as(
             last_error = 'Telegram pidió esperar y el archivo no salió.'
             continue
         description = str(data.get('description') or '')
-        return False, humanize_telegram_chat_error(description)
+        if destination_gone(description):
+            return False, humanize_telegram_chat_error(description)
+        return False, _send_failure_text(description)
     return False, last_error
+
+
+def _send_failure_text(description: str) -> str:
+    """Motivo corto, sin token, para ver en la pantalla de Drive por qué no salió."""
+    text = ' '.join((description or '').split())
+    low = text.lower()
+    if 'too big' in low or 'file of size' in low or 'request entity too large' in low:
+        return 'El archivo sigue siendo demasiado grande para Telegram.'
+    if 'image_process_failed' in low or 'photo_invalid_dimensions' in low:
+        return 'Telegram no pudo usar esa imagen por el tamaño o la proporción.'
+    if 'wrong file identifier' in low or "can't parse" in low or 'failed to get http url content' in low:
+        return 'Telegram no pudo leer el archivo.'
+    if 'not enough rights' in low or 'have no rights' in low or 'need administrator' in low:
+        return 'El bot no puede escribir en el grupo o en el tema.'
+    if not text:
+        return 'Telegram no aceptó el archivo.'
+    if len(text) > 160:
+        text = text[:160]
+    return 'Telegram no aceptó el archivo: ' + text
 
 
 def _upload(
@@ -658,8 +695,18 @@ def _problem(file_name: str, destino: str, problema: str) -> dict:
 
 
 def _store_problems(transfer, problems: list) -> None:
-    kept = problems[:MAX_PROBLEMS]
-    transfer.telegram_send_problems = json.dumps(kept, ensure_ascii=False) if kept else None
+    """Solo queda la última pasada. Si no hay nada, la columna queda vacía."""
+    kept = [item for item in problems[:MAX_PROBLEMS] if isinstance(item, dict)]
+    if not kept:
+        transfer.telegram_send_problems = None
+        return
+    from app.utils.timezone import get_colombia_datetime
+
+    moment = get_colombia_datetime().strftime('%d/%m/%Y %I:%M %p')
+    transfer.telegram_send_problems = json.dumps(
+        {'at': moment, 'items': kept},
+        ensure_ascii=False,
+    )
 
 
 def _safe_name(name: str) -> str:

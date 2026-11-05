@@ -15531,6 +15531,24 @@ def _drive_telegram_config_from_request(data) -> tuple[str | None, str | None, s
     return group_raw or None, topic_id, None
 
 
+def _clean_drive_folder_id(value, empty_ok=False):
+    """Devuelve (id, error). Vacío permitido solo si empty_ok."""
+    raw = (value or '').strip()
+    if not raw:
+        if empty_ok:
+            return '', None
+        return None, 'Falta el ID del Drive original.'
+    if not raw.replace('-', '').replace('_', '').isalnum():
+        return None, 'El ID de Drive no es válido.'
+    return raw, None
+
+
+def _drive_destination_error(processed_id, group_id):
+    if (processed_id or '').strip() or (group_id or '').strip():
+        return None
+    return 'Hace falta el Drive procesado o el grupo de Telegram.'
+
+
 @store_bp.route('/admin/drive_transfers', methods=['GET'])
 @admin_required
 def list_drive_transfers():
@@ -15541,13 +15559,19 @@ def list_drive_transfers():
     ensure_drive_telegram_columns()
 
     def _drive_tg_problems(raw):
+        """Solo la última pasada. Lo viejo en lista suelta no trae fecha."""
         if not raw:
-            return []
+            return [], ''
         try:
             parsed = _json.loads(raw)
-            return parsed if isinstance(parsed, list) else []
         except Exception:
-            return []
+            return [], ''
+        if isinstance(parsed, dict):
+            items = parsed.get('items') if isinstance(parsed.get('items'), list) else []
+            return items, str(parsed.get('at') or '')
+        if isinstance(parsed, list):
+            return parsed, ''
+        return [], ''
     
     transfers = DriveTransfer.query.all()
     return jsonify({
@@ -15561,7 +15585,8 @@ def list_drive_transfers():
                     'drive_deleted_id': t.drive_deleted_id,  # Campo opcional
                     'telegram_group_id': getattr(t, 'telegram_group_id', None) or '',
                     'telegram_topic_id': getattr(t, 'telegram_topic_id', None) or '',
-                    'telegram_send_problems': _drive_tg_problems(getattr(t, 'telegram_send_problems', None)),
+                    'telegram_send_problems': _drive_tg_problems(getattr(t, 'telegram_send_problems', None))[0],
+                    'telegram_send_at': _drive_tg_problems(getattr(t, 'telegram_send_problems', None))[1],
                     'processing_time': t.processing_time if isinstance(t.processing_time, str) else (t.processing_time.strftime('%I:%M %p') if t.processing_time else None),  # Soporta ambos formatos (legacy y nuevo)
                     'is_active': t.is_active,
                     'last_processed': t.last_processed.isoformat() if t.last_processed else None,
@@ -15581,15 +15606,18 @@ def create_drive_transfer():
     drive_deleted_id = data.get('drive_deleted')  # Campo opcional
     processing_time_str = data.get('drive_processing_time')
     
-    if not all([credentials_json, drive_original_id, drive_processed_id, processing_time_str]):
+    if not all([credentials_json, (drive_original_id or '').strip(), processing_time_str]):
         return jsonify({'success': False, 'error': 'Faltan datos requeridos'}), 400
-    
-    # Validar formato de IDs de Drive (deben ser strings alfanuméricos)
-    if not drive_original_id.replace('-', '').replace('_', '').isalnum():
-        return jsonify({'success': False, 'error': 'ID de carpeta original inválido'}), 400
-    
-    if not drive_processed_id.replace('-', '').replace('_', '').isalnum():
+
+    drive_original_id, original_err = _clean_drive_folder_id(drive_original_id, empty_ok=False)
+    if original_err:
+        return jsonify({'success': False, 'error': original_err}), 400
+    drive_processed_id, processed_err = _clean_drive_folder_id(drive_processed_id, empty_ok=True)
+    if processed_err:
         return jsonify({'success': False, 'error': 'ID de carpeta procesada inválido'}), 400
+    drive_deleted_id, deleted_err = _clean_drive_folder_id(drive_deleted_id, empty_ok=True)
+    if deleted_err:
+        return jsonify({'success': False, 'error': 'ID de carpeta de eliminados inválido'}), 400
     
     # Validar JSON de credenciales
     try:
@@ -15608,6 +15636,9 @@ def create_drive_transfer():
         group_id, topic_id, tg_err = _drive_telegram_config_from_request(data)
         if tg_err:
             return jsonify({'success': False, 'error': tg_err}), 400
+        dest_err = _drive_destination_error(drive_processed_id, group_id)
+        if dest_err:
+            return jsonify({'success': False, 'error': dest_err}), 400
         # Validar formato de intervalo (5h, 10m, 5H, 10M, etc.)
         interval = parse_interval(processing_time_str)
         if not interval:
@@ -15617,8 +15648,8 @@ def create_drive_transfer():
         transfer = DriveTransfer(
             credentials_json=credentials_json,
             drive_original_id=drive_original_id,
-            drive_processed_id=drive_processed_id,
-            drive_deleted_id=drive_deleted_id,  # Campo opcional
+            drive_processed_id=drive_processed_id or '',
+            drive_deleted_id=drive_deleted_id or None,  # Campo opcional
             telegram_group_id=group_id,
             telegram_topic_id=topic_id,
             processing_time=processing_time_str.upper(),  # Guardar como string (ej: "5H", "10M")
@@ -15654,11 +15685,20 @@ def update_drive_transfer(transfer_id):
         if 'drive_credentials_json' in data:
             transfer.credentials_json = data['drive_credentials_json']
         if 'drive_original_id' in data:
-            transfer.drive_original_id = data['drive_original_id']
+            original_id, original_err = _clean_drive_folder_id(data.get('drive_original_id'), empty_ok=False)
+            if original_err:
+                return jsonify({'success': False, 'error': original_err}), 400
+            transfer.drive_original_id = original_id
         if 'drive_destination' in data:
-            transfer.drive_processed_id = data['drive_destination']
+            processed_id, processed_err = _clean_drive_folder_id(data.get('drive_destination'), empty_ok=True)
+            if processed_err:
+                return jsonify({'success': False, 'error': 'ID de carpeta procesada inválido'}), 400
+            transfer.drive_processed_id = processed_id or ''
         if 'drive_deleted' in data:
-            transfer.drive_deleted_id = data['drive_deleted']  # Campo opcional
+            deleted_id, deleted_err = _clean_drive_folder_id(data.get('drive_deleted'), empty_ok=True)
+            if deleted_err:
+                return jsonify({'success': False, 'error': 'ID de carpeta de eliminados inválido'}), 400
+            transfer.drive_deleted_id = deleted_id or None
         if 'drive_telegram_group' in data or 'drive_telegram_topic' in data:
             from app.store.drive_manager import ensure_drive_telegram_columns
             ensure_drive_telegram_columns()
@@ -15669,6 +15709,13 @@ def update_drive_transfer(transfer_id):
             transfer.telegram_topic_id = topic_id if group_id else None
             if not group_id:
                 transfer.telegram_send_problems = None
+        dest_err = _drive_destination_error(
+            transfer.drive_processed_id,
+            getattr(transfer, 'telegram_group_id', None),
+        )
+        if dest_err:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': dest_err}), 400
         if 'drive_processing_time' in data:
             from app.store.drive_manager import parse_interval
             processing_time_str = data['drive_processing_time']
@@ -15847,6 +15894,8 @@ def cleanup_drive_files(transfer_id):
     try:
         days_old = int(days_old)
         transfer = DriveTransfer.query.get_or_404(transfer_id)
+        if not (transfer.drive_processed_id or '').strip():
+            return jsonify({'success': False, 'error': 'No hay Drive procesado para limpiar.'}), 400
         
         from .drive_manager import DriveTransferService
         

@@ -51,8 +51,9 @@
         <input type="text" id="drive-original-id" name="drive_original_id" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" required autocomplete="off">
       </div>
       <div class="mb-1">
-        <label for="drive-destination" class="form-label">Drive procesado:</label>
-        <input type="text" id="drive-destination" name="drive_destination" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" required autocomplete="off">
+        <label for="drive-destination" class="form-label">Drive procesado (opcional):</label>
+        <input type="text" id="drive-destination" name="drive_destination" class="form-control" placeholder="Ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" autocomplete="off">
+        <small class="form-text text-muted">Hace falta este Drive o el grupo de Telegram. Si lo dejas vacío, los archivos no se mueven y solo se envían al grupo.</small>
       </div>
       <div class="mb-1">
         <label for="drive-deleted" class="form-label">Drive eliminados (opcional):</label>
@@ -527,8 +528,9 @@
         <input type="text" id="edit-drive-original-id" name="drive_original_id" class="form-control" required autocomplete="off">
       </div>
       <div class="mb-1">
-        <label for="edit-drive-destination" class="form-label">Drive procesado:</label>
-        <input type="text" id="edit-drive-destination" name="drive_destination" class="form-control" required autocomplete="off">
+        <label for="edit-drive-destination" class="form-label">Drive procesado (opcional):</label>
+        <input type="text" id="edit-drive-destination" name="drive_destination" class="form-control" autocomplete="off">
+        <small class="form-text text-muted">Hace falta este Drive o el grupo de Telegram. Si lo dejas vacío, los archivos no se mueven y solo se envían al grupo.</small>
       </div>
       <div class="mb-1">
         <label for="edit-drive-deleted" class="form-label">Drive eliminados (opcional):</label>

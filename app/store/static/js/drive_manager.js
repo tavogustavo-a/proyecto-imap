@@ -50,8 +50,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        if (!data.drive_destination?.trim()) {
-            showStatus('Por favor ingresa el ID del Drive procesado', false);
+        if (!data.drive_destination?.trim() && !data.drive_telegram_group?.trim()) {
+            showStatus('Hace falta el Drive procesado o el grupo de Telegram', false);
             return;
         }
         
@@ -290,8 +290,8 @@ async function loadDriveTransfersTable() {
                     const td2 = document.createElement('td');
                     const code2 = document.createElement('code');
                     code2.className = 'drive-id-code';
-                    code2.textContent = truncateId(transfer.drive_processed_id);
-                    code2.title = escapeHtml(transfer.drive_processed_id);
+                    code2.textContent = transfer.drive_processed_id ? truncateId(transfer.drive_processed_id) : '—';
+                    code2.title = transfer.drive_processed_id ? escapeHtml(transfer.drive_processed_id) : '';
                     td2.appendChild(code2);
                     tr.appendChild(td2);
                     
@@ -376,17 +376,17 @@ async function loadDriveTransfersTable() {
                 
                 table.appendChild(tbody);
                 containerDiv.appendChild(table);
-                const problems = [];
                 result.transfers.forEach(function (item) {
-                    (item.telegram_send_problems || []).forEach(function (problem) {
-                        problems.push(problem);
-                    });
-                });
-                if (problems.length) {
+                    const problems = item.telegram_send_problems || [];
+                    if (!problems.length) {
+                        return;
+                    }
                     const box = document.createElement('div');
                     box.className = 'drive-telegram-problems';
                     const title = document.createElement('strong');
-                    title.textContent = 'Problemas a resolver en el envío a Telegram';
+                    title.textContent = item.telegram_send_at
+                        ? 'Última pasada: ' + item.telegram_send_at
+                        : 'Última pasada';
                     box.appendChild(title);
                     const list = document.createElement('ul');
                     problems.slice(0, 20).forEach(function (problem) {
@@ -398,7 +398,7 @@ async function loadDriveTransfersTable() {
                     });
                     box.appendChild(list);
                     containerDiv.appendChild(box);
-                }
+                });
                 tableContainer.innerHTML = '';
                 tableContainer.appendChild(containerDiv);
                 
@@ -458,7 +458,7 @@ async function loadDriveTransfersTable() {
 
 document.addEventListener('DOMContentLoaded', function() {
     // Validación de campos
-    const requiredFields = ['drive-credentials-json', 'drive-original-id', 'drive-destination', 'drive-processing-time'];
+    const requiredFields = ['drive-credentials-json', 'drive-original-id', 'drive-processing-time'];
     
     requiredFields.forEach(fieldId => {
         const field = document.getElementById(fieldId);
@@ -630,7 +630,7 @@ window.editDriveTransfer = async function(transferId) {
 // Función para eliminar configuración
 // Función global para ejecutar transferencia manualmente
 window.executeDriveTransferNow = async function(transferId) {
-    if (!confirm('¿Ejecutar la transferencia de Drive ahora? Esto moverá los archivos del Drive original al Drive procesado. Si hay Telegram configurado, también se envían.')) {
+    if (!confirm('¿Ejecutar ahora? Si hay Drive procesado, mueve los archivos ahí. Si hay Telegram, también se envían. Si no hay Drive procesado, solo se envían y se quedan en el original.')) {
         return;
     }
     
@@ -819,14 +819,22 @@ function setupDriveEditModal() {
         
         
         try {
+            if (!String(data.drive_original_id || '').trim()) {
+                showDriveStatus('Hace falta el ID del Drive original', false);
+                return;
+            }
+            if (!String(data.drive_destination || '').trim() && !String(data.drive_telegram_group || '').trim()) {
+                showDriveStatus('Hace falta el Drive procesado o el grupo de Telegram', false);
+                return;
+            }
             showDriveStatus('Actualizando configuración...', true);
             
             const csrfToken = document.querySelector('meta[name="csrf_token"]')?.content || '';
             const formData = new FormData();
             formData.append('drive_credentials_json', data.drive_credentials_json);
             formData.append('drive_original_id', data.drive_original_id);
-            formData.append('drive_destination', data.drive_destination);
-            formData.append('drive_deleted', data.drive_deleted);
+            formData.append('drive_destination', data.drive_destination || '');
+            formData.append('drive_deleted', data.drive_deleted || '');
             formData.append('drive_telegram_group', data.drive_telegram_group || '');
             formData.append('drive_telegram_topic', data.drive_telegram_topic || '');
             formData.append('drive_processing_time', data.drive_processing_time);

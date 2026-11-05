@@ -388,6 +388,45 @@ class DriveTransferService:
                 time.sleep(0.4 * (attempt + 1))
         raise last_error
     
+    def publish_original_to_telegram(self, source_folder_id: str, on_file=None) -> Dict[str, Any]:
+        """Envía lo que hay en el original sin moverlo. Sirve cuando no hay Drive procesado."""
+        try:
+            files = self.get_files_in_folder(source_folder_id)
+        except DriveFolderMissing:
+            return {
+                'success': True,
+                'drive_missing': True,
+                'message': '',
+                'files_processed': 0,
+                'files_moved': 0,
+                'files_failed': 0,
+                'moved_files': [],
+                'transfer_completed': False,
+                'remaining_files': 0,
+            }
+        for file in files:
+            info = {
+                'id': file.get('id'),
+                'name': file.get('name'),
+                'mimeType': file.get('mimeType') or '',
+                'size': file.get('size') or 0,
+            }
+            if on_file is not None and info.get('id'):
+                try:
+                    on_file(info)
+                except Exception:
+                    logger.warning('No se pudo enviar a Telegram un archivo del Drive original')
+        return {
+            'success': True,
+            'message': 'Sin Drive procesado: se envió a Telegram y los archivos siguen en el original.',
+            'files_processed': len(files),
+            'files_moved': 0,
+            'files_failed': 0,
+            'moved_files': [],
+            'transfer_completed': True,
+            'remaining_files': 0,
+        }
+
     def transfer_files(self, source_folder_id: str, destination_folder_id: str, max_files_per_batch: Optional[int] = None, on_moved=None) -> Dict[str, Any]:
         """Mueve fotos y videos. Si el servidor está libre, avanza más; si está cargado, espera."""
         if not self.service:
@@ -1053,19 +1092,45 @@ def execute_transfer_simple(transfer, app):
             sender = None
         
         # Ejecutar transferencia. Cada archivo movido se envía enseguida si hay grupo.
+        def _save_send_notes():
+            if sender is None:
+                return
+            try:
+                with app.app_context():
+                    note_row = DriveTransfer.query.get(transfer_id)
+                    if note_row is not None:
+                        sender.write_notes(note_row)
+                        db.session.commit()
+            except Exception:
+                logger.warning('No se pudo anotar el resultado del envío a Telegram')
+
         def _send_moved(item, sender=sender):
             if sender is None or not sender.active or sender.skipped:
                 return
             try:
                 sender.send_one(item)
             except Exception:
+                from app.store.drive_telegram_send import _problem
+                sender.problems.append(_problem(
+                    str(item.get('name') or ''),
+                    '',
+                    'El envío de este archivo se cortó antes de terminar.',
+                ))
                 logger.warning('No se pudo enviar a Telegram el archivo movido')
+            _save_send_notes()
 
-        result = service.transfer_files(
-            drive_original_id,
-            drive_processed_id,
-            on_moved=_send_moved if sender is not None and sender.active else None,
-        )
+        processed_id = (drive_processed_id or '').strip()
+        if processed_id:
+            result = service.transfer_files(
+                drive_original_id,
+                processed_id,
+                on_moved=_send_moved if sender is not None and sender.active else None,
+            )
+        else:
+            result = service.publish_original_to_telegram(
+                drive_original_id,
+                on_file=_send_moved if sender is not None and sender.active else None,
+            )
         
         # Verificar si la transferencia fue exitosa (completa o parcial)
         if result and isinstance(result, dict):
