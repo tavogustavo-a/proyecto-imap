@@ -69,8 +69,8 @@ def _ensure_source_chats_column() -> None:
     cols = {column['name'] for column in inspector.get_columns('telegram_personal_accounts')}
     if 'source_chats' in cols:
         return
-    db.session.execute(text('ALTER TABLE telegram_personal_accounts ADD COLUMN source_chats TEXT'))
-    db.session.commit()
+    with db.engine.begin() as conn:
+        conn.execute(text('ALTER TABLE telegram_personal_accounts ADD COLUMN source_chats TEXT'))
 
 
 def _row():
@@ -371,6 +371,21 @@ def _load_state(raw: str | None) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _ads_error_text(exc: Exception) -> str:
+    """Motivo corto para la pantalla. No incluye datos de la sesión."""
+    name = type(exc).__name__
+    low = name.lower()
+    if 'token' in low:
+        return 'No se pudo leer la sesión guardada. Vuelve a conectar la cuenta.'
+    if 'flood' in low:
+        return 'Telegram pidió esperar antes de leer los grupos.'
+    if 'auth' in low or 'unauthorized' in low:
+        return 'La sesión de la cuenta venció. Vuelve a conectarla en Datos BotFather.'
+    if name in ('ModuleNotFoundError', 'ImportError'):
+        return 'Falta instalar Telethon en el servidor.'
+    return 'No se pudo leer los grupos de la cuenta personal (' + name + ').'
+
+
 def import_source_ads(transfer, drive_service, sender) -> list[dict]:
     """Después del pase de Drive, copia la publicidad nueva. La primera vez solo marca el punto."""
     row = _row()
@@ -389,8 +404,12 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
     except Exception:
         problems.append({'file': '', 'destino': '', 'problema': 'Falta instalar Telethon en el servidor.'})
         return problems
-    api_hash = decrypt_password(row['api_hash_enc'])
-    session = decrypt_password(row['session_enc'])
+    try:
+        api_hash = decrypt_password(str(row['api_hash_enc']).strip())
+        session = decrypt_password(str(row['session_enc']).strip())
+    except Exception:
+        problems.append({'file': '', 'destino': '', 'problema': 'No se pudo leer la sesión guardada. Vuelve a conectar la cuenta.'})
+        return problems
     state = _load_state(getattr(transfer, 'source_telegram_state', None))
     processed_id = (getattr(transfer, 'drive_processed_id', None) or '').strip()
 
@@ -405,18 +424,37 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
         try:
             if not await client.is_user_authorized():
                 return 'auth', found, new_state
-            for source in sources:
-                try:
-                    entity = await client.get_entity(source)
-                except Exception as exc:
-                    name = type(exc).__name__.lower()
-                    if 'flood' in name:
-                        problems.append({'file': source, 'destino': '', 'problema': 'Telegram pidió esperar antes de leer ese grupo.'})
-                    elif 'private' in name or 'channelprivate' in name:
-                        problems.append({'file': source, 'destino': '', 'problema': 'Ese grupo es privado y la cuenta no entra.'})
-                    else:
-                        problems.append({'file': source, 'destino': '', 'problema': 'La cuenta no puede abrir ese grupo. Revisa el @ o el ID.'})
+            from telethon import utils
+
+            known = {}
+            async for dialog in client.iter_dialogs():
+                entity = dialog.entity
+                if entity is None:
                     continue
+                known[str(dialog.id)] = entity
+                try:
+                    known[str(utils.get_peer_id(entity))] = entity
+                except Exception:
+                    pass
+                username = getattr(entity, 'username', None)
+                if username:
+                    known['@' + str(username).lower()] = entity
+                    known[str(username).lower()] = entity
+            for source in sources:
+                entity = known.get(source) or known.get(source.lower())
+                if entity is None:
+                    try:
+                        target = int(source) if source.lstrip('-').isdigit() else source
+                        entity = await client.get_entity(target)
+                    except Exception as exc:
+                        name = type(exc).__name__.lower()
+                        if 'flood' in name:
+                            problems.append({'file': source, 'destino': '', 'problema': 'Telegram pidió esperar antes de leer ese grupo.'})
+                        elif 'private' in name or 'channelprivate' in name:
+                            problems.append({'file': source, 'destino': '', 'problema': 'Ese grupo es privado y la cuenta no entra.'})
+                        else:
+                            problems.append({'file': source, 'destino': '', 'problema': 'La cuenta no puede abrir ese grupo. Revisa el @ o el ID.'})
+                        continue
                 key = str(getattr(entity, 'id', source))
                 try:
                     cursor = int(new_state.get(key) or 0)
@@ -466,31 +504,28 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
             await client.disconnect()
 
     try:
-        status, ads, new_state = _run(_pull())
-    except Exception:
-        logger.warning('No se pudo leer la publicidad de Telegram')
-        problems.append({'file': '', 'destino': '', 'problema': 'No se pudo leer los grupos de la cuenta personal.'})
-        import shutil
+        pulled = _run(_pull())
+        status, ads, new_state = pulled
+    except Exception as exc:
+        logger.exception('No se pudo leer la publicidad de Telegram')
+        problems.append({'file': '', 'destino': '', 'problema': _ads_error_text(exc)})
         shutil.rmtree(tmp, ignore_errors=True)
         return problems
-    transfer.source_telegram_state = json.dumps(new_state, ensure_ascii=False)
-    if status == 'auth':
-        problems.append({'file': '', 'destino': '', 'problema': 'La sesión de la cuenta venció. Vuelve a conectarla en Datos BotFather.'})
-        import shutil
-        shutil.rmtree(tmp, ignore_errors=True)
-        return problems
-
-    if ads and not processed_id and (sender is None or not sender.active):
-        problems.append({'file': '', 'destino': '', 'problema': 'Hay publicidad nueva, pero no hay Drive procesado ni grupo de Telegram para guardarla.'})
-        failed = ads[0]
-        new_state[failed['chat_key']] = max(0, int(failed['msg_id']) - 1)
-        transfer.source_telegram_state = json.dumps(new_state, ensure_ascii=False)
-        shutil.rmtree(tmp, ignore_errors=True)
-        return problems
-
-    from app.store.telegram_bot_service import wait_for_host_room
-
     try:
+        transfer.source_telegram_state = json.dumps(new_state, ensure_ascii=False)
+        if status == 'auth':
+            problems.append({'file': '', 'destino': '', 'problema': 'La sesión de la cuenta venció. Vuelve a conectarla en Datos BotFather.'})
+            return problems
+
+        if ads and not processed_id and (sender is None or not sender.active):
+            problems.append({'file': '', 'destino': '', 'problema': 'Hay publicidad nueva, pero no hay Drive procesado ni grupo de Telegram para guardarla.'})
+            failed = ads[0]
+            new_state[failed['chat_key']] = max(0, int(failed['msg_id']) - 1)
+            transfer.source_telegram_state = json.dumps(new_state, ensure_ascii=False)
+            return problems
+
+        from app.store.telegram_bot_service import wait_for_host_room
+
         known = set(_saved_captions(new_state))
         published = []
         for ad in ads:
@@ -533,6 +568,9 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
             failed = ads[len(published)]
             new_state[failed['chat_key']] = max(0, int(failed['msg_id']) - 1)
         transfer.source_telegram_state = json.dumps(new_state, ensure_ascii=False)
+    except Exception as exc:
+        logger.exception('No se pudo guardar la publicidad leída')
+        problems.append({'file': '', 'destino': '', 'problema': _ads_error_text(exc)})
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return problems

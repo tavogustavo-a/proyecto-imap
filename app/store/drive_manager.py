@@ -1168,13 +1168,13 @@ def execute_transfer_simple(transfer, app):
                         try:
                             from app.store.telegram_user_ads import import_source_ads
                             extra_notes = import_source_ads(transfer_obj, service, sender) or []
-                        except Exception:
+                        except Exception as exc:
                             extra_notes = [{
                                 'file': '',
                                 'destino': '',
-                                'problema': 'No se pudo copiar la publicidad de los grupos de Telegram.',
+                                'problema': 'No se pudo copiar la publicidad de los grupos de Telegram (' + type(exc).__name__ + ').',
                             }]
-                            logger.warning('No se pudo copiar la publicidad de los grupos de Telegram')
+                            logger.exception('No se pudo copiar la publicidad de los grupos de Telegram')
                         if sender is not None:
                             sender.problems.extend(extra_notes)
                         else:
