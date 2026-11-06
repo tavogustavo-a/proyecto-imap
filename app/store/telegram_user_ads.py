@@ -387,13 +387,13 @@ def _ads_error_text(exc: Exception) -> str:
 
 
 def import_source_ads(transfer, drive_service, sender) -> list[dict]:
-    """Después del pase de Drive, copia la publicidad nueva. La primera vez solo marca el punto."""
+    """Después del pase de Drive, copia la publicidad nueva. La primera vez trae las últimas de cada grupo."""
     row = _row()
     sources = _parse_sources((row or {}).get('source_chats')) or _parse_sources(
         getattr(transfer, 'source_telegram_chats', None)
     )
     if not sources:
-        return []
+        return [{'file': '', 'destino': '', 'problema': 'No hay grupos para leer. Escríbelos en Cuenta que lee grupos.'}]
     problems = []
     if not row or not row.get('session_enc') or row.get('phone_code_hash'):
         problems.append({'file': '', 'destino': '', 'problema': 'La cuenta de Telegram para leer grupos no está conectada.'})
@@ -462,13 +462,24 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
                     cursor = 0
                 latest = await client.get_messages(entity, limit=1)
                 newest = int(latest[0].id) if latest else 0
-                if cursor <= 0:
-                    new_state[key] = newest
-                    continue
+                # La pasada que solo marcó el punto no dejó _loaded, así que esa sí trae lo reciente.
+                catchup = cursor <= 0 or not new_state.get('_loaded')
                 batch = []
-                async for msg in client.iter_messages(entity, min_id=cursor, reverse=True, limit=_MAX_PER_CHAT):
-                    batch.append(msg)
-                top = cursor
+                if catchup:
+                    async for msg in client.iter_messages(entity, limit=80):
+                        raw_text = msg.message or msg.text or ''
+                        if 'gestor streaming' in raw_text.casefold():
+                            continue
+                        if _ad_media(msg) is None:
+                            continue
+                        batch.append(msg)
+                        if len(batch) >= _MAX_PER_CHAT:
+                            break
+                    batch.reverse()
+                else:
+                    async for msg in client.iter_messages(entity, min_id=cursor, reverse=True, limit=_MAX_PER_CHAT):
+                        batch.append(msg)
+                top = newest if catchup else cursor
                 for msg in batch:
                     top = max(top, int(msg.id))
                     raw_text = msg.message or msg.text or ''
@@ -498,6 +509,7 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
                         'file_name': os.path.basename(saved),
                     })
                 new_state[key] = top
+            new_state['_loaded'] = 1
             new_state['_captions'] = list(seen)[-300:]
             return 'ok', found, new_state
         finally:
