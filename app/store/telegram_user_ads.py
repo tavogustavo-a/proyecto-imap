@@ -371,6 +371,25 @@ def _load_state(raw: str | None) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _drive_upload_problem(exc: Exception) -> str:
+    """Motivo corto cuando Drive no acepta la foto. No incluye la respuesta completa."""
+    text = str(exc).lower()
+    status = getattr(getattr(exc, 'resp', None), 'status', None)
+    if status == 403 or 'permission' in text or 'insufficient' in text:
+        return 'La cuenta de Drive no puede escribir en la carpeta procesada.'
+    if status == 404 or 'not found' in text:
+        return 'No se encontró la carpeta de Drive procesado.'
+    if status == 413 or 'too large' in text or 'entity too large' in text:
+        return 'La foto pesa demasiado para subirla de una sola vez.'
+    if 'quota' in text or 'storage' in text:
+        return 'El Drive se quedó sin espacio.'
+    if 'vacía' in text:
+        return 'La foto bajada de Telegram llegó vacía.'
+    if 'timed out' in text or 'timeout' in text or 'connection' in text or 'reset' in text or 'ssl' in text:
+        return 'Se cortó la conexión con Drive al subir la publicidad.'
+    return 'No se pudo subir la publicidad al Drive procesado (' + type(exc).__name__ + ').'
+
+
 def _ads_error_text(exc: Exception) -> str:
     """Motivo corto para la pantalla. No incluye datos de la sesión."""
     name = type(exc).__name__
@@ -555,9 +574,10 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
                 try:
                     file_id = drive_service.upload_to_folder(processed_id, saved, ad['file_name'], ad['mime'])
                     drive_ok = bool(file_id)
-                except Exception:
+                except Exception as exc:
                     drive_ok = False
-                    problems.append({'file': ad['file_name'], 'destino': 'drive', 'problema': 'No se pudo subir la publicidad al Drive procesado.'})
+                    logger.exception('No se pudo subir la publicidad al Drive procesado')
+                    problems.append({'file': ad['file_name'], 'destino': 'drive', 'problema': _drive_upload_problem(exc)})
             telegram_ok = True
             if sender is not None and sender.active and not sender.skipped:
                 item = {'name': label, 'mimeType': ad['mime'], 'local_path': saved}

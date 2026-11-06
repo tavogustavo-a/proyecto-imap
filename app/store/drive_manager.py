@@ -398,10 +398,33 @@ class DriveTransferService:
             raise Exception('Servicio no autenticado')
         if not _valid_drive_id(folder_id):
             raise Exception('ID de carpeta de Drive no válido')
-        body = {'name': name, 'parents': [folder_id]}
-        media = MediaFileUpload(local_path, mimetype=mime or 'application/octet-stream', resumable=False)
-        created = self.service.files().create(body=body, media_body=media, fields='id').execute()
-        return str(created.get('id') or '')
+        if not local_path or not os.path.isfile(local_path) or os.path.getsize(local_path) <= 0:
+            raise Exception('La foto bajada de Telegram llegó vacía')
+        last_error = None
+        for attempt in range(3):
+            self._drop_drive_connections()
+            try:
+                media = MediaFileUpload(
+                    local_path,
+                    mimetype=mime or 'application/octet-stream',
+                    resumable=True,
+                    chunksize=1024 * 1024,
+                )
+                request = self.service.files().create(
+                    body={'name': name, 'parents': [folder_id]},
+                    media_body=media,
+                    fields='id',
+                    supportsAllDrives=True,
+                )
+                response = None
+                while response is None:
+                    _, response = request.next_chunk()
+                return str((response or {}).get('id') or '')
+            except Exception as exc:
+                last_error = exc
+                logger.warning('Intento %s de subir publicidad a Drive falló: %s', attempt + 1, type(exc).__name__)
+                time.sleep(0.4 * (attempt + 1))
+        raise last_error
     
     def publish_original_to_telegram(self, source_folder_id: str, on_file=None) -> Dict[str, Any]:
         """Envía lo que hay en el original sin moverlo. Sirve cuando no hay Drive procesado."""
