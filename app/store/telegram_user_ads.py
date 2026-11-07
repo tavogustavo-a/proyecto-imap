@@ -283,13 +283,25 @@ def forget_account() -> dict:
     return {'ok': True, 'message': 'Cuenta borrada.'}
 
 
+def _without_link_label(line: str) -> str:
+    """Una línea que solo anunciaba el enlace queda vacía al quitar la URL."""
+    cleaned = _SPACE_RE.sub(' ', line).strip(' -•|')
+    plain = re.sub(r'^[^\wáéíóúñü]+', '', cleaned, flags=re.I).strip(' :.-')
+    folded = plain.casefold()
+    if not folded or folded.startswith('link') or folded.startswith('enlace'):
+        return ''
+    if re.fullmatch(r'canva', folded):
+        return ''
+    return cleaned
+
+
 def clean_ad_text(raw: str | None) -> str:
     text_value = raw or ''
     text_value = _URL_RE.sub(' ', text_value)
     text_value = _HASH_RE.sub(' ', text_value)
     lines = []
     for line in text_value.splitlines():
-        cleaned = _SPACE_RE.sub(' ', line).strip(' -•|')
+        cleaned = _without_link_label(line)
         if cleaned:
             lines.append(cleaned)
     return _BLANK_RE.sub('\n\n', '\n'.join(lines)).strip()
