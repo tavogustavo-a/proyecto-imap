@@ -24,6 +24,7 @@ _URL_RE = re.compile(r'(https?://\S+|www\.\S+|t\.me/\S+)', re.I)
 _HASH_RE = re.compile(r'#\w+')
 _SPACE_RE = re.compile(r'[ \t]{2,}')
 _BLANK_RE = re.compile(r'\n{3,}')
+_PROFILE_RE = re.compile(r'escr[ií]benos\s+y\s+solicita\s+tu\s+perfil\.?', re.I)
 
 
 def ensure_telegram_personal_schema() -> None:
@@ -285,7 +286,8 @@ def forget_account() -> dict:
 
 def _without_link_label(line: str) -> str:
     """Una línea que solo anunciaba el enlace queda vacía al quitar la URL."""
-    cleaned = _SPACE_RE.sub(' ', line).strip(' -•|')
+    cleaned = _PROFILE_RE.sub('', line)
+    cleaned = _SPACE_RE.sub(' ', cleaned).strip(' -•|')
     plain = re.sub(r'^[^\wáéíóúñü]+', '', cleaned, flags=re.I).strip(' :.-')
     folded = plain.casefold()
     if not folded or folded.startswith('link') or folded.startswith('enlace'):
@@ -584,7 +586,9 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
             drive_ok = True
             if processed_id and drive_service is not None:
                 try:
-                    file_id = drive_service.upload_to_folder(processed_id, saved, ad['file_name'], ad['mime'])
+                    file_id = drive_service.upload_to_folder(
+                        processed_id, saved, ad['file_name'], ad['mime'], caption,
+                    )
                     drive_ok = bool(file_id)
                 except Exception as exc:
                     drive_ok = False
@@ -592,9 +596,9 @@ def import_source_ads(transfer, drive_service, sender) -> list[dict]:
                     problems.append({'file': ad['file_name'], 'destino': 'drive', 'problema': _drive_upload_problem(exc)})
             telegram_ok = True
             if sender is not None and sender.active and not sender.skipped:
-                item = {'name': label, 'mimeType': ad['mime'], 'local_path': saved}
+                item = {'name': label, 'caption': caption, 'mimeType': ad['mime'], 'local_path': saved}
                 if file_id:
-                    item = {'id': file_id, 'name': label, 'mimeType': ad['mime']}
+                    item = {'id': file_id, 'name': label, 'caption': caption, 'mimeType': ad['mime']}
                 try:
                     before = sender.sent
                     sender.send_one(item)

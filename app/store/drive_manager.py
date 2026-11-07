@@ -390,7 +390,7 @@ class DriveTransferService:
                 time.sleep(0.4 * (attempt + 1))
         raise last_error
 
-    def upload_to_folder(self, folder_id: str, local_path: str, name: str, mime: str) -> str:
+    def upload_to_folder(self, folder_id: str, local_path: str, name: str, mime: str, description: str = '') -> str:
         """Sube un archivo al Drive procesado y devuelve su ID."""
         from googleapiclient.http import MediaFileUpload
 
@@ -410,8 +410,12 @@ class DriveTransferService:
                     resumable=True,
                     chunksize=1024 * 1024,
                 )
+                body = {'name': name, 'parents': [folder_id]}
+                text = (description or '').strip()
+                if text:
+                    body['description'] = text[:4000]
                 request = self.service.files().create(
-                    body={'name': name, 'parents': [folder_id]},
+                    body=body,
                     media_body=media,
                     fields='id',
                     supportsAllDrives=True,

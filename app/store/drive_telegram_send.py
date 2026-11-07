@@ -96,6 +96,7 @@ class DriveTelegramSender:
 
         room = wait_for_host_room()
         name = str(item.get('name') or 'archivo')
+        caption = str(item.get('caption') or name)
         mime = str(item.get('mimeType') or '')
         file_id = str(item.get('id') or '')
         local_src = str(item.get('local_path') or '')
@@ -132,7 +133,7 @@ class DriveTelegramSender:
                     target['chat_id'],
                     current,
                     current_kind,
-                    name,
+                    caption,
                     target.get('message_thread_id'),
                 )
                 if self._stopped_because_gone(ok, err):
@@ -147,7 +148,7 @@ class DriveTelegramSender:
                             target['chat_id'],
                             current,
                             'video',
-                            name,
+                            caption,
                             target.get('message_thread_id'),
                         )
                         if self._stopped_because_gone(ok, err):
@@ -162,7 +163,7 @@ class DriveTelegramSender:
                             target['chat_id'],
                             current,
                             'photo',
-                            name,
+                            caption,
                             target.get('message_thread_id'),
                         )
                         if self._stopped_because_gone(ok, err):
@@ -178,7 +179,7 @@ class DriveTelegramSender:
                             target['chat_id'],
                             current,
                             'document',
-                            name,
+                            caption,
                             target.get('message_thread_id'),
                         )
                         if self._stopped_because_gone(ok, err):
@@ -632,7 +633,7 @@ def _upload_as(
 ) -> tuple[bool, str]:
     field = {'photo': 'photo', 'video': 'video', 'animation': 'animation'}.get(kind, 'document')
     method = {'photo': 'sendPhoto', 'video': 'sendVideo', 'animation': 'sendAnimation'}.get(kind, 'sendDocument')
-    payload = {'chat_id': chat_id, 'caption': caption[:1000]}
+    payload = {'chat_id': chat_id, 'caption': caption[:1024]}
     if message_thread_id:
         try:
             payload['message_thread_id'] = int(message_thread_id)
