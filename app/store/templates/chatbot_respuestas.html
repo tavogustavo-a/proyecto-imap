@@ -2,7 +2,7 @@
 
 {% block title %}Chat de respuestas o dudas{% endblock %}
 
-{% block head %}{{ super() }}<meta name="csrf_token" content="{{ csrf_token() }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20260729-chatbot-secure-voice">{% endblock %}
+{% block head %}{{ super() }}<meta name="csrf_token" content="{{ csrf_token() }}"><link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}?v=20261107-chatbot-asistente">{% endblock %}
 {% block content %}
 <div class="container container-max-width-900 store-light store-front-main px-2 pb-3 chatbot-rp-page"
      {% if is_admin %}
@@ -59,11 +59,11 @@
       <section class="chatbot-rp-chat-card" aria-label="Conversación">
         <div id="chatbotRpMessages" class="chatbot-rp-messages" role="log" aria-live="polite"></div>
         <form id="chatbotRpForm" class="chatbot-rp-input-row">
+          <label for="chatbotRpInput" class="sr-only">Tu pregunta</label>
+          <textarea id="chatbotRpInput" class="form-control chatbot-rp-input" rows="2" placeholder="Escribe o pulsa el micrófono para hablar en vivo…" autocomplete="off"></textarea>
           <button type="button" id="chatbotRpMicBtn" class="btn-panel btn-blue chatbot-rp-mic" title="Iniciar o detener voz (micrófono y respuesta)" aria-label="Iniciar o detener voz" aria-pressed="false">
             <i class="fas fa-microphone" aria-hidden="true"></i>
           </button>
-          <label for="chatbotRpInput" class="sr-only">Tu pregunta</label>
-          <textarea id="chatbotRpInput" class="form-control chatbot-rp-input" rows="2" placeholder="Escribe o pulsa el micrófono para hablar en vivo…" autocomplete="off"></textarea>
           <button type="submit" id="chatbotRpSendBtn" class="btn-panel btn-blue chatbot-rp-send">
             <i class="fas fa-paper-plane" aria-hidden="true"></i>
           </button>

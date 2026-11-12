@@ -13796,7 +13796,8 @@ def get_chat_messages():
                     ChatMessage.sender_id == current_user.id,
                     ChatMessage.recipient_id == current_user.id
                 )
-            ).order_by(ChatMessage.created_at.asc()).limit(100).all()
+            ).order_by(ChatMessage.created_at.desc()).limit(100).all()
+            messages.reverse()
         else:
             # Para admin/soporte, obtener conversación normal
             messages = ChatMessage.get_conversation(current_user.id, limit=100)
@@ -13838,7 +13839,8 @@ def get_user_chat_messages():
                 ChatMessage.sender_id == current_user.id,
                 ChatMessage.recipient_id == current_user.id
             )
-        ).order_by(ChatMessage.created_at.asc()).limit(100).all()
+        ).order_by(ChatMessage.created_at.desc()).limit(100).all()
+        messages.reverse()
         
         # Marcar mensajes como leídos
         ChatMessage.mark_as_read(current_user.id)

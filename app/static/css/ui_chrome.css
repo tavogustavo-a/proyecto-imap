@@ -160,9 +160,14 @@ html body .mobile-menu-store .btn-panel.btn-red.mobile-menu-btn {
   box-sizing: border-box !important;
 }
 
-html body .mobile-menu-store .codigos-sidebar-codigos-row .mobile-menu-btn {
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
+html body .mobile-menu-store .codigos-sidebar-codigos-row {
+  margin: 0 1rem !important;
+}
+
+html body .mobile-menu-store .codigos-sidebar-codigos-row .btn-panel.btn-blue.mobile-menu-btn,
+html body .mobile-menu-store .codigos-sidebar-codigos-row .btn-panel.btn-red.mobile-menu-btn {
+  margin: 0.04rem 0 0.1rem !important;
+  width: auto !important;
 }
 
 html body .regex-result-container a.regex-result-approve-btn,

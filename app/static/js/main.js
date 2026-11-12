@@ -52,8 +52,72 @@ function getIsUserLoggedIn() {
   return false;
 }
 
+function bindPersistentSearchClears(root) {
+  var scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll("input, textarea").forEach(function (input) {
+    if (!input || input.dataset.clearBound === "1") return;
+    if (input.type === "hidden" || input.type === "checkbox" || input.type === "radio" || input.type === "file") return;
+    var wrap = input.parentElement;
+    if (!wrap) return;
+    var isSearch = input.type === "search" || input.classList.contains("search-input") || input.classList.contains("email-search") || input.classList.contains("connection-logs-search");
+    if (input.type === "search") input.type = "text";
+    var btn = wrap.querySelector(".search-textarea-clear-btn, .search-clear-btn, .connection-logs-search-clear");
+    if (!btn && !isSearch) return;
+    if (!btn) {
+      if (window.getComputedStyle(wrap).position === "static") wrap.style.position = "relative";
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "search-textarea-clear-btn search-clear-inline";
+      btn.setAttribute("aria-label", "Limpiar");
+      btn.innerHTML = "\u00d7";
+      wrap.appendChild(btn);
+    }
+    if (btn.dataset.clearBound === "1") return;
+    input.dataset.clearBound = "1";
+    btn.dataset.clearBound = "1";
+    function sync() {
+      btn.classList.toggle("show", !!String(input.value || "").trim());
+    }
+    if (!btn.dataset.clearClick) {
+      btn.dataset.clearClick = "1";
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("search", { bubbles: true }));
+        sync();
+      });
+    }
+    input.addEventListener("input", sync);
+    input.addEventListener("search", sync);
+    sync();
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
-  // console.log("main.js loaded!");
+  bindPersistentSearchClears(document);
+  if (window.MutationObserver) {
+    var clearObserver = new MutationObserver(function (records) {
+      records.forEach(function (record) {
+        record.addedNodes.forEach(function (node) {
+          if (!node || node.nodeType !== 1) return;
+          if (node.matches && node.matches("input, textarea")) bindPersistentSearchClears(node.parentElement || document);
+          else bindPersistentSearchClears(node);
+        });
+      });
+    });
+    clearObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  document.querySelectorAll(".site-footer__social-btn--android, .site-footer__social-btn--ios").forEach(function (link) {
+    link.addEventListener("click", function (event) {
+      var url = link.getAttribute("href");
+      if (!url) return;
+      if (!(window.NativeAppBridge || window.AndroidAppBridge)) return;
+      event.preventDefault();
+      openExternalLink(url);
+    });
+  });
+
 
   function getCsrfToken() {
     const csrfMeta = document.querySelector('meta[name="csrf_token"]');

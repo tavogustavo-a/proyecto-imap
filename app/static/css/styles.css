@@ -977,6 +977,13 @@ noscript p {
   margin: 2rem auto;
 }
 
+.trigger-logs-page {
+  max-width: 900px;
+  width: 100%;
+  margin: 1.25rem auto;
+  box-sizing: border-box;
+}
+
 .otp-input-container {
   max-width: 400px;
 }
@@ -9476,4 +9483,56 @@ body:not(.theme-active) .site-footer__social-config-btn {
 .edit-subuser-page #email-search-clear-btn.search-textarea-clear-btn:active {
   transform: translateY(-50%) !important;
   box-shadow: none !important;
+}
+
+/* La X nativa del navegador se suma a la propia. Se deja solo la propia. */
+input[type="search"] {
+  -webkit-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration,
+input[type="search"]::-moz-search-clear-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  pointer-events: none !important;
+}
+
+.search-textarea-clear-btn.show,
+.search-clear-btn.show,
+.connection-logs-search-clear.show {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.search-clear-inline {
+  top: 50%;
+  right: 8px;
+  padding: 0;
+  transform: translateY(-50%);
+}
+
+.search-clear-inline.show:hover,
+.search-clear-inline:hover {
+  transform: translateY(-50%);
+}
+
+/* Permisos: el alto fijo y el fondo pegado al scroll dejan la página en negro al moverla. */
+html:has(.perm-page),
+body.theme-active:has(.perm-page),
+body.theme-active.tema1:has(.perm-page),
+body.theme-active.tema2:has(.perm-page),
+body.theme-active.tema3:has(.perm-page) {
+  height: auto !important;
+  min-height: 100% !important;
+  background-image: none !important;
+  background-attachment: scroll !important;
 }

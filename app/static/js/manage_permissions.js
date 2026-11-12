@@ -429,6 +429,10 @@ document.addEventListener("DOMContentLoaded", function() {
             th.dataset.resourceType = resource.type;
             headerRow.appendChild(th);
           });
+          const resourcesTable = document.getElementById('resourcesPermissionsTable');
+          if (resourcesTable) {
+            resourcesTable.style.setProperty('--perm-resource-cols', String(allResources.length || 1));
+          }
         }
         
         renderResourcesTable(filteredUsersForResources);
@@ -2804,6 +2808,22 @@ document.addEventListener("DOMContentLoaded", function() {
       } else {
         disconnectAdminBalanceStream();
       }
+    });
+  })();
+
+  /* Las secciones de abajo no se miden al cambiar el tamaño de la ventana. */
+  (function watchLowerPermCards() {
+    document.querySelectorAll('.perm-page > .admin-card:not(.perm-main-card)').forEach(function (card) {
+      if (!('IntersectionObserver' in window)) {
+        card.classList.add('perm-card-live');
+        return;
+      }
+      const io = new IntersectionObserver(function (entries) {
+        if (!entries.some(function (entry) { return entry.isIntersecting; })) return;
+        card.classList.add('perm-card-live');
+        io.disconnect();
+      }, { rootMargin: '500px' });
+      io.observe(card);
     });
   })();
 

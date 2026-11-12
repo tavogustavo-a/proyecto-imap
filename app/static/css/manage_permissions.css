@@ -32,41 +32,25 @@
 
 .permissions-table-container {
   overflow-x: auto;
+  overflow-y: clip;
   margin-top: 1rem;
 }
 
-/* Cada sección se maqueta sola. Plegar una no vuelve a medir las otras. */
-.perm-page .perm-section-body {
-  contain: layout paint;
+/* La tabla de permisos cabe en la tarjeta. Si es un recuadro con scroll,
+   el movimiento se queda ahí y la página se paraliza. */
+.perm-page .perm-main-card .permissions-table-container {
+  overflow: visible;
 }
 
-/* El panel es fijo. Abrirlo no debe heredar estilos a cada casilla
-   ni obligar a repintar las tablas. El velo ya tapa los clics. */
-.perm-page > .mobile-menu-store.hidden {
-  display: flex !important;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translate3d(-110%, 0, 0);
+/* Las tablas de abajo no existen para el layout hasta que se acercan.
+   Si se miden al agrandar la ventana, la de permisos se queda quieta. */
+.perm-page > .admin-card:not(.perm-main-card) .perm-section-body {
+  content-visibility: hidden;
+  contain-intrinsic-size: auto 480px;
 }
 
-.perm-page > .mobile-menu-store:not(.hidden) {
-  visibility: visible;
-  pointer-events: auto;
-  transform: translate3d(-12px, 0, 0);
-}
-
-.perm-page > .menu-overlay {
-  display: block !important;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.perm-page > .menu-overlay.active {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
+.perm-page > .admin-card.perm-card-live .perm-section-body {
+  content-visibility: visible;
 }
 
 .permissions-table {
@@ -88,9 +72,8 @@
   text-align: center;
   font-weight: 600;
   white-space: normal;
-  word-wrap: break-word;
   line-height: 1.3;
-  max-width: 120px;
+  max-width: none;
   vertical-align: middle;
 }
 
@@ -121,10 +104,6 @@
   background: #e4e7ee;
 }
 
-.permissions-table tbody tr:hover td {
-  background: #d5dce8;
-}
-
 .permissions-table tbody tr:last-child td {
   border-bottom: none;
 }
@@ -134,7 +113,8 @@
 }
 
 .perm-page .admin-card {
-  overflow-x: visible;
+  overflow: visible;
+  box-shadow: none;
 }
 
 .permission-checkbox,
@@ -281,8 +261,9 @@
 
 /* Estilos para headers de recursos en la tabla de recursos */
 #resourcesPermissionsTable {
-  width: max-content;
+  width: calc(9.5rem + var(--perm-resource-cols, 1) * 7.4rem);
   min-width: 100%;
+  table-layout: fixed;
 }
 
 #resourcesPermissionsTable th:not(:first-child),
@@ -336,9 +317,8 @@
   text-align: center;
   font-weight: 600;
   white-space: normal;
-  word-wrap: break-word;
   line-height: 1.3;
-  max-width: 120px;
+  max-width: none;
   vertical-align: middle;
 }
 
@@ -362,10 +342,6 @@
 
 #user-prices-table tbody tr:nth-child(even) td {
   background: #e4e7ee;
-}
-
-#user-prices-table tbody tr:hover td {
-  background: #d5dce8;
 }
 
 #user-prices-table tbody tr:last-child td {

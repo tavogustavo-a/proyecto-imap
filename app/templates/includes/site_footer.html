@@ -1,6 +1,7 @@
-{# Pie de sitio: redes + enlaces legales.
-   Solo usuarios principales logueados (admin incluido).
-   Sub-usuarios y visitantes sin sesión no ven nada. Oculto en pantallas de login. #}
+{# Pie de sitio.
+   Usuario principal: privacidad, eliminar cuenta, WhatsApp, Telegram, Android e iOS.
+   Sub-usuario logueado: solo Android e iOS, para descargar la app.
+   Visitantes sin sesión no ven nada. Oculto en pantallas de login. #}
 {% set _hide_footer_eps = [
   'auth_bp.login',
   'user_auth_bp.login',
@@ -8,13 +9,16 @@
   'auth_bp.forgot_password',
   'user_auth_bp.forgot_password',
 ] %}
-{% if session.get('logged_in') and current_user_obj and not is_subuser and request.endpoint not in _hide_footer_eps %}
 {% set android_url = (site_settings.get('footer_android_url') or '')|trim %}
 {% set ios_url = (site_settings.get('footer_ios_url') or '')|trim %}
 {% set wa_url = (site_settings.get('footer_whatsapp_url') or '')|trim %}
 {% set tg_url = (site_settings.get('footer_telegram_url') or '')|trim %}
+{% set _footer_session = session.get('logged_in') and current_user_obj and request.endpoint not in _hide_footer_eps %}
+{% set _subuser_apps = _footer_session and is_subuser and (android_url or ios_url) %}
+{% if (_footer_session and not is_subuser) or _subuser_apps %}
 <footer class="site-footer" role="contentinfo">
   <nav class="site-footer__nav" aria-label="Enlaces del pie">
+    {% if not is_subuser %}
     <a class="site-footer__link" href="{{ url_for('main_bp.privacy_policy') }}">Política de privacidad</a>
     <a class="site-footer__link" href="{{ url_for('main_bp.account_deletion_request') }}">Eliminar cuenta</a>
     {% if wa_url %}
@@ -37,13 +41,14 @@
       <i class="fab fa-telegram-plane" aria-hidden="true"></i>
     </a>
     {% endif %}
+    {% endif %}
     {% if android_url %}
     <a class="site-footer__social-btn site-footer__social-btn--android"
        href="{{ android_url }}"
        target="_blank"
        rel="noopener noreferrer"
-       title="App para Android"
-       aria-label="App para Android">
+       title="Descargar la app para Android"
+       aria-label="Descargar la app para Android">
       <i class="fab fa-android" aria-hidden="true"></i>
     </a>
     {% endif %}
@@ -52,8 +57,8 @@
        href="{{ ios_url }}"
        target="_blank"
        rel="noopener noreferrer"
-       title="App para iOS"
-       aria-label="App para iOS">
+       title="Descargar la app para iPhone"
+       aria-label="Descargar la app para iPhone">
       <i class="fab fa-apple" aria-hidden="true"></i>
     </a>
     {% endif %}

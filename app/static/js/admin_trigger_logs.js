@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderLogs(logs) {
         if (!logListContainer) return;
         if (!logs || logs.length === 0) {
-            logListContainer.innerHTML = '<p>No hay entradas en el log que coincidan.</p>';
+            logListContainer.innerHTML = '<p class="text-center">No hay entradas en el log que coincidan.</p>';
             return;
         }
 
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function fetchLogs(query = "", page = 1) {
         if (!logListContainer) return;
-        logListContainer.innerHTML = '<p>Cargando logs...</p>';
+        logListContainer.innerHTML = '<p class="text-center">Cargando logs...</p>';
         if(paginationContainer) paginationContainer.innerHTML = '';
 
         currentQuery = query;

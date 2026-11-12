@@ -1671,7 +1671,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     position: relative !important;
     word-wrap: break-word;
-    word-break: break-all; /* ✅ NUEVO: Romper palabras largas como URLs */
+    word-break: break-word;
     overflow-wrap: break-word; /* ✅ NUEVO: Asegurar que el texto se rompa */
     /* ✅ CORREGIDO: Flexbox horizontal para hora en la misma línea */
     display: flex !important;
@@ -1794,7 +1794,7 @@
     padding: 7px 7px 9px 7px; /* Padding normal */
     border-radius: 18px;
     word-wrap: break-word;
-    word-break: break-all; /* ✅ NUEVO: Romper palabras largas como URLs */
+    word-break: break-word;
     overflow-wrap: break-word; /* ✅ NUEVO: Asegurar que el texto se rompa */
     position: relative !important;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -4802,4 +4802,12 @@ div.message.own-message .message-content,
         max-width: 96%;
         min-height: 320px;
     }
+}
+
+.message-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
+    flex: 1 1 auto;
 }

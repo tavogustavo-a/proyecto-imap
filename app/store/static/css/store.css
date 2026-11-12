@@ -39841,6 +39841,7 @@ body.balance-recharge-qr-lightbox-open {
   font-size: 1.3rem;
   font-weight: 700;
   margin: 0 0 0.35rem;
+  text-align: center;
 }
 
 .chatbot-rp-intro,
@@ -39972,6 +39973,8 @@ body.balance-recharge-qr-lightbox-open {
   flex: 1;
   resize: vertical;
   min-height: 2.5rem;
+  border: 1px solid #000 !important;
+  border-radius: 8px;
 }
 
 .chatbot-rp-mic,
@@ -40104,6 +40107,7 @@ body.balance-recharge-qr-lightbox-open {
   gap: 0.35rem;
   margin-bottom: 0.85rem;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .chatbot-rp-tab {

@@ -12,8 +12,14 @@ function escapeChatHtml(text) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+function formatChatBodyHtml(text) {
+    const raw = text == null ? '' : String(text);
+    if (!raw.trim() || raw.trim() === 'Mensaje sin texto') return '';
+    return '<span class="message-body">' + escapeChatHtml(raw) + '</span>';
+}
 if (typeof window !== 'undefined') {
     window.escapeChatHtml = escapeChatHtml;
+    window.formatChatBodyHtml = formatChatBodyHtml;
 }
 
     // Variables globales
@@ -660,7 +666,7 @@ function addMessageToChat(messageData, isFromServer = false) {
         
         messageElement.innerHTML = `
             <div class="message-content">
-                <div class="message-text">${senderLabel}${attachmentHTML}</div>
+                <div class="message-text">${senderLabel}${attachmentHTML}${formatChatBodyHtml(messageData.message)}</div>
                 <div class="message-time">${messageTime}</div>
             </div>
         `;
@@ -771,7 +777,7 @@ function addMessageToChat(messageData, isFromServer = false) {
         // Mensaje de texto normal
         messageElement.innerHTML = `
             <div class="message-content">
-                <div class="message-text">${senderLabel}${escapeChatHtml(messageData.message || '')}</div>
+                <div class="message-text">${senderLabel}${formatChatBodyHtml(messageData.message)}</div>
                 <div class="message-time">${messageTime}</div>
             </div>
         `;
