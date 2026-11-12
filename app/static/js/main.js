@@ -59,10 +59,10 @@ function bindPersistentSearchClears(root) {
     if (input.type === "hidden" || input.type === "checkbox" || input.type === "radio" || input.type === "file") return;
     var wrap = input.parentElement;
     if (!wrap) return;
-    var isSearch = input.type === "search" || input.classList.contains("search-input") || input.classList.contains("email-search") || input.classList.contains("connection-logs-search");
-    if (input.type === "search") input.type = "text";
+    var wasSearch = input.type === "search";
+    if (wasSearch) input.type = "text";
     var btn = wrap.querySelector(".search-textarea-clear-btn, .search-clear-btn, .connection-logs-search-clear");
-    if (!btn && !isSearch) return;
+    if (!btn && !wasSearch) return;
     if (!btn) {
       if (window.getComputedStyle(wrap).position === "static") wrap.style.position = "relative";
       btn = document.createElement("button");
