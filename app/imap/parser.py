@@ -4,49 +4,29 @@ import quopri
 from bs4 import BeautifulSoup
 from email.header import decode_header, make_header
 import urllib.parse
-try:
-    import chardet
-    HAS_CHARDET = True
-except ImportError:
-    HAS_CHARDET = False
 
 def safe_decode(raw_payload, default_encoding='utf-8'):
-    """Decodifica payload de manera segura, detectando la codificación si es necesario."""
+    """Decodifica el cuerpo con el charset del correo. No sustituye tildes por error."""
     if not raw_payload:
         return ""
-    
-    # Si ya es string, devolverlo
+
     if isinstance(raw_payload, str):
         return raw_payload
-    
-    # Intentar con la codificación por defecto
-    try:
-        return raw_payload.decode(default_encoding, errors='replace')
-    except (UnicodeDecodeError, AttributeError):
-        pass
-    
-    # Intentar detectar la codificación si chardet está disponible
-    if HAS_CHARDET:
-        try:
-            detected = chardet.detect(raw_payload)
-            if detected and detected.get('encoding'):
-                encoding = detected['encoding']
-                confidence = detected.get('confidence', 0)
-                # Solo usar la detección si tiene alta confianza
-                if confidence > 0.7:
-                    return raw_payload.decode(encoding, errors='replace')
-        except:
-            pass
-    
-    # Fallback: intentar codificaciones comunes
-    for encoding in ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']:
-        try:
-            return raw_payload.decode(encoding, errors='replace')
-        except (UnicodeDecodeError, LookupError):
+
+    tried = []
+    for enc in (default_encoding, 'utf-8', 'cp1252', 'iso-8859-1', 'latin-1'):
+        if not enc:
             continue
-    
-    # Último fallback: forzar UTF-8 con replace
-    return str(raw_payload, errors='replace')
+        key = str(enc).lower().strip()
+        if not key or key in tried:
+            continue
+        tried.append(key)
+        try:
+            return raw_payload.decode(key)
+        except (UnicodeDecodeError, LookupError, AttributeError):
+            continue
+
+    return raw_payload.decode('utf-8', errors='replace')
 
 def parse_raw_email(raw_bytes):
     """Parsea el correo crudo (bytes) y extrae from/subject/date/text/html/message_id."""
@@ -110,7 +90,7 @@ def parse_raw_email(raw_bytes):
             if ctype == "text/plain":
                 try:
                     raw_payload = part.get_payload(decode=True) or b""
-                    decoded_str = safe_decode(raw_payload)
+                    decoded_str = safe_decode(raw_payload, part.get_content_charset() or "utf-8")
                     # get_payload(decode=True) ya aplicó quoted-printable.
                     # Volver a decodificar rompe los '=' del enlace (=8d pasa a un carácter).
                     if "=3d" in decoded_str.lower():
@@ -127,7 +107,7 @@ def parse_raw_email(raw_bytes):
             elif ctype == "text/html":
                 try:
                     raw_payload = part.get_payload(decode=True) or b""
-                    decoded_html = safe_decode(raw_payload)
+                    decoded_html = safe_decode(raw_payload, part.get_content_charset() or "utf-8")
                     html_part += decoded_html
                 except Exception:
                     # En caso de cualquier error, continuar sin agregar esta parte
@@ -137,7 +117,7 @@ def parse_raw_email(raw_bytes):
         if ctype == "text/plain":
             try:
                 raw_payload = msg.get_payload(decode=True) or b""
-                decoded_str = safe_decode(raw_payload)
+                decoded_str = safe_decode(raw_payload, msg.get_content_charset() or "utf-8")
                 if "=3d" in decoded_str.lower():
                     try:
                         decoded_str = quopri.decodestring(
@@ -151,7 +131,7 @@ def parse_raw_email(raw_bytes):
         elif ctype == "text/html":
             try:
                 raw_payload = msg.get_payload(decode=True) or b""
-                decoded_html = safe_decode(raw_payload)
+                decoded_html = safe_decode(raw_payload, msg.get_content_charset() or "utf-8")
                 html_part = decoded_html.strip()
             except Exception:
                 html_part = ""
