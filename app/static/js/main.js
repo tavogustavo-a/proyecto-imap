@@ -308,9 +308,12 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   // --- FIN: Aplicar opacidad dinámica --- 
 
-  // MODO OSCURO
-  const savedTheme = localStorage.getItem("darkMode") === "true";
-  if (savedTheme) {
+  // MODO OSCURO: el botón manda si ya eligieron. Si no, sigue al navegador.
+  const savedTheme = localStorage.getItem("darkMode");
+  const browserDarkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  const browserDark = !!(browserDarkQuery && browserDarkQuery.matches);
+  const useDark = savedTheme === "true" || (savedTheme !== "false" && browserDark);
+  if (useDark) {
     document.body.classList.add("dark-mode");
   }
   
@@ -319,14 +322,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const icon = toggleThemeBtn.querySelector("i");
     
     function updateThemeIcon() {
+      const isDark = document.body.classList.contains("dark-mode");
+      const moon = toggleThemeBtn.querySelector(".theme-ico-moon");
+      const sun = toggleThemeBtn.querySelector(".theme-ico-sun");
+      if (moon && sun) {
+        moon.hidden = isDark;
+        sun.hidden = !isDark;
+        return;
+      }
       if (icon) {
-        // Si está en modo oscuro, mostrar sol (porque al hacer clic cambiará a modo claro)
-        // Si está en modo claro, mostrar luna (porque al hacer clic cambiará a modo oscuro)
-        if (document.body.classList.contains("dark-mode")) {
-          icon.className = "fas fa-sun"; // Sol = cambiará a modo claro
-        } else {
-          icon.className = "fas fa-moon"; // Luna = cambiará a modo oscuro
-        }
+        icon.className = isDark ? "fas fa-sun" : "fas fa-moon";
       }
     }
     
@@ -348,6 +353,21 @@ document.addEventListener("DOMContentLoaded", function () {
     
     // Establecer icono inicial del botón según el estado actual
     updateThemeIcon();
+
+    if (browserDarkQuery && savedTheme !== "true" && savedTheme !== "false") {
+      const followBrowserTheme = function (event) {
+        if (localStorage.getItem("darkMode") === "true" || localStorage.getItem("darkMode") === "false") {
+          return;
+        }
+        document.body.classList.toggle("dark-mode", event.matches);
+        updateThemeIcon();
+      };
+      if (browserDarkQuery.addEventListener) {
+        browserDarkQuery.addEventListener("change", followBrowserTheme);
+      } else if (browserDarkQuery.addListener) {
+        browserDarkQuery.addListener(followBrowserTheme);
+      }
+    }
   }
 
   // Seleccionar servicio inicial - MOVIDO DESPUÉS DE DEFINIR FUNCIONES

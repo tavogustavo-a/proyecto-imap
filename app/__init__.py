@@ -748,6 +748,21 @@ def create_app(config_class_passed=None):
                 store_schema_err,
             )
 
+        try:
+            from app.catalog_seed import seed_default_regexes_if_empty
+
+            created = seed_default_regexes_if_empty()
+            if created.get("regexes") or created.get("services") or created.get("paragraphs"):
+                app.logger.info(
+                    "Proyecto nuevo: %s regex, %s servicios y %s párrafos creados.",
+                    created.get("regexes") or 0,
+                    created.get("services") or 0,
+                    created.get("paragraphs") or 0,
+                )
+        except Exception as regex_seed_err:
+            db.session.rollback()
+            app.logger.warning("No se pudieron crear los regex iniciales: %s", regex_seed_err)
+
     # === Registro de Blueprints ===
     from app.auth.routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/auth")

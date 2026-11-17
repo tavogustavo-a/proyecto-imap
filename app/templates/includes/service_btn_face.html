@@ -1,0 +1,30 @@
+{% set face = namespace(left=[], right=[], brands=[]) %}
+{% for icon_obj in (srv.service_icons or []) %}
+  {% set icon_file = icon_obj.icon_name or '' %}
+  {% if 'side-l-' in icon_file %}
+    {% set face.left = face.left + [icon_obj] %}
+  {% elif 'side-r-' in icon_file %}
+    {% set face.right = face.right + [icon_obj] %}
+  {% else %}
+    {% set face.brands = face.brands + [icon_obj] %}
+  {% endif %}
+{% endfor %}
+{% if face.left or face.right %}
+  <span class="service-btn-side service-btn-side-left">
+    {% for icon_obj in face.left %}
+      <img class="service-btn-side-ico" src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}" alt="">
+    {% endfor %}
+    {% for icon_obj in face.brands %}
+      <img class="service-btn-side-ico service-btn-side-brand" src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}" alt="">
+    {% endfor %}
+  </span>
+  <span class="service-btn-sep" aria-hidden="true"></span>
+  <span class="service-btn-label">{{ srv.name }}{% if srv.aliases and srv.aliases|length > 0 %}<span class="info-icon">ℹ️</span>{% endif %}</span>
+{% else %}
+  {% if face.brands %}
+    {% for icon_obj in face.brands %}
+      <img src="{{ url_for('static', filename='images/' ~ icon_obj.icon_name) }}" alt="icon">
+    {% endfor %}
+  {% endif %}
+  <span class="service-btn-label">{{ srv.name }}{% if srv.aliases and srv.aliases|length > 0 %}<span class="info-icon">ℹ️</span>{% endif %}</span>
+{% endif %}

@@ -14,7 +14,39 @@ _ALLOWED_TAGS = frozenset({
     "table", "thead", "tbody", "tfoot", "tr", "th", "td",
     "img", "pre", "code", "blockquote",
     "style", "button",
+    "svg", "path", "circle", "rect", "ellipse", "line", "polyline", "polygon",
+    "g", "defs", "lineargradient", "radialgradient", "stop", "title", "text", "tspan",
+    "clippath", "mask", "use",
 })
+
+_DROP_TAGS = frozenset({
+    "script", "iframe", "object", "embed", "foreignobject", "handler",
+    "set", "animate", "animatetransform", "animatemotion", "mpath",
+})
+
+_SVG_TAGS = frozenset({
+    "svg", "path", "circle", "rect", "ellipse", "line", "polyline", "polygon",
+    "g", "defs", "lineargradient", "radialgradient", "stop", "title", "text", "tspan",
+    "clippath", "mask", "use",
+})
+
+_SVG_ATTRS = frozenset({
+    "xmlns", "viewbox", "width", "height", "fill", "stroke", "stroke-width",
+    "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "d", "cx", "cy",
+    "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2", "points", "transform",
+    "opacity", "fill-opacity", "stroke-opacity", "fill-rule", "clip-rule",
+    "offset", "stop-color", "stop-opacity", "gradientunits", "gradienttransform",
+    "preserveaspectratio", "aria-hidden", "focusable", "role", "id", "offset",
+    "font-size", "font-family", "font-weight", "text-anchor", "dominant-baseline",
+    "cx", "cy", "fr", "fx", "fy", "href", "xlink:href",
+})
+
+_SVG_ATTR_CANON = {
+    "viewbox": "viewBox",
+    "preserveaspectratio": "preserveAspectRatio",
+    "gradientunits": "gradientUnits",
+    "gradienttransform": "gradientTransform",
+}
 
 _GLOBAL_ATTRS = frozenset({"class", "title", "aria-label"})
 _TAG_ATTRS = {
@@ -177,8 +209,23 @@ def _sanitize_style_element(tag) -> None:
     tag.append(css_text)
 
 
+def _svg_attr_value_ok(attr_name: str, value: str) -> bool:
+    raw = (value or "").strip()
+    low = raw.lower()
+    if low.startswith("javascript:") or low.startswith("vbscript:") or low.startswith("data:"):
+        return False
+    if attr_name in ("href", "xlink:href"):
+        return raw.startswith("#") and " " not in raw
+    if attr_name == "xmlns":
+        return low in ("http://www.w3.org/2000/svg", "http://www.w3.org/1999/xlink")
+    return True
+
+
 def _sanitize_element(tag) -> None:
     name = tag.name.lower() if tag.name else ""
+    if name in _DROP_TAGS:
+        tag.decompose()
+        return
     if name == "style":
         _sanitize_style_element(tag)
         return
@@ -187,6 +234,8 @@ def _sanitize_element(tag) -> None:
         return
 
     allowed = _GLOBAL_ATTRS | _TAG_ATTRS.get(name, frozenset())
+    if name in _SVG_TAGS:
+        allowed = allowed | _SVG_ATTRS
     attrs = dict(tag.attrs or {})
     for attr in list(attrs.keys()):
         attr_name = _clean_attr_name(attr)
@@ -194,6 +243,16 @@ def _sanitize_element(tag) -> None:
             del tag.attrs[attr]
             continue
         value = attrs[attr]
+        if name in _SVG_TAGS:
+            candidate = value[0] if isinstance(value, list) else value
+            if not _svg_attr_value_ok(attr_name, str(candidate)):
+                del tag.attrs[attr]
+                continue
+            canon = _SVG_ATTR_CANON.get(attr_name)
+            if canon and canon != attr:
+                del tag.attrs[attr]
+                tag.attrs[canon] = candidate
+            continue
         if attr_name in ("href", "src"):
             candidate = value[0] if isinstance(value, list) else value
             if not _is_safe_url(str(candidate), allow_data_images=(attr_name == "src" and name == "img")):

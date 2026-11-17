@@ -427,6 +427,39 @@ document.addEventListener("DOMContentLoaded", function() {
     container.classList.add("modal-visible");
     grid.innerHTML = "";
     fillStreamIconGrid(grid, (fileName) => addServiceIcon(serviceId, fileName));
+    fillSideIconGrid(document.getElementById("iconGridLeft"), "side/side-l-", (fileName) => addServiceIcon(serviceId, fileName));
+  }
+
+  const SIDE_LEFT_ICONS = [
+    "laptop", "star", "apple", "tv", "play", "house", "music", "game", "mail", "lock", "film", "globe",
+    "phone", "headphones", "camera", "heart", "bell", "cloud", "wifi", "cart", "gift", "book",
+    "calendar", "clock", "map", "car", "plane", "coffee", "user", "users", "gear", "download",
+    "key", "shield", "fire", "bolt", "sun", "tag", "card", "chat", "image", "mic"
+  ];
+
+  function fillSideIconGrid(grid, prefix, onPick) {
+    if (!grid) return;
+    const names = SIDE_LEFT_ICONS;
+    grid.innerHTML = "";
+    names.forEach((name) => {
+      const fileName = prefix + name + ".svg";
+      const img = document.createElement("img");
+      img.src = decideIconPath(fileName);
+      img.alt = name;
+      img.title = name;
+      img.addEventListener("click", () => onPick(fileName));
+      grid.appendChild(img);
+    });
+    for (let n = 1; n <= 46; n += 1) {
+      const fileName = prefix + "stream" + n + ".png";
+      const img = document.createElement("img");
+      img.src = decideIconPath(fileName);
+      img.alt = "stream" + n;
+      img.title = "stream" + n;
+      img.className = "side-platform-icon";
+      img.addEventListener("click", () => onPick(fileName));
+      grid.appendChild(img);
+    }
   }
 
   function streamIconNames(files) {

@@ -575,6 +575,9 @@ def export_config():
         config_data["paragraphs"] = paragraphs_data
         # --- Fin Añadir Párrafos ---
 
+        from app.admin.ui_chrome import get_ui_chrome_colors
+        config_data["ui_chrome"] = get_ui_chrome_colors()
+
         # 3. Convertir a JSON
         # Usar un serializador personalizado si hay tipos de datos complejos (como datetime)
         def default_serializer(obj):
@@ -753,9 +756,16 @@ def import_config():
                         old_to_new_filter_ids[old_id] = new_filter.id 
             
             if regexes_data:
+                 _regex_column_keys = {c.key for c in inspect(RegexPattern).columns}
                  for r_data in regexes_data:
                     old_id = r_data.get('id') or r_data.get('original_id') # Compatibilidad
-                    r_data_cleaned = {k: v for k, v in r_data.items() if k not in ['id', 'original_id']}
+                    r_data_cleaned = {
+                        k: v for k, v in r_data.items()
+                        if k not in ['id', 'original_id'] and k in _regex_column_keys
+                    }
+                    r_data_cleaned.setdefault('enabled', True)
+                    r_data_cleaned.setdefault('is_default', False)
+                    r_data_cleaned.setdefault('protected', False)
                     new_regex = RegexPattern(**r_data_cleaned) 
                     db.session.add(new_regex)
                     db.session.flush()
@@ -958,8 +968,16 @@ def import_config():
                         )
                         db.session.add(new_alias_icon)
                 
-                # Crear ServiceIcons del servicio
-                service_icon_names = s_data.get('service_icon_names', [])
+                # Crear ServiceIcons del servicio (nombres sueltos o lista de objetos)
+                service_icon_names = list(s_data.get('service_icon_names') or [])
+                if not service_icon_names:
+                    for icon_item in s_data.get('service_icons') or []:
+                        if isinstance(icon_item, dict):
+                            icon_name = icon_item.get('icon_name')
+                        else:
+                            icon_name = icon_item
+                        if icon_name:
+                            service_icon_names.append(icon_name)
                 for icon_name in service_icon_names:
                     new_service_icon = ServiceIcon(
                         service_id=new_service_id,
@@ -1141,6 +1159,16 @@ def import_config():
                 mode_item = SiteSettings(key=mode_key, value=mode_value)
                 db.session.add(mode_item)
             
+            ui_chrome = config_data.get('ui_chrome') or {}
+            if isinstance(ui_chrome, dict) and ui_chrome:
+                from app.admin.ui_chrome import save_ui_click_colors, save_ui_static_colors
+                save_ui_static_colors(ui_chrome.get('static1'), ui_chrome.get('static2'))
+                save_ui_click_colors(
+                    ui_chrome.get('click1'),
+                    ui_chrome.get('click2'),
+                    ui_chrome.get('click_dark'),
+                )
+
             db.session.commit()
 
         except Exception as e:

@@ -142,6 +142,7 @@ DEFAULT_IMAP2_REGEX_DESCRIPTIONS = (
     "codigo netflix hogar",
     "codigo netflix viaje",
     "confirma tu nuevo inicio de sesion en crunchyroll",
+    "consultar codigo viaje y hogar de max/hbo",
     "ingreso sesion netflix 6 digitos",
 )
 

@@ -219,7 +219,10 @@
 <div id="iconGridOverlay" class="popup-overlay modal-hidden">
   <div id="iconGridContainer" class="popup-base popup-medium modal-hidden">
     <h4 class="mt-0">Selecciona un ícono para el servicio</h4>
+    <h5 class="icon-grid-section">Selecciona un ícono para el botón servicio lado izquierdo</h5>
     <div id="iconGrid" class="popup-grid"></div>
+    <h5 class="icon-grid-section">Lado izquierdo del botón</h5>
+    <div id="iconGridLeft" class="popup-grid popup-grid-side"></div>
   </div>
 </div>
 
@@ -232,5 +235,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20261030-link-mark" defer></script>
+  <script src="{{ url_for('static', filename='js/admin_services_list.js') }}?v=20261117-side-platforms" defer></script>
 {% endblock %}

@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}?v=20261021-html-toolbar">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}?v=20261117-img-size">
 <script src="{{ url_for('store_bp.static', filename='js/vendor/iconify-icon.min.js') }}" defer></script>
   <meta name="html-tools-static-images" content="{{ url_for('static', filename='images/') }}">
 {% endblock %}
@@ -95,6 +95,7 @@
       <button type="button" id="btnOrderedList" title="Lista numerada"><i class="fas fa-list-ol" aria-hidden="true"></i> 1,2,3</button>
       <button type="button" id="btnLink" title="Enlace"><i class="fas fa-link"></i> Enlace</button>
       <button type="button" id="btnImage" title="Imagen por URL"><i class="fas fa-image"></i> Imagen</button>
+      <button type="button" id="btnImageSize" title="Reducir o cambiar el tamaño de la imagen"><i class="fas fa-expand"></i> Tamaño</button>
       <span class="html-toolbar-icon-wrap">
         <button type="button" id="btnIcons" class="html-toolbar-icon-btn" title="Insertar icono"><i class="fas fa-icons"></i> Iconos</button>
         <div id="iconsDropdown" class="html-toolbar-dropdown html-icons-dropdown hidden">
@@ -163,6 +164,11 @@
   </div>
 </div>
 
+<div id="htmlImageMenu" class="html-image-menu hidden" role="menu">
+  <button type="button" data-action="shrink">Reducir a la mitad</button>
+  <button type="button" data-action="resize">Cambiar tamaño</button>
+</div>
+
 <div id="modalImageResize" class="html-modal-overlay hidden">
   <div class="html-modal-box">
     <div class="html-modal-header">
@@ -220,5 +226,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20261027-stream-icons" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20261117-img-size" defer></script>
 {% endblock %}
