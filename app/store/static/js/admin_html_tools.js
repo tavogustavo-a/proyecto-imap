@@ -949,6 +949,11 @@
         setImagePixelSize(img, d.w / 2, d.h / 2);
         updateHtmlOutput();
         showToast('Imagen reducida');
+      } else if (action === 'grow') {
+        var grown = getImgDimensions(img);
+        setImagePixelSize(img, Math.min(2000, grown.w * 1.5), Math.min(2000, grown.h * 1.5));
+        updateHtmlOutput();
+        showToast('Imagen aumentada');
       } else if (action === 'resize') {
         showImageResizeModal(img);
       }

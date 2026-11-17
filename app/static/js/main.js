@@ -308,13 +308,12 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   // --- FIN: Aplicar opacidad dinámica --- 
 
-  // MODO OSCURO: el botón manda si ya eligieron. Si no, sigue al navegador.
+  // Modo claro al entrar. Oscuro solo si el visitante ya lo eligió con el botón.
   const savedTheme = localStorage.getItem("darkMode");
-  const browserDarkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-  const browserDark = !!(browserDarkQuery && browserDarkQuery.matches);
-  const useDark = savedTheme === "true" || (savedTheme !== "false" && browserDark);
-  if (useDark) {
+  if (savedTheme === "true") {
     document.body.classList.add("dark-mode");
+  } else {
+    document.body.classList.remove("dark-mode");
   }
   
   const toggleThemeBtn = document.getElementById("toggleThemeBtn");
@@ -353,21 +352,6 @@ document.addEventListener("DOMContentLoaded", function () {
     
     // Establecer icono inicial del botón según el estado actual
     updateThemeIcon();
-
-    if (browserDarkQuery && savedTheme !== "true" && savedTheme !== "false") {
-      const followBrowserTheme = function (event) {
-        if (localStorage.getItem("darkMode") === "true" || localStorage.getItem("darkMode") === "false") {
-          return;
-        }
-        document.body.classList.toggle("dark-mode", event.matches);
-        updateThemeIcon();
-      };
-      if (browserDarkQuery.addEventListener) {
-        browserDarkQuery.addEventListener("change", followBrowserTheme);
-      } else if (browserDarkQuery.addListener) {
-        browserDarkQuery.addListener(followBrowserTheme);
-      }
-    }
   }
 
   // Seleccionar servicio inicial - MOVIDO DESPUÉS DE DEFINIR FUNCIONES

@@ -5,7 +5,7 @@
 {% block head %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/store.css') }}">
-  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}?v=20261117-img-size">
+  <link rel="stylesheet" href="{{ url_for('store_bp.static', filename='css/html_tools.css') }}?v=20261117-resize-modal">
 <script src="{{ url_for('store_bp.static', filename='js/vendor/iconify-icon.min.js') }}" defer></script>
   <meta name="html-tools-static-images" content="{{ url_for('static', filename='images/') }}">
 {% endblock %}
@@ -166,6 +166,7 @@
 
 <div id="htmlImageMenu" class="html-image-menu hidden" role="menu">
   <button type="button" data-action="shrink">Reducir a la mitad</button>
+  <button type="button" data-action="grow">Aumentar la mitad</button>
   <button type="button" data-action="resize">Cambiar tamaño</button>
 </div>
 
@@ -226,5 +227,5 @@
   <script src="{{ url_for('store_bp.static', filename='js/menu_tienda.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/clear_trigger_logs.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/logout_all_cookies_btn.js') }}" defer></script>
-  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20261117-img-size" defer></script>
+  <script src="{{ url_for('store_bp.static', filename='js/admin_html_tools.js') }}?v=20261117-img-grow" defer></script>
 {% endblock %}

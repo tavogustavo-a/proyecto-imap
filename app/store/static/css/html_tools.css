@@ -734,3 +734,40 @@ body.store-side-menu-open .mobile-menu-store:not(.hidden) {
 .html-modal-btn-gray:hover {
   background: #5a6268;
 }
+
+#modalImageResize .html-modal-header {
+  position: relative;
+  justify-content: center;
+}
+
+#modalImageResize .html-modal-header h4 {
+  text-align: center;
+  width: 100%;
+}
+
+#modalImageResize .html-modal-close {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #dc2626;
+  font-weight: 700;
+}
+
+#modalImageResize .html-modal-close:hover {
+  color: #b91c1c;
+}
+
+#modalImageResize .html-modal-footer {
+  justify-content: center;
+}
+
+#modalImageResize #modalResizeCancel {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+}
+
+#modalImageResize #modalResizeCancel:hover {
+  background: #b91c1c;
+}
